@@ -1,0 +1,7 @@
+[package]
+name = "polytect"
+version = "0.1.0"
+authors = ["Archis Gore <archis@polyverse.io>"]
+edition = "2018"
+
+[dependencies]
