@@ -16,3 +16,6 @@ Cargo.lock
 
 /target
 #**/*.rs.bk
+
+# Any a.outs
+a.out

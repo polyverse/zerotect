@@ -10,7 +10,7 @@ pub fn emit(_ec: EmitterConfig, _source: Receiver<events::Event>) {
 
     loop {
         match _source.recv() {
-            Ok(message) => eprintln!("Emitter: Received message: {}", message),
+            Ok(message) => (), //eprintln!("Emitter: Received message: {}", message),
             Err(e) => {
                 eprintln!("Emitter: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e);
                 return;

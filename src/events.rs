@@ -6,7 +6,7 @@ pub enum Event {
 }
 
 impl fmt::Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Event::Segfault(d) => write!(f, "Segfault: {}", d)
         }
@@ -15,11 +15,13 @@ impl fmt::Display for Event {
 
 #[derive(Debug)]
 pub struct SegfaultDetails {
-    pub executable: String
+    pub executable: String,
+    pub pid: u64,
+    pub message: String,
 }
 
 impl fmt::Display for SegfaultDetails {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.executable)
     }
 }
