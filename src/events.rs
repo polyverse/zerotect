@@ -16,7 +16,7 @@ impl fmt::Display for Event {
 #[derive(Debug)]
 pub struct SegfaultDetails {
     pub executable: String,
-    pub pid: u64,
+    pub pid: usize,
     pub message: String,
 }
 
