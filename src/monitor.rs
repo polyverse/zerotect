@@ -229,7 +229,7 @@ where T: Iterator<Item = DmesgEntry>  {
     // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
     fn parse_kernel_trap(&mut self, dmesg_entry: DmesgEntry) -> Option<events::Event> {
        lazy_static! {
-            static ref RE: Regex = Regex::new(r"(?x)^
+            static ref RE_WITH_LOCATION: Regex = Regex::new(r"(?x)^
                 # the procname (may have whitespace around it),
                 [[:space:]]*(?P<procname>[^\[]*)
                 # followed by a [pid])
@@ -245,9 +245,24 @@ where T: Iterator<Item = DmesgEntry>  {
                 # in <file>[<vmastart>+<vmasize>]
                 [[:space:]]*in[[:space:]]*(?P<file>[^\[]*)[\[](?P<vmastart>[[:xdigit:]]*)\+(?P<vmasize>[[:xdigit:]]*)[\]]
                 [[:space:]]*$").unwrap();
+
+                static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
+                # the procname (may have whitespace around it),
+                [[:space:]]*(?P<procname>[^\[]*)
+                # followed by a [pid])
+                [\[](?P<pid>[[:xdigit:]]*)[\]][[:space:]]*:
+                # gobble up everything until the word 'ip'
+                (?P<message>.+?)
+                # ip <ip>
+                [[:space:]]*ip[[:space:]]*(?P<ip>([[:xdigit:]]*|\(null\)))
+                # sp <sp>
+                [[:space:]]*sp[[:space:]]*(?P<sp>([[:xdigit:]]*|\(null\)))
+                # error <errcode>
+                [[:space:]]*error[[:space:]]*(?P<errcode>[[:digit:]]*)
+                [[:space:]]*$").unwrap();
        }
 
-        if let Some(dmesg_parts) = RE.captures(dmesg_entry.message.as_str()) {
+        if let Some(dmesg_parts) = RE_WITH_LOCATION.captures(dmesg_entry.message.as_str()) {
             if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), file, Some(vmastart), Some(vmasize)) = 
             (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), self.parse_kernel_trap_type(&dmesg_parts["message"]), 
             parse_hex::<usize>(&dmesg_parts["ip"]), parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"]), &dmesg_parts["file"], 
@@ -265,6 +280,26 @@ where T: Iterator<Item = DmesgEntry>  {
                 }));
             } 
         };
+        
+        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(dmesg_entry.message.as_str()) {
+            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode)) = 
+            (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), self.parse_kernel_trap_type(&dmesg_parts["message"]), 
+            parse_hex::<usize>(&dmesg_parts["ip"]), parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"])) {
+                return Some(events::Event::KernelTrap(dmesg_entry.info, events::KernelTrapInfo{
+                    trap,
+                    procname: procname.to_owned(),
+                    pid,
+                    ip: ip,
+                    sp: sp,
+                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
+                    file: String::from(""),
+                    vmastart: 0,
+                    vmasize: 0,
+                }));
+            } 
+        };
+
+
         None
     }
 
@@ -275,7 +310,7 @@ where T: Iterator<Item = DmesgEntry>  {
         lazy_static! {
             static ref RE_SEGFAULT: Regex = Regex::new(r"(?x)^
                 [[:space:]]*
-                segfault[[:space:]]*at[[:space:]]*(?P<location>[[:xdigit:]])
+                segfault[[:space:]]*at[[:space:]]*(?P<location>[[:xdigit:]]*)
                 [[:space:]]*$").unwrap();
 
             static ref RE_INVALID_OPCODE: Regex = Regex::new(r"(?x)^[[:space:]]*trap[[:space:]]*invalid[[:space:]]*opcode[[:space:]]*$").unwrap();
@@ -433,6 +468,14 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
                 },
                 message: String::from(" a.out[36075]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
+            DmesgEntry{
+                info: events::EventInfo{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    timestamp: 372850.97,
+                },
+                message: String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
+            },
         ];
 
         let mut parser = DMesgParser::from_dmesg_iterator(dmesgs.into_iter());
@@ -489,6 +532,33 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
                 file: String::from("a.out"),
                 vmastart: 0x561bc8d8f000,
                 vmasize: 0x1000,
+            }));
+
+        let maybe_segfault = parser.next();
+        assert!(maybe_segfault.is_some());
+        let segfault = maybe_segfault.unwrap();
+        assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850.97,
+            },
+            events::KernelTrapInfo{
+                trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
+                procname: String::from("a.out"),
+                pid: 37659,
+                ip: 0x7fff4b8ba8b8,
+                sp: 0x00007fff4b8ba7b8,
+                errcode: events::SegfaultErrorCode{
+                    reason: events::SegfaultReason::ProtectionFault,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: true,
+                    protection_keys_block_access: false,
+                },
+                file: String::from(""),
+                vmastart: 0x0,
+                vmasize: 0x0,
             }));
 
     }
