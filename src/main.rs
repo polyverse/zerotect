@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate enum_display_derive;
+#[macro_use]
+extern crate lazy_static;
+
 mod init;
 mod events;
 mod emitter;

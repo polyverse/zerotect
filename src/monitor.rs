@@ -1,10 +1,9 @@
 // Strum contains all the trait definitions
-extern crate strum;
 extern crate regex;
+extern crate num;
 
 use regex::Regex;
 use std::str::FromStr;
-use strum_macros::{EnumString};
 use std::{thread, time};
 use std::process::Command;
 use std::sync::mpsc::{Sender};
@@ -18,80 +17,14 @@ pub struct MonitorConfig {
     pub args: Option<Vec<String>>,
 }
 
-#[derive(EnumString)]
-#[derive(Debug)]
-#[derive(PartialEq)]
-enum LogFacility {
-    #[strum(serialize="unknown")]
-    Unknown,
-
-    #[strum(serialize="kern")]
-    Kern,
-
-    #[strum(serialize="user")]
-    User,
-
-    #[strum(serialize="mail")]
-    Mail,
-
-    #[strum(serialize="daemon")]
-    Daemon,
-
-    #[strum(serialize="auth")]
-    Auth,
-
-    #[strum(serialize="syslog")]
-    Syslog,
-
-    #[strum(serialize="lpr")]
-    Lpr,
-
-    #[strum(serialize="news")]
-    News
-}
-
-#[derive(EnumString)]
-#[derive(Debug)]
-#[derive(PartialEq)]
-enum LogLevel {
-    #[strum(serialize="unknown")]
-    Unknown,
-
-    #[strum(serialize="emerg")]
-    Emergency,
-
-    #[strum(serialize="alert")]
-    Alert,
-
-    #[strum(serialize="crit")]
-    Critical,
-
-    #[strum(serialize="err")]
-    Error,
-
-    #[strum(serialize="warn")]
-    Warning,
-
-    #[strum(serialize="notice")]
-    Notice,
-
-    #[strum(serialize="info")]
-    Info,
-
-    #[strum(serialize="debug")]
-    Debug
-}
-
 #[derive(PartialEq)]
 #[derive(Debug)]
 struct DmesgEntry {
-    facility: LogFacility,
-    level: LogLevel,
-    timestamp: f64,
+    info: events::EventInfo,
     message: String,
 }
 
-pub fn monitor(mc: MonitorConfig, _sink: Sender<events::Event>) {
+pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
     eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
 
     let poll_interval = match mc.poll_interval {
@@ -124,7 +57,10 @@ pub fn monitor(mc: MonitorConfig, _sink: Sender<events::Event>) {
 
     // infinite iterator
     for event in DMesgParser::from_dmesg_iterator(DMesgPoller::with_poll_settings(poll_interval, &dmesg_location, &args)) {
-        eprintln!("{:#?}", event);
+        if let Err(e) = sink.send(event) {
+            eprintln!("Monitor: Error occurred sending events. Receipent is dead. Closing monitor. Error: {}", e);
+            return;
+        }
     }
 }
 
@@ -136,7 +72,6 @@ struct DMesgPoller {
     args: Vec<String>,
     last_timestamp: f64,
     queue: Vec<DmesgEntry>,
-    re_dmesg_line_format_1: Regex,
 }
 
 impl DMesgPoller {
@@ -147,7 +82,6 @@ impl DMesgPoller {
             args: args.clone(),
             last_timestamp: 0.0,
             queue: Vec::new(),
-            re_dmesg_line_format_1: DMesgPoller::dmesg_format_1(),
         }
     }
 
@@ -159,30 +93,7 @@ impl DMesgPoller {
             args: vec![],
             last_timestamp: 0.0,
             queue: Vec::new(),
-            re_dmesg_line_format_1: DMesgPoller::dmesg_format_1(),
         }
-    }
-
-    fn dmesg_format_1() -> Regex {
-        // Regex reference here: https://docs.rs/regex/1.3.1/regex/
-
-        //This regex looks for this format:
-        //kern  :info  : [174297.359257] docker0: port 2(veth51d1953) entered disabled state
-        // Let's break this down a bit:
-        // (?m) # Parse multiple lines - begin line begin (^
-        let mut dmesg_format_1 = String::from(r"(?m)(^");
-        // the log facility (may have whitespace around it, followed by a colon)
-        dmesg_format_1.push_str(r"[[:space:]]*(?P<facility>[[:alpha:]]*)[[:space:]]*:");
-        // log level (may have whitespace around it, followed by a colon)
-        dmesg_format_1.push_str(r"[[:space:]]*(?P<level>[[:alpha:]]*)[[:space:]]*:");
-        // [timestamp] enclosed in square brackets (may have whitespace preceeding it)
-        dmesg_format_1.push_str(r"[[:space:]]*[\[](?P<timestamp>[[:digit:]]*\.[[:digit:]]*)[\]]"); 
-        // message gobbles up everything left
-        dmesg_format_1.push_str(r"(?P<message>.*)");
-        // close out the line
-        dmesg_format_1.push_str(r"$)");
-        eprintln!("Monitor: Initializing dmesg format 1 regex: {}", dmesg_format_1);
-        Regex::new(dmesg_format_1.as_str()).unwrap()
     }
 
     fn fetch_dmesg_and_enqueue(&mut self) {
@@ -202,8 +113,8 @@ impl DMesgPoller {
                             match self.parse_dmesg_entries(messages.as_str()) {
                                 Ok(dmesg_entries) => {
                                     for dmesg_entry in dmesg_entries.into_iter() {
-                                        if dmesg_entry.timestamp > self.last_timestamp {
-                                            self.last_timestamp = dmesg_entry.timestamp;
+                                        if dmesg_entry.info.timestamp > self.last_timestamp {
+                                            self.last_timestamp = dmesg_entry.info.timestamp;
                                             self.queue.push(dmesg_entry);
                                         }
                                     }
@@ -223,39 +134,37 @@ impl DMesgPoller {
     }
 
     fn parse_dmesg_entries(&mut self, dmesg_output: &str) -> Result<Vec<DmesgEntry>, String> {
+        lazy_static! {
+            //This regex looks for this format across multiple lines:
+            //kern  :info  : [174297.359257] <rest of the message>
+            static ref RE1: Regex = Regex::new(r"(?mx)(^
+                # the log facility (may have whitespace around it, followed by a colon)
+                [[:space:]]*(?P<facility>[[:alpha:]]*)[[:space:]]*: 
+                # log level (may have whitespace around it, followed by a colon)
+                [[:space:]]*(?P<level>[[:alpha:]]*)[[:space:]]*:
+                # [timestamp] enclosed in square brackets (may have whitespace preceeding it)
+                [[:space:]]*[\[](?P<timestamp>[[:digit:]]*\.[[:digit:]]*)[\]]
+                # message gobbles up everything left
+                (?P<message>.*)
+                # close out the line
+                $)").unwrap();
+        }
         let mut dmesg_entries: Vec<DmesgEntry> = vec![];
 
-        for line_parts in self.re_dmesg_line_format_1.captures_iter(dmesg_output) {
-                let facility = match LogFacility::from_str(&line_parts["facility"]) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        eprintln!("Unable to parse LogFacility {} into enum: {}", &line_parts["facility"], e);
-                        continue
-                    }
-                };
-
-                let level = match LogLevel::from_str(&line_parts["level"]) {
-                    Ok(l) => l,
-                    Err(e) => {
-                        eprintln!("Unable to parse LogLevel {} into enum: {}", &line_parts["level"], e);
-                        continue
-                    }
-                };
-
-                let timestamp = match &line_parts["timestamp"].parse::<f64>() {
-                    Ok(num) => *num,
-                    Err(e) => {
-                        eprintln!("Unable to parse Timestamp {} into enum: {}", &line_parts["timestamp"], e);
-                        continue
-                    }
-                };
-
+        for line_parts in RE1.captures_iter(dmesg_output) {
+            if let (Some(facility), Some(level), Some(timestamp)) = 
+            (parse_fragment::<events::LogFacility>(&line_parts["facility"]), 
+            parse_fragment::<events::LogLevel>(&line_parts["level"]), 
+            parse_fragment::<f64>(&line_parts["timestamp"])) {
                 dmesg_entries.push(DmesgEntry{
-                    facility,
-                    level,
-                    timestamp,
+                    info: events::EventInfo {
+                        facility,
+                        level,
+                        timestamp,
+                    },
                     message: line_parts["message"].to_owned(),
                 });
+            } 
         };
         Ok(dmesg_entries)
     }
@@ -285,16 +194,15 @@ impl Iterator for DMesgPoller {
     }
 }
 
-
 struct DMesgParser<T: Iterator<Item = DmesgEntry>> {
-    dmesg_iter: T
+    dmesg_iter: T,
 }
 
 impl<T> DMesgParser<T>
 where T: Iterator<Item = DmesgEntry>  {
     fn from_dmesg_iterator(dmesg_iter: T) -> DMesgParser<T> { 
             DMesgParser {
-                dmesg_iter
+                dmesg_iter,
             }
     }
 
@@ -303,32 +211,10 @@ where T: Iterator<Item = DmesgEntry>  {
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
             let maybe_dmesg_entry = self.dmesg_iter.next();
-            //println!("New DMesg Entry: {:#?}", maybe_dmesg_entry);
             match maybe_dmesg_entry {
                 Some(dmesg_entry) => {
-                    if dmesg_entry.message.contains("segfault") {
-                        // We have this fatal's entry, enabled by debug.exception-trace
-                        // kern  :info  : [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
-                        match self.parse_exception_trace(dmesg_entry) {
-                            Ok(deets) => return Ok(events::Event::Segfault(deets)),
-                            Err(e) => eprintln!("Monitor: Unable to parse exception-trace line into a Segfault Details struct: {}\n", e)
-                        }
-                    } else if dmesg_entry.message.contains("fatal signal 11") {
-                        // We have this entry, enabled by kernel.print-fatal-signals
-                        // kern  :info  : [372850.970643] potentially unexpected fatal signal 11.
-                        // kern  :warn  : [372850.971417] CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1
-                        // kern  :warn  : [372850.972476] Hardware name:  BHYVE, BIOS 1.00 03/14/2014
-                        // kern  :warn  : [372850.973380] task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000
-                        // kern  :warn  : [372850.974349] RIP: 0033:0x561bc8d8f12e
-                        // kern  :warn  : [372850.974981] RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246
-                        // kern  :warn  : [372850.975780] RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718
-                        // kern  :warn  : [372850.976943] RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001
-                        // kern  :warn  : [372850.978183] RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80
-                        // kern  :warn  : [372850.979232] R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040
-                        // kern  :warn  : [372850.980268] R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000
-                        // kern  :warn  : [372850.981246] FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
-                        // kern  :warn  : [372850.982384] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-                        // kern  :warn  : [372850.983159] CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
+                    if let Some(e) = self.parse_kernel_trap(dmesg_entry) {
+                        return Ok(e);
                     }
                 },
                 None => break
@@ -338,60 +224,96 @@ where T: Iterator<Item = DmesgEntry>  {
         Err("Exited dmesg iterator unexpectedly.".to_owned())
     }
 
-    // Parses this: a.out[33629]: segfault at 0 ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
-    // Into SegfaultDetails
-    fn parse_exception_trace(&mut self, dmesg_entry: DmesgEntry) -> Result<events::SegfaultDetails, String> {
-        let  message = dmesg_entry.message;
-        let mut exec_and_rest = message.splitn(2,"[");
-        let executable = match exec_and_rest.next() {
-            Some(exec) => exec,
-            None => {
-                eprintln!("Monitor: Unable to parse the first word, executable, in message: {}", message);
-                ""
-            }
-        };
+    // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
+    // Parses this basic structure: 
+    // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
+    fn parse_kernel_trap(&mut self, dmesg_entry: DmesgEntry) -> Option<events::Event> {
+       lazy_static! {
+            static ref RE: Regex = Regex::new(r"(?x)^
+                # the procname (may have whitespace around it),
+                [[:space:]]*(?P<procname>[^\[]*)
+                # followed by a [pid])
+                [\[](?P<pid>[[:xdigit:]]*)[\]][[:space:]]*:
+                # gobble up everything until the word 'ip'
+                (?P<message>.+?)
+                # ip <ip>
+                [[:space:]]*ip[[:space:]]*(?P<ip>([[:xdigit:]]*|\(null\)))
+                # sp <sp>
+                [[:space:]]*sp[[:space:]]*(?P<sp>([[:xdigit:]]*|\(null\)))
+                # error <errcode>
+                [[:space:]]*error[[:space:]]*(?P<errcode>[[:digit:]]*)
+                # in <file>[<vmastart>+<vmasize>]
+                [[:space:]]*in[[:space:]]*(?P<file>[^\[]*)[\[](?P<vmastart>[[:xdigit:]]*)\+(?P<vmasize>[[:xdigit:]]*)[\]]
+                [[:space:]]*$").unwrap();
+       }
 
-        let (pid_str, maybe_rest) = match exec_and_rest.next() {
-            Some(rest) => {
-                let mut pid_and_rest = rest.splitn(2, "]");
-                match pid_and_rest.next() {
-                    Some(p) => (p, pid_and_rest.next()),
-                    None => {
-                        eprintln!("Monitor: Unable to parse the second word, pid, in message: {}", message);
-                        ("", Some(""))
-                    }
-                }
-            }
-            None => {
-                eprintln!("Monitor: Segfault message has nothing after executable: {}", message);
-                ("", Some(""))
-            }
+        if let Some(dmesg_parts) = RE.captures(dmesg_entry.message.as_str()) {
+            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), file, Some(vmastart), Some(vmasize)) = 
+            (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), self.parse_kernel_trap_type(&dmesg_parts["message"]), 
+            parse_hex::<usize>(&dmesg_parts["ip"]), parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"]), &dmesg_parts["file"], 
+            parse_hex::<usize>(&dmesg_parts["vmastart"]), parse_hex::<usize>(&dmesg_parts["vmasize"])) {
+                return Some(events::Event::KernelTrap(dmesg_entry.info, events::KernelTrapInfo{
+                    trap,
+                    procname: procname.to_owned(),
+                    pid,
+                    ip: ip,
+                    sp: sp,
+                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
+                    file: file.to_owned(),
+                    vmastart: vmastart,
+                    vmasize: vmasize,
+                }));
+            } 
         };
-
-        // https://stackoverflow.com/questions/6294133/maximum-pid-in-linux
-        let pid = match pid_str.parse::<usize>() {
-            Ok(p) => p,
-            Err(_) => {
-                eprintln!("Monitor: Could not parse pid from string: {}", pid_str);
-                0
-            }
-        };
-
-        let rest = match maybe_rest {
-            Some(r) => r,
-            None => {
-                eprintln!("Monitor: No message after executable and pid in dmesg entry: {}", message);
-                ""
-            }
-        };
-
-        Ok(events::SegfaultDetails{
-            executable: executable.to_owned(),
-            pid: pid,
-            message: rest.to_owned(),
-        })
+        None
     }
+
+        // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
+    // Parses this basic structure: 
+    // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
+    fn parse_kernel_trap_type(&mut self, trap_string: &str) -> Option<events::KernelTrapType> {
+        lazy_static! {
+            static ref RE_SEGFAULT: Regex = Regex::new(r"(?x)^
+                [[:space:]]*
+                segfault[[:space:]]*at[[:space:]]*(?P<location>[[:xdigit:]])
+                [[:space:]]*$").unwrap();
+
+            static ref RE_INVALID_OPCODE: Regex = Regex::new(r"(?x)^[[:space:]]*trap[[:space:]]*invalid[[:space:]]*opcode[[:space:]]*$").unwrap();
+        }
+
+        if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
+            if let Some(location) = parse_hex::<usize>(&segfault_parts["location"]) {
+                return Some(events::KernelTrapType::Segfault(location))
+            }
+        } else if RE_INVALID_OPCODE.is_match(trap_string) {
+            return Some(events::KernelTrapType::InvalidOpcode)
+        }
+
+        None
+    }
+
+    // Parses this
+    // We have this entry, enabled by kernel.print-fatal-signals
+    // kern  :info  : [372850.970643] potentially unexpected fatal signal 11.
+    // kern  :warn  : [372850.971417] CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1
+    // kern  :warn  : [372850.972476] Hardware name:  BHYVE, BIOS 1.00 03/14/2014
+    // kern  :warn  : [372850.973380] task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000
+    // kern  :warn  : [372850.974349] RIP: 0033:0x561bc8d8f12e
+    // kern  :warn  : [372850.974981] RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246
+    // kern  :warn  : [372850.975780] RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718
+    // kern  :warn  : [372850.976943] RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001
+    // kern  :warn  : [372850.978183] RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80
+    // kern  :warn  : [372850.979232] R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040
+    // kern  :warn  : [372850.980268] R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000
+    // kern  :warn  : [372850.981246] FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
+    // kern  :warn  : [372850.982384] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+    // kern  :warn  : [372850.983159] CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
+    fn parse_fatal_signal_11() {
+
+    }
+
 }
+
 
 impl<T: Iterator<Item = DmesgEntry>> Iterator for DMesgParser<T> {
    // we will be counting with usize
@@ -408,6 +330,36 @@ impl<T: Iterator<Item = DmesgEntry>> Iterator for DMesgParser<T> {
         }
     }
 }
+
+fn parse_fragment<T: FromStr + typename::TypeName>(frag: &str) -> Option<T> 
+where <T as std::str::FromStr>::Err: std::fmt::Display
+{
+    match frag.parse::<T>() {
+        Ok(f) => Some(f),
+        Err(e) => {
+            eprintln!("Unable to parse {} into {}: {}", frag, T::type_name(), e);
+            None
+        }
+    }
+}
+
+fn parse_hex<N: num::Num + typename::TypeName>(frag: &str) -> Option<N>
+where <N as num::Num>::FromStrRadixErr: std::fmt::Display
+{
+    // special case
+    if frag == "(null)" {
+        return Some(N::zero());
+    };
+
+    match N::from_str_radix(frag, 16) {
+        Ok(n) => Some(n),
+        Err(e) => {
+            eprintln!("Unable to parse {} into {}: {}", frag, N::type_name(), e);
+            None
+        }
+    }
+}
+
 
 /**********************************************************************************/
 // Tests! Tests! Tests!
@@ -438,9 +390,11 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, &DmesgEntry{
-            facility: LogFacility::Kern,
-            level: LogLevel::Info,
-            timestamp: 372850.968943,
+            info: events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Info,
+                timestamp: 372850.968943,
+            },
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
 
@@ -448,14 +402,95 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, &DmesgEntry{
-            facility: LogFacility::Kern,
-            level: LogLevel::Warning,
-            timestamp: 372850.97,
+            info: events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850.97,
+            },
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_none());
+    }
+
+    #[test]
+    fn can_parse_kernel_trap_segfault() {
+        let dmesgs = vec![
+            DmesgEntry{
+                info: events::EventInfo{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    timestamp: 372850.97,
+                },
+                message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+            },
+            DmesgEntry{
+                info: events::EventInfo{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    timestamp: 372850.97,
+                },
+                message: String::from(" a.out[36075]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+            },
+        ];
+
+        let mut parser = DMesgParser::from_dmesg_iterator(dmesgs.into_iter());
+
+        let maybe_segfault = parser.next();
+        assert!(maybe_segfault.is_some());
+        let segfault = maybe_segfault.unwrap();
+        assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850.97,
+            },
+            events::KernelTrapInfo{
+                trap: events::KernelTrapType::Segfault(0),
+                procname: String::from("a.out"),
+                pid: 36075,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode{
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: String::from("a.out"),
+                vmastart: 0x561bc8d8f000,
+                vmasize: 0x1000,
+            }));
+
+        let maybe_segfault = parser.next();
+        assert!(maybe_segfault.is_some());
+        let segfault = maybe_segfault.unwrap();
+        assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850.97,
+            },
+            events::KernelTrapInfo{
+                trap: events::KernelTrapType::Segfault(0),
+                procname: String::from("a.out"),
+                pid: 36075,
+                ip: 0x0,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode{
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: String::from("a.out"),
+                vmastart: 0x561bc8d8f000,
+                vmasize: 0x1000,
+            }));
+
     }
 }
 /**********************************************************************************/
