@@ -3,6 +3,7 @@ use std::sync::mpsc::{Receiver};
 use crate::events;
 
 pub struct EmitterConfig {
+    pub verbosity: u8,
 }
 
 pub fn emit(_ec: EmitterConfig, _source: Receiver<events::Event>) {

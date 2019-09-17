@@ -174,6 +174,7 @@ impl fmt::Display for Event {
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub enum KernelTrapType {
+    Generic(String),
     Segfault(usize),
     InvalidOpcode,
 }
@@ -182,6 +183,7 @@ impl fmt::Display for KernelTrapType {
         match self {
             KernelTrapType::Segfault(location) => write!(f, "Segfault at location {}", location),
             KernelTrapType::InvalidOpcode => write!(f, "Invalid Opcode"),
+            KernelTrapType::Generic(message) => write!(f, "Please parse this kernel trap: {}", message),
         }
     }
 }
@@ -204,15 +206,22 @@ pub struct KernelTrapInfo {
     pub ip: usize,
     pub sp: usize,
     pub errcode: SegfaultErrorCode,
-    pub file: String,
-    pub vmastart: usize,
-    pub vmasize: usize,
+    pub file: Option<String>,
+    pub vmastart: Option<usize>,
+    pub vmasize: Option<usize>,
 }
 
 impl fmt::Display for KernelTrapInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) in file {} (VMM region {} of size {}).", 
-            self.trap, self.errcode, self.procname, self.pid, self.ip, self.sp, self.file, self.vmastart, self.vmasize)
+
+        let location = if let (Some(file), Some(vmastart), Some(vmasize)) = (self.file.as_ref(), self.vmasize, self.vmasize) {
+            Some(format!("in file {} (VMM region {} of size {})", file, vmastart, vmasize))
+        } else {
+            None
+        };
+
+        write!(f, "{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.", 
+            self.trap, self.errcode, self.procname, self.pid, self.ip, self.sp, location.unwrap_or_default())
     }
 }
 

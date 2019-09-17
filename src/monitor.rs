@@ -12,6 +12,7 @@ use crate::events;
 
 
 pub struct MonitorConfig {
+    pub verbosity: u8,
     pub poll_interval: Option<time::Duration>,
     pub dmesg_location: Option<String>,
     pub args: Option<Vec<String>>,
@@ -25,7 +26,7 @@ struct DmesgEntry {
 }
 
 pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
-    eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
+    if mc.verbosity > 0 { eprintln!("Monitor: Reading dmesg periodically to get kernel messages..."); }
 
     let poll_interval = match mc.poll_interval {
         None => {
@@ -56,7 +57,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
     };
 
     // infinite iterator
-    for event in DMesgParser::from_dmesg_iterator(DMesgPoller::with_poll_settings(poll_interval, &dmesg_location, &args)) {
+    for event in DMesgParser::from_dmesg_iterator(DMesgPoller::with_poll_settings(poll_interval, &dmesg_location, &args, mc.verbosity), mc.verbosity) {
         if let Err(e) = sink.send(event) {
             eprintln!("Monitor: Error occurred sending events. Receipent is dead. Closing monitor. Error: {}", e);
             return;
@@ -72,16 +73,18 @@ struct DMesgPoller {
     args: Vec<String>,
     last_timestamp: f64,
     queue: Vec<DmesgEntry>,
+    verbosity: u8,
 }
 
 impl DMesgPoller {
-    fn with_poll_settings(poll_interval: time::Duration, dmesg_location: &String, args: &Vec<String>) -> DMesgPoller {
+    fn with_poll_settings(poll_interval: time::Duration, dmesg_location: &String, args: &Vec<String>, verbosity: u8) -> DMesgPoller {
         DMesgPoller {
             poll_interval,
             dmesg_location: dmesg_location.clone(),
             args: args.clone(),
             last_timestamp: 0.0,
             queue: Vec::new(),
+            verbosity,
         }
     }
 
@@ -93,6 +96,7 @@ impl DMesgPoller {
             args: vec![],
             last_timestamp: 0.0,
             queue: Vec::new(),
+            verbosity: 0,
         }
     }
 
@@ -113,8 +117,9 @@ impl DMesgPoller {
                             match self.parse_dmesg_entries(messages.as_str()) {
                                 Ok(dmesg_entries) => {
                                     for dmesg_entry in dmesg_entries.into_iter() {
-                                        if dmesg_entry.info.timestamp > self.last_timestamp {
-                                            self.last_timestamp = dmesg_entry.info.timestamp;
+                                        if (dmesg_entry.info.timestamp > self.last_timestamp) || self.last_timestamp == 0.0 {
+                                            // fetch all kernel start messages until we move past timestamp 0, then begin incrementing.
+                                            if dmesg_entry.info.timestamp > 0.0 { self.last_timestamp = dmesg_entry.info.timestamp; }
                                             self.queue.push(dmesg_entry);
                                         }
                                     }
@@ -143,27 +148,33 @@ impl DMesgPoller {
                 # log level (may have whitespace around it, followed by a colon)
                 [[:space:]]*(?P<level>[[:alpha:]]*)[[:space:]]*:
                 # [timestamp] enclosed in square brackets (may have whitespace preceeding it)
-                [[:space:]]*[\[](?P<timestamp>[[:digit:]]*\.[[:digit:]]*)[\]]
+                [[:space:]]*[\[](?P<timestamp>[[:space:]]*[[:digit:]]*\.[[:digit:]]*)[\]]
                 # message gobbles up everything left
                 (?P<message>.*)
                 # close out the line
                 $)").unwrap();
         }
-        let mut dmesg_entries: Vec<DmesgEntry> = vec![];
 
+        if self.verbosity > 2 { eprintln!("Monitor:: parse_dmesg_entries:: complete dmesg raw output: {}", dmesg_output); }
+
+        let mut dmesg_entries: Vec<DmesgEntry> = vec![];
         for line_parts in RE1.captures_iter(dmesg_output) {
+            if self.verbosity > 2 { eprintln!("Monitor:: parse_dmesg_entries:: parsed parts of a line: {:?}", line_parts); }
             if let (Some(facility), Some(level), Some(timestamp)) = 
             (parse_fragment::<events::LogFacility>(&line_parts["facility"]), 
             parse_fragment::<events::LogLevel>(&line_parts["level"]), 
             parse_fragment::<f64>(&line_parts["timestamp"])) {
-                dmesg_entries.push(DmesgEntry{
+                let entry = DmesgEntry{
                     info: events::EventInfo {
                         facility,
                         level,
                         timestamp,
                     },
                     message: line_parts["message"].to_owned(),
-                });
+                };
+
+                if self.verbosity > 1 { eprintln!("Monitor:: parse_dmesg_entries:: parsed entry: {:?}", entry); }
+                dmesg_entries.push(entry);
             } 
         };
         Ok(dmesg_entries)
@@ -196,13 +207,15 @@ impl Iterator for DMesgPoller {
 
 struct DMesgParser<T: Iterator<Item = DmesgEntry>> {
     dmesg_iter: T,
+    verbosity: u8,
 }
 
 impl<T> DMesgParser<T>
 where T: Iterator<Item = DmesgEntry>  {
-    fn from_dmesg_iterator(dmesg_iter: T) -> DMesgParser<T> { 
+    fn from_dmesg_iterator(dmesg_iter: T, verbosity: u8) -> DMesgParser<T> { 
             DMesgParser {
                 dmesg_iter,
+                verbosity,
             }
     }
 
@@ -226,10 +239,12 @@ where T: Iterator<Item = DmesgEntry>  {
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure: 
-    // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
+    // ====>> a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4
+    // Optionally followed by
+    // ====>>  in a.out[556b4c03c000+1000]
     fn parse_kernel_trap(&mut self, dmesg_entry: DmesgEntry) -> Option<events::Event> {
        lazy_static! {
-            static ref RE_WITH_LOCATION: Regex = Regex::new(r"(?x)^
+            static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # the procname (may have whitespace around it),
                 [[:space:]]*(?P<procname>[^\[]*)
                 # followed by a [pid])
@@ -242,68 +257,53 @@ where T: Iterator<Item = DmesgEntry>  {
                 [[:space:]]*sp[[:space:]]*(?P<sp>([[:xdigit:]]*|\(null\)))
                 # error <errcode>
                 [[:space:]]*error[[:space:]]*(?P<errcode>[[:digit:]]*)
-                # in <file>[<vmastart>+<vmasize>]
+                (?P<maybelocation>.*)$").unwrap();
+
+            static ref RE_LOCATION: Regex = Regex::new(r"(?x)^
                 [[:space:]]*in[[:space:]]*(?P<file>[^\[]*)[\[](?P<vmastart>[[:xdigit:]]*)\+(?P<vmasize>[[:xdigit:]]*)[\]]
                 [[:space:]]*$").unwrap();
 
-                static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
-                # the procname (may have whitespace around it),
-                [[:space:]]*(?P<procname>[^\[]*)
-                # followed by a [pid])
-                [\[](?P<pid>[[:xdigit:]]*)[\]][[:space:]]*:
-                # gobble up everything until the word 'ip'
-                (?P<message>.+?)
-                # ip <ip>
-                [[:space:]]*ip[[:space:]]*(?P<ip>([[:xdigit:]]*|\(null\)))
-                # sp <sp>
-                [[:space:]]*sp[[:space:]]*(?P<sp>([[:xdigit:]]*|\(null\)))
-                # error <errcode>
-                [[:space:]]*error[[:space:]]*(?P<errcode>[[:digit:]]*)
-                [[:space:]]*$").unwrap();
-       }
-
-        if let Some(dmesg_parts) = RE_WITH_LOCATION.captures(dmesg_entry.message.as_str()) {
-            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), file, Some(vmastart), Some(vmasize)) = 
-            (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), self.parse_kernel_trap_type(&dmesg_parts["message"]), 
-            parse_hex::<usize>(&dmesg_parts["ip"]), parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"]), &dmesg_parts["file"], 
-            parse_hex::<usize>(&dmesg_parts["vmastart"]), parse_hex::<usize>(&dmesg_parts["vmasize"])) {
-                return Some(events::Event::KernelTrap(dmesg_entry.info, events::KernelTrapInfo{
-                    trap,
-                    procname: procname.to_owned(),
-                    pid,
-                    ip: ip,
-                    sp: sp,
-                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
-                    file: file.to_owned(),
-                    vmastart: vmastart,
-                    vmasize: vmasize,
-                }));
-            } 
-        };
+        }
         
-        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(dmesg_entry.message.as_str()) {
-            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode)) = 
-            (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), self.parse_kernel_trap_type(&dmesg_parts["message"]), 
-            parse_hex::<usize>(&dmesg_parts["ip"]), parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"])) {
-                return Some(events::Event::KernelTrap(dmesg_entry.info, events::KernelTrapInfo{
-                    trap,
-                    procname: procname.to_owned(),
-                    pid,
-                    ip: ip,
-                    sp: sp,
-                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
-                    file: String::from(""),
-                    vmastart: 0,
-                    vmasize: 0,
-                }));
-            } 
-        };
+        if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Attempting to parse entry as kernel trap: {:?}", dmesg_entry); }
 
+        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(dmesg_entry.message.as_str()) {
+            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), maybelocation) = 
+                (&dmesg_parts["procname"], parse_fragment::<usize>(&dmesg_parts["pid"]), 
+                self.parse_kernel_trap_type(&dmesg_parts["message"]), parse_hex::<usize>(&dmesg_parts["ip"]), 
+                parse_hex::<usize>(&dmesg_parts["sp"]), parse_hex::<u8>(&dmesg_parts["errcode"]), 
+                &dmesg_parts["maybelocation"]) {
+
+                if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap parts: {:?}", dmesg_parts); }
+
+                let (file, vmastart, vmasize) = if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
+                    if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap location: {:?}", location_parts); }
+                    (Some((&location_parts["file"]).to_owned()), parse_hex::<usize>(&location_parts["vmastart"]), parse_hex::<usize>(&location_parts["vmasize"]))
+                } else {
+                    (None, None, None)
+                };
+
+                let trapinfo = events::KernelTrapInfo{
+                        trap,
+                        procname: procname.to_owned(),
+                        pid,
+                        ip: ip,
+                        sp: sp,
+                        errcode: events::SegfaultErrorCode::from_error_code(errcode),
+                        file,
+                        vmastart,
+                        vmasize,
+                };
+
+                if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap: {:?}", trapinfo); }
+                return Some(events::Event::KernelTrap(dmesg_entry.info, trapinfo));
+            }
+        };
 
         None
     }
 
-        // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
+    // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure: 
     // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
     fn parse_kernel_trap_type(&mut self, trap_string: &str) -> Option<events::KernelTrapType> {
@@ -318,13 +318,16 @@ where T: Iterator<Item = DmesgEntry>  {
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
             if let Some(location) = parse_hex::<usize>(&segfault_parts["location"]) {
-                return Some(events::KernelTrapType::Segfault(location))
+                Some(events::KernelTrapType::Segfault(location))
+            } else {
+                eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);
+                Some(events::KernelTrapType::Generic(trap_string.to_owned()))
             }
         } else if RE_INVALID_OPCODE.is_match(trap_string) {
-            return Some(events::KernelTrapType::InvalidOpcode)
+            Some(events::KernelTrapType::InvalidOpcode)
+        } else {
+            Some(events::KernelTrapType::Generic(trap_string.to_owned()))
         }
-
-        None
     }
 
     // Parses this
@@ -369,7 +372,7 @@ impl<T: Iterator<Item = DmesgEntry>> Iterator for DMesgParser<T> {
 fn parse_fragment<T: FromStr + typename::TypeName>(frag: &str) -> Option<T> 
 where <T as std::str::FromStr>::Err: std::fmt::Display
 {
-    match frag.parse::<T>() {
+    match frag.trim().parse::<T>() {
         Ok(f) => Some(f),
         Err(e) => {
             eprintln!("Unable to parse {} into {}: {}", frag, T::type_name(), e);
@@ -386,7 +389,7 @@ where <N as num::Num>::FromStrRadixErr: std::fmt::Display
         return Some(N::zero());
     };
 
-    match N::from_str_radix(frag, 16) {
+    match N::from_str_radix(frag.trim(), 16) {
         Ok(n) => Some(n),
         Err(e) => {
             eprintln!("Unable to parse {} into {}: {}", frag, N::type_name(), e);
@@ -409,8 +412,8 @@ mod test {
         kern  :info  : [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
 kern: warn :[372850.970000] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
 badfacility: info :[372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
-kern: badlevel :[372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
-kern: invalid-level :[372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
+kern: badlevel :[ 372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
+kern: invalid-level :[ 372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
 invalid-facility :info :[372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
 invalid-facility :info : no timestamp a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
 no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]
@@ -478,7 +481,7 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
             },
         ];
 
-        let mut parser = DMesgParser::from_dmesg_iterator(dmesgs.into_iter());
+        let mut parser = DMesgParser::from_dmesg_iterator(dmesgs.into_iter(), 0);
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -502,9 +505,9 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
                     instruction_fetch: false,
                     protection_keys_block_access: false,
                 },
-                file: String::from("a.out"),
-                vmastart: 0x561bc8d8f000,
-                vmasize: 0x1000,
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
             }));
 
         let maybe_segfault = parser.next();
@@ -529,9 +532,9 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
                     instruction_fetch: false,
                     protection_keys_block_access: false,
                 },
-                file: String::from("a.out"),
-                vmastart: 0x561bc8d8f000,
-                vmasize: 0x1000,
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
             }));
 
         let maybe_segfault = parser.next();
@@ -556,9 +559,9 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
                     instruction_fetch: true,
                     protection_keys_block_access: false,
                 },
-                file: String::from(""),
-                vmastart: 0x0,
-                vmasize: 0x0,
+                file: None,
+                vmastart: None,
+                vmasize: None,
             }));
 
     }

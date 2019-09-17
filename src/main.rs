@@ -14,22 +14,25 @@ use std::thread;
 
 
 fn main() {
-    init::initialize();
+    let polytect_config = init::initialize();
 
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) = mpsc::channel();
 
-    let monitor_handle = thread::spawn(|| {
+    let mverbosity = polytect_config.verbosity;
+    let monitor_handle = thread::spawn(move || {
         let mc = monitor::MonitorConfig{
             dmesg_location: None,
             poll_interval: None,
             args: None,
+            verbosity: mverbosity,
         };
         monitor::monitor(mc, monitor_sink);
     });
 
-    let emitter_handle = thread::spawn(|| {
+    let everbosity = polytect_config.verbosity;
+    let emitter_handle = thread::spawn(move || {
         let ec = emitter::EmitterConfig{
-
+            verbosity: everbosity,
         };
         emitter::emit(ec, emitter_source);
     });
