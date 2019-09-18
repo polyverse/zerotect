@@ -8,6 +8,8 @@ mod events;
 mod emitter;
 mod monitor;
 
+use monitor::dmesg_poller;
+
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std::thread;
@@ -21,9 +23,11 @@ fn main() {
     let mverbosity = polytect_config.verbosity;
     let monitor_handle = thread::spawn(move || {
         let mc = monitor::MonitorConfig{
-            dmesg_location: None,
-            poll_interval: None,
-            args: None,
+            monitor_type: monitor::MonitorType::DMesgPoller(dmesg_poller::DMesgPollerConfig {
+                dmesg_location: None,
+                poll_interval: None,
+                args: None,
+            }),
             verbosity: mverbosity,
         };
         monitor::monitor(mc, monitor_sink);
