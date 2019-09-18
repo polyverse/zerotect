@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/polyverse/polytect.svg?branch=master)](https://travis-ci.org/polyverse/polytect)
+
 # polytect
 
 An attack/exploit Detector that utilizes Polymorphism and Diversity.
@@ -12,7 +14,7 @@ Polytect detects these side effects of exploits on polymorphic systems.
 
 ## Usage
 
-TBD 
+TBD
 
 ## How it works
 

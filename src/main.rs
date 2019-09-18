@@ -8,8 +8,6 @@ mod events;
 mod emitter;
 mod monitor;
 
-use monitor::dmesg_poller;
-
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std::thread;
