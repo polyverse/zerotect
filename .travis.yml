@@ -1,10 +1,7 @@
 language: rust
 rust:
   - stable
-addons:
-  apt:
-    packages: musl-gcc
 before_install:
-  - rustup target add x86_64-unknown-linux-musl
+  - cargo install cross
 script:
   - cargo build --target x86_64-unknown-linux-musl
