@@ -7,16 +7,15 @@ use crate::monitor::kmsg;
 use regex::Regex;
 use std::str::FromStr;
 
-pub struct EventParser<T: Iterator<Item = kmsg::KMsg>> {
-    dmesg_iter: T,
+pub struct EventParser {
+    kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg>>,
     verbosity: u8,
 }
 
-impl<T> EventParser<T>
-where T: Iterator<Item = kmsg::KMsg>  {
-    pub fn from_kmsg_iterator(dmesg_iter: T, verbosity: u8) -> EventParser<T> { 
+impl EventParser{
+    pub fn from_kmsg_iterator(kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg>>, verbosity: u8) -> EventParser { 
             EventParser {
-                dmesg_iter,
+                kmsg_iter,
                 verbosity,
             }
     }
@@ -25,10 +24,10 @@ where T: Iterator<Item = kmsg::KMsg>  {
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
-            let maybe_dmesg_entry = self.dmesg_iter.next();
-            match maybe_dmesg_entry {
-                Some(dmesg_entry) => {
-                    if let Some(e) = self.parse_kernel_trap(dmesg_entry) {
+            let maybe_kmsg_entry = self.kmsg_iter.next();
+            match maybe_kmsg_entry {
+                Some(kmsg_entry) => {
+                    if let Some(e) = self.parse_kernel_trap(kmsg_entry) {
                         return Ok(e);
                     }
                 },
@@ -184,7 +183,7 @@ where T: Iterator<Item = kmsg::KMsg>  {
 }
 
 
-impl<T: Iterator<Item = kmsg::KMsg>> Iterator for EventParser<T> {
+impl Iterator for EventParser {
    // we will be counting with usize
     type Item = events::Event;
 
@@ -210,12 +209,12 @@ mod test {
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
-        let dmesgs = vec![
+        let kmsgs = vec![
             kmsg::KMsg{
                 info: events::EventInfo{
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    timestamp: 372850.97,
+                    timestamp: 372850970000,
                 },
                 message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
@@ -223,7 +222,7 @@ mod test {
                 info: events::EventInfo{
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    timestamp: 372850.97,
+                    timestamp: 372850970000,
                 },
                 message: String::from(" a.out[36075]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
@@ -231,13 +230,13 @@ mod test {
                 info: events::EventInfo{
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    timestamp: 372850.97,
+                    timestamp: 372850970000,
                 },
                 message: String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
             },
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator(dmesgs.into_iter(), 0);
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -245,7 +244,7 @@ mod test {
         assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                timestamp: 372850.97,
+                timestamp: 372850970000,
             },
             events::KernelTrapInfo{
                 trap: events::KernelTrapType::Segfault(0),
@@ -272,7 +271,7 @@ mod test {
         assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                timestamp: 372850.97,
+                timestamp: 372850970000,
             },
             events::KernelTrapInfo{
                 trap: events::KernelTrapType::Segfault(0),
@@ -299,7 +298,7 @@ mod test {
         assert_eq!(segfault, events::Event::KernelTrap(events::EventInfo{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                timestamp: 372850.97,
+                timestamp: 372850970000,
             },
             events::KernelTrapInfo{
                 trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),

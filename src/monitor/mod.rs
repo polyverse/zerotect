@@ -1,3 +1,4 @@
+pub mod dev_kmsg_reader;
 pub mod dmesg_poller;
 mod event_parser;
 mod kmsg;
@@ -8,7 +9,7 @@ use crate::events;
 
 pub enum MonitorType {
     DMesgPoller(dmesg_poller::DMesgPollerConfig),
-    DevKMsgReader,
+    DevKMsgReader(dev_kmsg_reader::KMsgReaderConfig),
 }
 
 pub struct MonitorConfig {
@@ -20,10 +21,11 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
     if mc.verbosity > 0 { eprintln!("Monitor: Reading dmesg periodically to get kernel messages..."); }
 
 
-    let kmsg_iterator = match mc.monitor_type {
-         MonitorType::DMesgPoller(c) => dmesg_poller::DMesgPoller::with_poll_settings(c, mc.verbosity),
-         MonitorType::DevKMsgReader => return
+    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg>> = match mc.monitor_type {
+         MonitorType::DevKMsgReader(c) => Box::new(dev_kmsg_reader::DevKMsgReader::with_file(c, mc.verbosity)),
+         MonitorType::DMesgPoller(c) => Box::new(dmesg_poller::DMesgPoller::with_poll_settings(c, mc.verbosity)),
     };
+
     let event_iterator = event_parser::EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity);
 
     // infinite iterator

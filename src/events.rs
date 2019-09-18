@@ -1,6 +1,7 @@
 extern crate typename;
 extern crate strum;
 
+use num_derive::FromPrimitive;    
 use std::fmt::Display;
 use strum_macros::{EnumString};
 use typename::TypeName;
@@ -100,9 +101,10 @@ impl fmt::Display for SegfaultErrorCode {
 #[derive(PartialEq)]
 #[derive(TypeName)]
 #[derive(Display)]
+#[derive(FromPrimitive)]
 pub enum LogFacility {
     #[strum(serialize="kern")]
-    Kern,
+    Kern = 0,
 
     #[strum(serialize="user")]
     User,
@@ -123,7 +125,19 @@ pub enum LogFacility {
     Lpr,
 
     #[strum(serialize="news")]
-    News
+    News,
+
+    #[strum(serialize="uucp")]
+    UUCP,
+
+    #[strum(serialize="cron")]
+    Cron,
+
+    #[strum(serialize="authpriv")]
+    AuthPriv,
+
+    #[strum(serialize="ftp")]
+    FTP,
 }
 
 #[derive(EnumString)]
@@ -131,9 +145,10 @@ pub enum LogFacility {
 #[derive(PartialEq)]
 #[derive(TypeName)]
 #[derive(Display)]
+#[derive(FromPrimitive)]
 pub enum LogLevel {
     #[strum(serialize="emerg")]
-    Emergency,
+    Emergency = 0,
 
     #[strum(serialize="alert")]
     Alert,
@@ -188,13 +203,14 @@ impl fmt::Display for KernelTrapType {
     }
 }
 
+pub type MicrosecondsFromSystemStart = u64;
 
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct EventInfo {
     pub facility: LogFacility,
     pub level: LogLevel,
-    pub timestamp: f64,
+    pub timestamp: MicrosecondsFromSystemStart,
 }
 
 #[derive(Debug)]

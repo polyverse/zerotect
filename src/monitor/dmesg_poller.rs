@@ -1,4 +1,3 @@
-// Strum contains all the trait definitions
 extern crate regex;
 extern crate num;
 
@@ -20,7 +19,7 @@ pub struct DMesgPoller {
     poll_interval: time::Duration,
     dmesg_location: String,
     args: Vec<String>,
-    last_timestamp: f64,
+    last_timestamp: u64,
     queue: Vec<kmsg::KMsg>,
     verbosity: u8,
 }
@@ -59,7 +58,7 @@ impl DMesgPoller {
             poll_interval,
             dmesg_location: dmesg_location.clone(),
             args: args.clone(),
-            last_timestamp: 0.0,
+            last_timestamp: 0,
             queue: Vec::new(),
             verbosity,
         }
@@ -71,7 +70,7 @@ impl DMesgPoller {
             poll_interval: time::Duration::from_secs(0),
             dmesg_location: String::from(""),
             args: vec![],
-            last_timestamp: 0.0,
+            last_timestamp: 0,
             queue: Vec::new(),
             verbosity: 0,
         }
@@ -94,9 +93,9 @@ impl DMesgPoller {
                             match self.parse_kmsgs(messages.as_str()) {
                                 Ok(dmesg_entries) => {
                                     for dmesg_entry in dmesg_entries.into_iter() {
-                                        if (dmesg_entry.info.timestamp > self.last_timestamp) || self.last_timestamp == 0.0 {
+                                        if (dmesg_entry.info.timestamp > self.last_timestamp) || self.last_timestamp == 0 {
                                             // fetch all kernel start messages until we move past timestamp 0, then begin incrementing.
-                                            if dmesg_entry.info.timestamp > 0.0 { self.last_timestamp = dmesg_entry.info.timestamp; }
+                                            if dmesg_entry.info.timestamp > 0 { self.last_timestamp = dmesg_entry.info.timestamp; }
                                             self.queue.push(dmesg_entry);
                                         }
                                     }
@@ -145,7 +144,8 @@ impl DMesgPoller {
                     info: events::EventInfo {
                         facility,
                         level,
-                        timestamp,
+                        //undoing this: https://github.com/karelzak/util-linux/blob/master/sys-utils/dmesg.c#L493
+                        timestamp: (timestamp*1000000.0) as u64, 
                     },
                     message: line_parts["message"].to_owned(),
                 };
@@ -227,7 +227,7 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
             info: events::EventInfo{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
-                timestamp: 372850.968943,
+                timestamp: 372850968943,
             },
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
@@ -239,7 +239,7 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
             info: events::EventInfo{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                timestamp: 372850.97,
+                timestamp: 372850970000,
             },
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
