@@ -1,7 +1,7 @@
 language: rust
 rust:
   - stable
-before_script:
+before_install:
   - cargo install cross
 script:
   - cargo build --target x86_64-unknown-linux-musl
