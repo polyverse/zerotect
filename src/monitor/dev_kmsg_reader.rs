@@ -169,8 +169,9 @@ impl Iterator for DevKMsgReader {
                         continue;
                     },
                     KMsgParseError::Generic(msg) => {
+                        // don't exit because there may be bad lines...
                         eprintln!("Error parsing kmsg line due to error: {}", msg);
-                        return None;
+                        continue;
                     }
                 }
             }
@@ -257,6 +258,44 @@ mod test {
         let boxed_reader = Box::new(realistic_message.as_bytes());
 
         let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 3}, boxed_reader, 3);
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            info: events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+            },
+            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+        });     
+    }
+
+
+    #[test]
+    fn can_parse_kmsg_entries_with_bad_line() {
+        let realistic_message = r"
+5,0,bad!!!n 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019
+6,1,0,-;Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
+6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
+
+        let boxed_reader = Box::new(realistic_message.as_bytes());
+
+        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, boxed_reader, 3);
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            info: events::EventInfo{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+            },
+            message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
+        });    
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());

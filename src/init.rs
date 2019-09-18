@@ -53,6 +53,8 @@ fn parse_args() -> PolytectParams {
     let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG);
     let verbosity = u8::try_from(matches.occurrences_of("verbose")).ok().unwrap();
      
+    println!("monitor-type option: {:?}",matches.value_of("monitor-type"));
+
     let monitor_type = match matches.value_of("monitor-type") {
         Some(s) => match s {
             "dmesg-poller" => monitor::MonitorType::DMesgPoller(monitor::dmesg_poller::DMesgPollerConfig {

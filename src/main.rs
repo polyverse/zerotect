@@ -21,13 +21,10 @@ fn main() {
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) = mpsc::channel();
 
     let mverbosity = polytect_config.verbosity;
+    let mmonitor_type = polytect_config.monitor_type;
     let monitor_handle = thread::spawn(move || {
         let mc = monitor::MonitorConfig{
-            monitor_type: monitor::MonitorType::DMesgPoller(dmesg_poller::DMesgPollerConfig {
-                dmesg_location: None,
-                poll_interval: None,
-                args: None,
-            }),
+            monitor_type: mmonitor_type,
             verbosity: mverbosity,
         };
         monitor::monitor(mc, monitor_sink);
