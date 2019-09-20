@@ -93,9 +93,9 @@ impl DMesgPoller {
                             match self.parse_kmsgs(messages.as_str()) {
                                 Ok(dmesg_entries) => {
                                     for dmesg_entry in dmesg_entries.into_iter() {
-                                        if (dmesg_entry.info.timestamp > self.last_timestamp) || self.last_timestamp == 0 {
+                                        if (dmesg_entry.timestamp > self.last_timestamp) || self.last_timestamp == 0 {
                                             // fetch all kernel start messages until we move past timestamp 0, then begin incrementing.
-                                            if dmesg_entry.info.timestamp > 0 { self.last_timestamp = dmesg_entry.info.timestamp; }
+                                            if dmesg_entry.timestamp > 0 { self.last_timestamp = dmesg_entry.timestamp; }
                                             self.queue.push(dmesg_entry);
                                         }
                                     }
@@ -141,12 +141,10 @@ impl DMesgPoller {
             self.parse_fragment::<events::LogLevel>(&line_parts["level"]), 
             self.parse_fragment::<f64>(&line_parts["timestamp"])) {
                 let entry = kmsg::KMsg{
-                    info: events::EventInfo {
-                        facility,
-                        level,
-                        //undoing this: https://github.com/karelzak/util-linux/blob/master/sys-utils/dmesg.c#L493
-                        timestamp: (timestamp*1000000.0) as u64, 
-                    },
+                    facility,
+                    level,
+                    //undoing this: https://github.com/karelzak/util-linux/blob/master/sys-utils/dmesg.c#L493
+                    timestamp: (timestamp*1000000.0) as u64, 
                     message: line_parts["message"].to_owned(),
                 };
 
@@ -224,11 +222,9 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, &kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Info,
-                timestamp: 372850968943,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Info,
+            timestamp: 372850968943,
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
 
@@ -236,11 +232,9 @@ no colons [372850.968943] a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 000
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, &kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: 372850970000,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Warning,
+            timestamp: 372850970000,
             message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
         });
 

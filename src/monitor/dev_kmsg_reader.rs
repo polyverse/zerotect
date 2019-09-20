@@ -125,11 +125,9 @@ impl DevKMsgReader {
         }
 
         Ok(kmsg::KMsg{
-            info: events::EventInfo{
-                facility,
-                level,
-                timestamp,
-            },
+            facility,
+            level,
+            timestamp,
             message: message.to_owned(),
         })
     }
@@ -202,11 +200,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
         });
 
@@ -214,11 +210,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });
 
@@ -226,11 +220,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"),
         });
 
@@ -238,11 +230,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
         });        
     }
@@ -263,11 +253,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
         });     
     }
@@ -289,11 +277,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });    
 
@@ -301,11 +287,9 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, kmsg::KMsg{
-            info: events::EventInfo{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
-                timestamp: 0,
-            },
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
         });     
     }
