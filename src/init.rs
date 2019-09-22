@@ -39,14 +39,6 @@ fn parse_args() -> PolytectParams {
                             .long("verbose")
                             .multiple(true)
                             .help(format!("Increase debug verbosity of polytect.").as_str()))
-                        .arg(Arg::with_name("monitor-type")
-                            .short("m")
-                            .long("monitor-type")
-                            .takes_value(true)
-                            .possible_values(&["dmesg-poller", "dev-kmsg-reader"])
-                            .default_value("dev-kmsg-reader")
-                            .help("Indicates how to obtain kernel logs. dev-kmsg-reader: read from /dev/kmsg file (may not work on older kernels.) dmesg-poller: call the 'dmesg' command periodically and scrape output.")
-                            .next_line_help(true))
                         .get_matches();
 
     let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG);
@@ -55,20 +47,9 @@ fn parse_args() -> PolytectParams {
      
     println!("monitor-type option: {:?}",matches.value_of("monitor-type"));
 
-    let monitor_type = match matches.value_of("monitor-type") {
-        Some(s) => match s {
-            "dmesg-poller" => monitor::MonitorType::DMesgPoller(monitor::dmesg_poller::DMesgPollerConfig {
-                poll_interval: None,
-                dmesg_location: None,
-                args: None,
-            }),
-            "dev-kmsg-reader" => monitor::MonitorType::DevKMsgReader(monitor::dev_kmsg_reader::KMsgReaderConfig{
-                from_sequence_number: 0,
-            }),
-            _ => panic!("Argument monitor-type not in the set of possible values. CLI parsing has failed drastically.")
-        }
-        None => panic!("Argument monitor-type not in the set of possible values. CLI parsing has failed drastically.")
-    };
+    let monitor_type = monitor::MonitorType::DevKMsgReader(monitor::dev_kmsg_reader::KMsgReaderConfig{
+        from_sequence_number: 0,
+    });
 
     PolytectParams{
         exception_trace, 

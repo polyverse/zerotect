@@ -10,22 +10,26 @@ use std::io::prelude::*;
 use std::str::FromStr;
 use crate::monitor::dev_kmsg_reader::num::FromPrimitive;
 
+type PeekableLinesIter = std::iter::Peekable<std::io::Lines<std::boxed::Box<dyn BufRead>>>;
+
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
 pub struct KMsgReaderConfig {
     pub from_sequence_number: usize,
 }
 
-pub struct DevKMsgReader {
-    verbosity: u8,
-    kmsg_reader: Box<dyn BufRead>,
-    from_sequence_number: usize,
-}
 
 enum KMsgParseError {
+    Completed,
     SequenceNumTooOld,
     EmptyLine,
     Generic(String),
+}
+
+pub struct DevKMsgReader {
+    verbosity: u8,
+    kmsg_reader: PeekableLinesIter,
+    from_sequence_number: usize,
 }
 
 impl DevKMsgReader {
@@ -35,17 +39,17 @@ impl DevKMsgReader {
             Err(e) => panic!("Unable to open file {}: {}", DEV_KMSG_LOCATION, e),
         };
 
-        let kmsg_reader = BufReader::new(dev_kmsg_file);
-
+        let kmsg_file_reader = BufReader::new(dev_kmsg_file);
+        let peekable_kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead>).lines().peekable();
         DevKMsgReader {
             verbosity,
-            kmsg_reader: Box::new(kmsg_reader),
+            kmsg_reader: peekable_kmsg_lines_iter,
             from_sequence_number: config.from_sequence_number,
         }
     }
 
     #[cfg(test)]
-    fn with_reader(c: KMsgReaderConfig, reader: Box<dyn BufRead>, verbosity: u8) -> DevKMsgReader {
+    fn with_reader(c: KMsgReaderConfig, reader: PeekableLinesIter, verbosity: u8) -> DevKMsgReader {
         DevKMsgReader {
             verbosity,
             kmsg_reader: reader,
@@ -53,15 +57,42 @@ impl DevKMsgReader {
         }
     }
 
+    // Message spec: https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/dev-kmsg
     // Parses a kernel log line that looks like this: 
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParseError> {
 
         // read next line
         let mut line_str = String::new();
-        if let Err(e) = self.kmsg_reader.read_line(&mut line_str) {
-            return Err(KMsgParseError::Generic(format!("Error reading line from file {}: {}", DEV_KMSG_LOCATION, e)));
-        }
+        match self.kmsg_reader.next() {
+            None => return Err(KMsgParseError::Completed),
+            Some(maybe_line) => match maybe_line {
+                Err(e) => return Err(KMsgParseError::Generic(format!("Error reading line from device {}: {}", DEV_KMSG_LOCATION, e))),
+                Ok(line) => {
+                    line_str.push_str(&line);
+                    // while next lines start with a single whitespace, append them (including the \n newlines)
+                    loop {
+                        match self.kmsg_reader.peek() {
+                            None => break, // Only think of continuations here... no decision making
+                            Some(maybe_continuation) => match maybe_continuation {
+                                Err(_) => break, // Only think of continuations here... no decision making
+                                Ok(possible_continuation) => {
+                                    if possible_continuation.starts_with(' ') {
+                                        line_str.push('\n'); //add a new-line
+                                        line_str.push_str(possible_continuation);
+                                        self.kmsg_reader.next(); //consume it
+                                        continue;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
         if line_str.trim() == "" {
             return Err(KMsgParseError::EmptyLine)
         }
@@ -156,6 +187,11 @@ impl Iterator for DevKMsgReader {
             match self.parse_kmsg() {
                 Ok(km) => return Some(km),
                 Err(e) => match e {
+                    KMsgParseError::Completed => {
+                        // don't exit because there may be bad lines...
+                        eprintln!("Iterator completed. No more messages expected");
+                        return None;
+                    }
                     KMsgParseError::SequenceNumTooOld => {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
@@ -192,9 +228,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let boxed_reader = Box::new(realistic_message.as_bytes());
-
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, boxed_reader, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
+        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -245,9 +280,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let boxed_reader = Box::new(realistic_message.as_bytes());
-
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 3}, boxed_reader, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
+        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 3}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -269,9 +303,8 @@ mod test {
 6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let boxed_reader = Box::new(realistic_message.as_bytes());
-
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, boxed_reader, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
+        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -292,5 +325,61 @@ mod test {
             timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
         });     
+    }
+
+    #[test]
+    fn can_parse_kmsg_multi_line() {
+        let realistic_message = r"
+5,0,0,-;Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019
+6,1,0,-;Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
+ LINE2=foobar
+ LINE 3 = foobar ; with semicolon
+6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
+
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
+        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
+            message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
+        });
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
+            message: String::from(r"Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
+ LINE2=foobar
+ LINE 3 = foobar ; with semicolon"),
+        });
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
+            message: String::from("x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"),
+        });
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, kmsg::KMsg{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: 0,
+            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+        });        
     }
 }
