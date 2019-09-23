@@ -19,7 +19,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
     if mc.verbosity > 0 { eprintln!("Monitor: Reading dmesg periodically to get kernel messages..."); }
 
 
-    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg>> = match mc.monitor_type {
+    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg> + Send> = match mc.monitor_type {
          MonitorType::DevKMsgReader(c) => Box::new(dev_kmsg_reader::DevKMsgReader::with_file(c, mc.verbosity)),
     };
 

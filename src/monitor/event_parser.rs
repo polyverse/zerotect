@@ -1,31 +1,36 @@
 extern crate regex;
 extern crate num;
+extern crate timeout_iterator;
 
-use num::FromPrimitive;
 use crate::events;
 use crate::monitor::kmsg;
+
+use num::FromPrimitive;
+use timeout_iterator::{TimeoutIterator};
 
 use regex::Regex;
 use std::str::FromStr;
 
 pub struct EventParser {
-    kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg>>,
+    timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
     verbosity: u8,
 }
 
-impl EventParser{
-    pub fn from_kmsg_iterator(kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg>>, verbosity: u8) -> EventParser { 
-            EventParser {
-                kmsg_iter,
-                verbosity,
-            }
+impl EventParser {
+    pub fn from_kmsg_iterator(kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>, verbosity: u8) -> EventParser { 
+        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity);
+
+        EventParser {
+            timeout_kmsg_iter,
+            verbosity,
+        }
     }
 
     fn parse_next_event(&mut self) -> Result<events::Event, String> {
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
-            let maybe_kmsg_entry = self.kmsg_iter.next();
+            let maybe_kmsg_entry = self.timeout_kmsg_iter.next();
             match maybe_kmsg_entry {
                 Some(kmsg_entry) => {
                     if let Some(e) = self.parse_kernel_trap(&kmsg_entry) {
@@ -245,6 +250,7 @@ impl Iterator for EventParser {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::thread;
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
@@ -384,5 +390,54 @@ mod test {
                 signal: events::FatalSignalType::SIGSEGV,
             }),
         })
+    }
+
+
+    #[test]
+    fn is_sendable() {
+        let kmsgs = vec![
+            kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+            },
+        ];
+
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
+
+        thread::spawn(move || {
+            
+            let maybe_segfault = parser.next();
+            assert!(maybe_segfault.is_some());
+            let segfault = maybe_segfault.unwrap();
+            assert_eq!(segfault, events::Event{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::KernelTrap(events::KernelTrapInfo{
+                    trap: events::KernelTrapType::Segfault(0),
+                    procname: String::from("a.out"),
+                    pid: 36075,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode{
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            });
+
+        });
+
+        assert!(true, "If this compiles, EventParser is Send-able across threads.");
+
     }
 }

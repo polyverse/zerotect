@@ -221,6 +221,7 @@ impl Iterator for DevKMsgReader {
 
 #[cfg(test)]
 mod test {
+    use std::thread;
     use super::*;
 
     #[test]
@@ -384,5 +385,29 @@ mod test {
             timestamp: 0,
             message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
         });        
+    }
+
+        #[test]
+    fn is_sendable() {
+        let realistic_message = r"
+5,0,0,-;Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019
+6,1,0,-;Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
+6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
+
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0, flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        thread::spawn(move || {
+            let maybe_entry = iter.next();
+            assert!(maybe_entry.is_some());
+            let entry = maybe_entry.unwrap();
+            assert_eq!(entry, kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
+            });            
+        });
+        assert!(true, "If this compiles, DevKMsgReader is Send'able across threads.");
     }
 }
