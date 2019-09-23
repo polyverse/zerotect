@@ -1,6 +1,7 @@
 pub mod dev_kmsg_reader;
 mod event_parser;
 mod kmsg;
+mod timeout_line_iterator;
 
 use std::sync::mpsc::{Sender};
 

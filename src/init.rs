@@ -3,6 +3,7 @@ extern crate clap;
 use clap::{Arg, App};
 use std::convert::TryFrom;
 use crate::monitor;
+use std::time::Duration;
 
 const ENABLE_FATAL_SIGNALS_FLAG: &str = "enable-fatal-signals";
 const ENABLE_EXCEPTION_TRACE_FLAG: &str = "enable-exception-trace";
@@ -44,11 +45,10 @@ fn parse_args() -> PolytectParams {
     let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG);
     let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG);
     let verbosity = u8::try_from(matches.occurrences_of("verbose")).ok().unwrap();
-     
-    println!("monitor-type option: {:?}",matches.value_of("monitor-type"));
-
+    
     let monitor_type = monitor::MonitorType::DevKMsgReader(monitor::dev_kmsg_reader::KMsgReaderConfig{
         from_sequence_number: 0,
+        flush_timeout: Duration::from_secs(1),
     });
 
     PolytectParams{

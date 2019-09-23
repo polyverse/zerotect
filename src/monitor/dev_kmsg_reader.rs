@@ -3,21 +3,24 @@ extern crate num;
 
 use crate::events;
 use crate::monitor::kmsg;
+use crate::monitor::timeout_line_iterator;
 
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
 use std::str::FromStr;
+use std::time::Duration;
+
 use crate::monitor::dev_kmsg_reader::num::FromPrimitive;
 
-type PeekableLinesIter = std::iter::Peekable<std::io::Lines<std::boxed::Box<dyn BufRead>>>;
+type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
 pub struct KMsgReaderConfig {
     pub from_sequence_number: usize,
+    pub flush_timeout: Duration,
 }
-
 
 enum KMsgParseError {
     Completed,
@@ -28,8 +31,9 @@ enum KMsgParseError {
 
 pub struct DevKMsgReader {
     verbosity: u8,
-    kmsg_reader: PeekableLinesIter,
+    kmsg_line_reader: timeout_line_iterator::TimeoutLineIterator,
     from_sequence_number: usize,
+    flush_timeout: Duration,
 }
 
 impl DevKMsgReader {
@@ -40,20 +44,18 @@ impl DevKMsgReader {
         };
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
-        let peekable_kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead>).lines().peekable();
-        DevKMsgReader {
-            verbosity,
-            kmsg_reader: peekable_kmsg_lines_iter,
-            from_sequence_number: config.from_sequence_number,
-        }
+        let kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead + Send>).lines();
+        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter, verbosity)
     }
 
-    #[cfg(test)]
-    fn with_reader(c: KMsgReaderConfig, reader: PeekableLinesIter, verbosity: u8) -> DevKMsgReader {
+    fn with_lines_iterator(config: KMsgReaderConfig, reader: LinesIterator, verbosity: u8) -> DevKMsgReader {
+        let kmsg_line_reader = timeout_line_iterator::TimeoutLineIterator::with_lines_iterator(reader, verbosity);
+
         DevKMsgReader {
             verbosity,
-            kmsg_reader: reader,
-            from_sequence_number: c.from_sequence_number,
+            kmsg_line_reader,
+            from_sequence_number: config.from_sequence_number,
+            flush_timeout: config.flush_timeout,
         }
     }
 
@@ -61,36 +63,9 @@ impl DevKMsgReader {
     // Parses a kernel log line that looks like this: 
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParseError> {
-
-        // read next line
-        let mut line_str = String::new();
-        match self.kmsg_reader.next() {
-            None => return Err(KMsgParseError::Completed),
-            Some(maybe_line) => match maybe_line {
-                Err(e) => return Err(KMsgParseError::Generic(format!("Error reading line from device {}: {}", DEV_KMSG_LOCATION, e))),
-                Ok(line) => {
-                    line_str.push_str(&line);
-                    // while next lines start with a single whitespace, append them (including the \n newlines)
-                    loop {
-                        match self.kmsg_reader.peek() {
-                            None => break, // Only think of continuations here... no decision making
-                            Some(maybe_continuation) => match maybe_continuation {
-                                Err(_) => break, // Only think of continuations here... no decision making
-                                Ok(possible_continuation) => {
-                                    if possible_continuation.starts_with(' ') {
-                                        line_str.push('\n'); //add a new-line
-                                        line_str.push_str(possible_continuation);
-                                        self.kmsg_reader.next(); //consume it
-                                        continue;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        let line_str: String = match self.next_kmsg_record() {
+            Ok(l) => l,
+            Err(e) => return Err(e),
         };
 
         if line_str.trim() == "" {
@@ -106,13 +81,13 @@ impl DevKMsgReader {
             Some(meta) => meta.trim(),
             None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg metadata in line: {}", line_str)))
         };
-        if self.verbosity > 2 {eprintln!("Monitor: Broken line into metadata: {}", meta);}
+        if self.verbosity > 2 {eprintln!("Monitor:: parse_kmsg:: Broken line into metadata (part 1): {}", meta);}
 
         let message = match meta_and_msg.next() {
             Some(message) => message.trim(),
             None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg message (even if empty) in line: {}", line_str)))
         };
-        if self.verbosity > 2 {eprintln!("Monitor: Broken line into message: {}", message);}
+        if self.verbosity > 2 {eprintln!("Monitor:: parse_kmsg:: Broken line into message (part 2): {}", message);}
 
         let mut meta_parts = meta.splitn(4, ",");
         let (facility, level) = match meta_parts.next() {
@@ -151,7 +126,7 @@ impl DevKMsgReader {
 
         if self.verbosity > 2 {
             if let Some(ignored) = meta_parts.next() {
-                eprintln!("Ignored metadata in kmsg: {}", ignored); 
+                eprintln!("Monitor:: parse_kmsg:: Ignored metadata in kmsg: {}", ignored); 
             }
         }
 
@@ -163,6 +138,33 @@ impl DevKMsgReader {
         })
     }
 
+    fn next_kmsg_record(&mut self) -> Result<String, KMsgParseError> {
+        // read next line
+        let mut line_str = String::new();
+        match self.kmsg_line_reader.next() {
+            Some(line) => {
+                line_str.push_str(line.as_str());
+
+                // look for any supplemental lines and append them
+                loop {
+                    match self.kmsg_line_reader.peek_timeout(self.flush_timeout) {
+                        Ok(l) => {
+                            if l.starts_with(' ') {
+                                line_str.push('\n'); //Preserve newlines
+                                line_str.push_str(l);
+                                self.kmsg_line_reader.next(); //consume the next one
+                            } else {
+                                break;
+                            }
+                        },
+                        Err(_) => break
+                    }
+                }
+            },
+            None => return Err(KMsgParseError::Completed)
+        }
+        Ok(line_str)
+    }
 
     fn parse_fragment<F: FromStr + typename::TypeName>(&mut self, frag: &str) -> Option<F> 
     where <F as std::str::FromStr>::Err: std::fmt::Display
@@ -228,8 +230,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0, flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -280,8 +282,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 3}, peekable_line_iter, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 3,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -303,8 +305,8 @@ mod test {
 6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -337,8 +339,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead>).lines().peekable();
-        let mut iter = DevKMsgReader::with_reader(KMsgReaderConfig{from_sequence_number: 0}, peekable_line_iter, 3);
+        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());

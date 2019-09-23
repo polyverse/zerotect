@@ -69,7 +69,7 @@ impl EventParser{
 
         }
         
-        if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Attempting to kernel log as kernel trap: {:?}", km); }
+        if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Attempting to parse kernel log as kernel trap: {:?}", km); }
 
         if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(km.message.as_str()) {
             if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), maybelocation) = 
