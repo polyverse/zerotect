@@ -1,9 +1,10 @@
 extern crate regex;
 extern crate num;
+extern crate timeout_iterator;
 
 use crate::events;
 use crate::monitor::kmsg;
-use crate::monitor::timeout_line_iterator;
+use timeout_iterator::{TimeoutIterator};
 
 use std::fs::File;
 use std::io::BufReader;
@@ -31,7 +32,7 @@ enum KMsgParseError {
 
 pub struct DevKMsgReader {
     verbosity: u8,
-    kmsg_line_reader: timeout_line_iterator::TimeoutLineIterator,
+    kmsg_line_reader: TimeoutIterator<String>,
     from_sequence_number: usize,
     flush_timeout: Duration,
 }
@@ -49,7 +50,7 @@ impl DevKMsgReader {
     }
 
     fn with_lines_iterator(config: KMsgReaderConfig, reader: LinesIterator, verbosity: u8) -> DevKMsgReader {
-        let kmsg_line_reader = timeout_line_iterator::TimeoutLineIterator::with_lines_iterator(reader, verbosity);
+        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity);
 
         DevKMsgReader {
             verbosity,
