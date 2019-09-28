@@ -92,7 +92,7 @@ impl DevKMsgReader {
 
         let mut meta_parts = meta.splitn(4, ",");
         let (facility, level) = match meta_parts.next() {
-            Some(faclevstr) => match self.parse_fragment::<u32>(faclevstr) {
+            Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev >> 3)) {
@@ -105,7 +105,7 @@ impl DevKMsgReader {
             None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg facility/level (the very first part) in line: {}", line_str)))
         };
         let sequence_num = match meta_parts.next(){
-            Some(seqnumstr) => match self.parse_fragment::<usize>(seqnumstr) {
+            Some(seqnumstr) => match DevKMsgReader::parse_fragment::<usize>(seqnumstr) {
                 Some(seqnum) => seqnum,
                 None => return Err(KMsgParseError::Generic(format!("Unable to parse sequence number into an integer: {}, Line: {}", seqnumstr, line_str)))
             },
@@ -118,7 +118,7 @@ impl DevKMsgReader {
         }
 
         let timestamp = match meta_parts.next() {
-            Some(tstr) => match self.parse_fragment::<u64>(tstr) {
+            Some(tstr) => match DevKMsgReader::parse_fragment::<u64>(tstr) {
                 Some(t) => t,
                 None => return Err(KMsgParseError::Generic(format!("Unable to parse timestamp into integer: {}", tstr)))
             },
@@ -167,7 +167,7 @@ impl DevKMsgReader {
         Ok(line_str)
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(&mut self, frag: &str) -> Option<F> 
+    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F> 
     where <F as std::str::FromStr>::Err: std::fmt::Display
     {
         match frag.trim().parse::<F>() {

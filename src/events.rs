@@ -6,6 +6,7 @@ use std::fmt::Display;
 use strum_macros::{EnumString};
 use typename::TypeName;
 use std::fmt;
+use std::collections::HashMap;
 
 pub type MicrosecondsFromSystemStart = u64;
 
@@ -224,14 +225,19 @@ impl fmt::Display for SegfaultErrorCode {
 #[derive(Debug, PartialEq)]
 pub struct FatalSignalInfo {
     pub signal: FatalSignalType,
+    pub stack_dump: Option<StackDump>,
 }
 
 impl fmt::Display for FatalSignalInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Fatal Signal: {}({})", self.signal, self.signal.clone() as u8)
+        let mut retval = write!(f, "Fatal Signal: {}({})", self.signal, self.signal.clone() as u8);
+        if self.stack_dump.is_some() {
+            retval = write!(f, "{}", self.stack_dump.as_ref().unwrap());
+        }
+
+        retval
     }
 }
-
 
 // POSIX signals in the linux kernel: https://github.com/torvalds/linux/blob/master/include/linux/signal.h#L339
 #[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone)]
@@ -268,3 +274,23 @@ pub enum FatalSignalType {
     SIGPWR,
 }
 
+
+#[derive(Debug, PartialEq)]
+pub struct StackDump {
+    pub cpu: usize,
+    pub pid: usize,
+    pub command: String,
+    pub kernel: String,
+    pub hardware: String,
+    pub taskinfo: HashMap<String, String>,
+    pub registers: HashMap<String, String>
+}
+
+impl fmt::Display for StackDump {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CPU: {} PID: {} Comm: {} {}", self.cpu, 
+            self.pid, 
+            self.command, 
+            self.kernel)
+    }
+}
