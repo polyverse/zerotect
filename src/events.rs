@@ -1,6 +1,7 @@
 extern crate typename;
 extern crate strum;
 
+use serde::{Serialize};
 use num_derive::FromPrimitive;    
 use std::fmt::Display;
 use strum_macros::{EnumString};
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 
 pub type MicrosecondsFromSystemStart = u64;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Event {
     pub facility: LogFacility,
     pub level: LogLevel,
@@ -27,13 +28,13 @@ impl fmt::Display for Event {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum EventType {
     KernelTrap(KernelTrapInfo),
     FatalSignal(FatalSignalInfo)
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone)]
+#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
 pub enum LogFacility {
     #[strum(serialize="kern")]
     Kern = 0,
@@ -72,7 +73,7 @@ pub enum LogFacility {
     FTP,
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone)]
+#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
 pub enum LogLevel {
     #[strum(serialize="emerg")]
     Emergency = 0,
@@ -99,8 +100,7 @@ pub enum LogLevel {
     Debug
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct KernelTrapInfo {
     pub trap: KernelTrapType,
     pub procname: String,
@@ -128,7 +128,7 @@ impl fmt::Display for KernelTrapInfo {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum KernelTrapType {
     Generic(String),
     Segfault(usize),
@@ -144,20 +144,20 @@ impl fmt::Display for KernelTrapType {
     }
 }
 
-#[derive(EnumString, Debug, Display, PartialEq)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultReason {
     #[strum(serialize="kern")]
     NoPageFound,
     ProtectionFault
 }
 
-#[derive(EnumString, Debug, Display, PartialEq)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultAccessType {
     Read,
     Write
 }
 
-#[derive(EnumString, Debug, Display, PartialEq)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultAccessMode {
     Kernel,
     User
@@ -165,7 +165,7 @@ pub enum SegfaultAccessMode {
 
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
 // https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct SegfaultErrorCode {
     pub reason: SegfaultReason,
     pub access_type: SegfaultAccessType,
@@ -222,7 +222,7 @@ impl fmt::Display for SegfaultErrorCode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct FatalSignalInfo {
     pub signal: FatalSignalType,
     pub stack_dump: Option<StackDump>,
@@ -240,7 +240,7 @@ impl fmt::Display for FatalSignalInfo {
 }
 
 // POSIX signals in the linux kernel: https://github.com/torvalds/linux/blob/master/include/linux/signal.h#L339
-#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone)]
+#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone, Serialize)]
 pub enum FatalSignalType {
     SIGHUP = 1,
     SIGINT,
@@ -275,7 +275,7 @@ pub enum FatalSignalType {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct StackDump {
     pub cpu: usize,
     pub pid: usize,

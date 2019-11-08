@@ -19,24 +19,28 @@ fn main() {
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) = mpsc::channel();
 
     let mverbosity = polytect_config.verbosity;
-    let mmonitor_type = polytect_config.monitor_type;
+    let monitor_type = polytect_config.monitor_type;
     let monitor_handle = thread::spawn(move || {
         let mc = monitor::MonitorConfig{
-            monitor_type: mmonitor_type,
             verbosity: mverbosity,
+            monitor_type,
         };
         monitor::monitor(mc, monitor_sink);
     });
 
     let everbosity = polytect_config.verbosity;
+    let console_config =  polytect_config.console_config;
+    let tricorder_config = polytect_config.tricorder_config;
     let emitter_handle = thread::spawn(move || {
         let ec = emitter::EmitterConfig{
             verbosity: everbosity,
+            console_config,
+            tricorder_config,
         };
         emitter::emit(ec, emitter_source);
     });
 
-    eprintln!("Waiting indefinitely under monitor and emitter exit....");
+    eprintln!("Waiting indefinitely until monitor and emitter exit....");
     monitor_handle.join().expect("Unable to join on the monitoring thread");
     emitter_handle.join().expect("Unable to join on the emitter thread");
 }
