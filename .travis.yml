@@ -2,10 +2,7 @@ language: rust
 rust:
   - stable
 env:
-  - PKG_CONFIG_ALLOW_CROSS=1
-  - OPENSSL_LIB_DIR=$HOME/openssl_install/lib/
-  - OPENSSL_INCLUDE_DIR=$HOME/openssl_install/include/
-  - OPENSSL_STATIC=yes
+  - PKG_CONFIG_ALLOW_CROSS=1 OPENSSL_LIB_DIR=$HOME/openssl_install/lib/ OPENSSL_INCLUDE_DIR=$HOME/openssl_install/include/ OPENSSL_STATIC=yes
 addons:
   apt:
     packages: musl-tools
