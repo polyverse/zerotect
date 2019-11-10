@@ -6,11 +6,16 @@ env:
 addons:
   apt:
     packages: musl-tools
+cache:
+  cargo: true
+  directories:
+    - openssl
 before_install:
   - rustup target add x86_64-unknown-linux-musl
+  - cd $HOME
   - git clone git://git.openssl.org/openssl.git
-  - cd openssl
-  - ./config -fPIC --prefix=/usr/local --openssldir=/usr/local/ssl
+  - cd $HOME/openssl
+  - ./config -fPIC --prefix=$HOME/openssl_install --openssldir=$HOME/openssl_install/ssl
   - make
   - make install
 script:
