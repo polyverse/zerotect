@@ -13,7 +13,7 @@ cache:
 before_install:
   - git clone git://git.openssl.org/openssl.git $HOME/openssl
   - cd $HOME/openssl
-  - git checkout OpenSSL_1_1_1d # https://github.com/sfackler/rust-openssl/issues/1030
+  - git checkout OpenSSL_1_0_2q # https://github.com/sfackler/rust-openssl/issues/1030
   - ./config -fPIC --prefix=$HOME/openssl_install --openssldir=$HOME/openssl_install/ssl
   - make
   - make install
