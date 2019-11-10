@@ -3,7 +3,7 @@ rust:
   - stable
 addons:
   apt:
-    packages: musl-tools
+    packages: musl-tools libssl-dev
 before_install:
   - rustup target add x86_64-unknown-linux-musl
 script:
