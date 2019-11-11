@@ -1,26 +1,12 @@
 language: rust
 rust:
   - stable
-env:
-  - PKG_CONFIG_ALLOW_CROSS=1 OPENSSL_LIB_DIR=$HOME/openssl_install/lib/ OPENSSL_INCLUDE_DIR=$HOME/openssl_install/include/ OPENSSL_STATIC=yes
-addons:
-  apt:
-    packages: musl-tools
-cache:
-  cargo: true
-  directories:
-    - openssl
+services:
+  - docker
 before_install:
-  - git clone git://git.openssl.org/openssl.git $HOME/openssl
-  - cd $HOME/openssl
-  - git checkout OpenSSL_1_0_2q # https://github.com/sfackler/rust-openssl/issues/1030
-  - ./config -fPIC --prefix=$HOME/openssl_install --openssldir=$HOME/openssl_install/ssl
-  - make
-  - make install
-  - cd -
-  - rustup target add x86_64-unknown-linux-musl
+  - docker pull clux/muslrust
 script:
-  - cargo build --release --target x86_64-unknown-linux-musl
+  - docker run -v $PWD:/volume --rm -t clux/muslrust cargo build --release
 deploy:
   provider: releases
   file: "target/x86_64-unknown-linux-musl/release/polytect"
