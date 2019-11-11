@@ -103,7 +103,7 @@ fn parse_args() -> PolytectParams {
             auth_key: v.to_owned(),
             node_id: node_id.to_owned(),
             flush_timeout: Duration::from_secs(10),
-            flush_event_count: 200,
+            flush_event_count: 10,
         })
     };
 
