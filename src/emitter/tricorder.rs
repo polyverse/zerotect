@@ -1,19 +1,36 @@
 
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, Receiver, RecvTimeoutError};
 use std::thread;
+use std::time;
+use serde::{Serialize};
+use reqwest;
+
 use crate::emitter;
 use crate::events;
-use reqwest;
 
 
 const TRICORDER_PUBLISH_ENDPOINT: &str = "https://tricorder.polyverse.com/v1/publish";
 
 pub struct TricorderConfig {
     pub auth_key: String,
+    pub node_id: String,
+
+    // Flush all events if none arrive for this interval
+    pub flush_timeout: time::Duration,
+
+    // Flush after this number of items, even if more are arriving...
+    pub flush_event_count: usize,
 }
 
 pub struct Tricorder {
     sender: Sender<events::Event>,
+}
+
+// The structure to send data to tricorder in...
+#[derive(Serialize)]
+struct Report<'l> {
+    node_id: &'l str,
+    events: &'l Vec<events::Event>,
 }
 
 impl emitter::Emitter for Tricorder {
@@ -38,20 +55,46 @@ pub fn new(config: TricorderConfig) -> Tricorder {
             return;
         };
 
+        let mut events: Vec<events::Event> = vec!();
+
         loop {
-            match receiver.recv() {
+            let flush = match receiver.recv_timeout(config.flush_timeout) {
                 Ok(event) => {
-                    let res = client.post(TRICORDER_PUBLISH_ENDPOINT)
-                        .bearer_auth(&config.auth_key)
-                        .json(&event)
-                        .send();
-                    match res {
-                        Ok(r) => eprintln!("Response from tricorder: {:?}", r),
-                        Err(e) => eprintln!("Tricorder: error publishing event to service {}: {}", TRICORDER_PUBLISH_ENDPOINT, e)
+                    events.push(event);
+                    if events.len() >= config.flush_event_count {
+                        true
+                    } else {
+                        false
                     }
                 },
-                Err(e) => eprintln!("Tricorder: Error receiving message from monitor: {}", e)
+                Err(e) => match e {
+                    RecvTimeoutError::Timeout => true,
+                    _ => {
+                        eprintln!("Tricorder: Error receiving message from monitor: {}", e);
+                        false
+                    }
+                }
+            };
+
+            if flush && events.len() > 0 {
+                let report = Report{
+                    node_id: config.node_id.as_str(),
+                    events: &events,
+                };
+
+                let res = client.post(TRICORDER_PUBLISH_ENDPOINT)
+                    .bearer_auth(&config.auth_key)
+                    .json(&report)
+                    .send();
+
+                match res {
+                    Ok(r) => eprintln!("Published {} events. Response from tricorder: {:?}", events.len(), r),
+                    Err(e) => eprintln!("Tricorder: error publishing event to service {}: {}", TRICORDER_PUBLISH_ENDPOINT, e)
+                }
+
+                events.clear();
             }
+
         }
     });
     

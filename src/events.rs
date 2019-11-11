@@ -24,6 +24,7 @@ impl fmt::Display for Event {
         write!(f, "Event<{},{},{}>::{}", self.facility, self.level, self.timestamp, match &self.event_type {
             EventType::KernelTrap(k) => format!("{}", k),
             EventType::FatalSignal(f) => format!("{}", f),
+            EventType::SuppressedCallback(s) => format!("{}", s),
         })
     }
 }
@@ -31,7 +32,8 @@ impl fmt::Display for Event {
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum EventType {
     KernelTrap(KernelTrapInfo),
-    FatalSignal(FatalSignalInfo)
+    FatalSignal(FatalSignalInfo),
+    SuppressedCallback(SuppressedCallbackInfo)
 }
 
 #[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
@@ -292,5 +294,17 @@ impl fmt::Display for StackDump {
             self.pid, 
             self.command, 
             self.kernel)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct SuppressedCallbackInfo {
+    pub function_name: String,
+    pub count: usize,
+}
+
+impl fmt::Display for SuppressedCallbackInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Suppressed {} callbacks to {}", self.count, &self.function_name)
     }
 }

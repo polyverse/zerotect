@@ -36,7 +36,9 @@ impl EventParser {
             let maybe_kmsg_entry = self.timeout_kmsg_iter.next();
             match maybe_kmsg_entry {
                 Some(kmsg_entry) => {
-                    if let Some(e) = self.parse_kernel_trap(&kmsg_entry) {
+                    if let Some(e) = self.parse_callbacks_suppressed(&kmsg_entry) {
+                        return Ok(e);
+                    } else if let Some(e) = self.parse_kernel_trap(&kmsg_entry) {
                         return Ok(e);
                     } else if let Some(e) = self.parse_fatal_signal(&kmsg_entry) {
                         return Ok(e);
@@ -48,6 +50,7 @@ impl EventParser {
 
         Err("Exited dmesg iterator unexpectedly.".to_owned())
     }
+
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure: 
@@ -291,6 +294,46 @@ impl EventParser {
         // Not implemented
         HashMap::<String, String>::new()
     }
+
+
+    // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
+    // Parses this basic structure: 
+    // ====> <function name>: 9 callbacks suppressed
+    fn parse_callbacks_suppressed(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
+        lazy_static! {
+             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(r"(?x)^
+                 # the function name (may have whitespace around it),
+                 [[:space:]]*(?P<function>[^:]*):[[:space:]]*
+                 # followed by a [number])
+                 (?P<count>[[:digit:]]*)
+                 # the literal 'callbacks suppressed'
+                 [[:space:]]*callbacks[[:space:]]*suppressed[[:space:]]*$").unwrap(); 
+         }
+         
+         if self.verbosity > 2 { eprintln!("Monitor:: parse_callbacks_suppressed:: Attempting to parse kernel log as suppressed number of callbacks: {:?}", km); }
+ 
+         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
+             if let (function_name, Some(count)) = 
+                (&dmesg_parts["function"], EventParser::parse_fragment::<usize>(&dmesg_parts["count"])) {
+                
+                if self.verbosity > 2 { eprintln!("Monitor:: parse_callbacks_suppressed:: Successfully suppressed callbacks: {:?}", dmesg_parts); }
+
+                let suppressed_callback_info = events::SuppressedCallbackInfo {
+                    function_name: function_name.to_owned(),
+                    count,
+                };
+
+                return Some(events::Event{
+                    facility: km.facility.clone(),
+                    level: km.level.clone(),
+                    timestamp: km.timestamp,
+                    event_type: events::EventType::SuppressedCallback(suppressed_callback_info),
+                })
+             }
+         };
+ 
+         None
+     }
 
     fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F> 
     where <F as std::str::FromStr>::Err: std::fmt::Display
@@ -579,5 +622,25 @@ mod test {
 
         assert!(true, "If this compiles, EventParser is Send-able across threads.");
 
+    }
+
+    #[test]
+    fn can_parse_suppressed_callback() {
+        let kmsgs = vec![
+            kmsg::KMsg{facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("show_signal_msg: 9 callbacks suppressed"),},
+        ];
+
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
+        let suppressed_callback = parser.next();
+        assert!(suppressed_callback.is_some());
+        assert_eq!(suppressed_callback.unwrap(), events::Event{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Warning,
+            timestamp: 372850970000,
+            event_type: events::EventType::SuppressedCallback(events::SuppressedCallbackInfo{
+                function_name: "show_signal_msg".to_owned(),
+                count: 9,
+            }),
+        })
     }
 }

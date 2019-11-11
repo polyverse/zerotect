@@ -15,6 +15,9 @@ const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
 const CONSOLE_OUTPUT_FLAG: &str = "console";
 const TRICORDER_OUTPUT_FLAG: &str = "tricorder";
 
+const NODE_ID_FLAG: &str = "node";
+const UNIDENTIFIED_NODE: &str = "unidentified";
+
 pub struct PolytectParams {
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,
@@ -48,14 +51,18 @@ fn parse_args() -> PolytectParams {
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
                             .short("c")
                             .long(CONSOLE_OUTPUT_FLAG)
-                            .takes_value(true)
-                            .default_value("text")
+                            .default_value_if(CONSOLE_OUTPUT_FLAG, None, "text")
                             .help(format!("Prints all monitored data to the console. Optionally takes a value of 'text' or 'json'").as_str()))
                         .arg(Arg::with_name(TRICORDER_OUTPUT_FLAG)
                             .short("t")
                             .long(TRICORDER_OUTPUT_FLAG)
                             .takes_value(true)
                             .help(format!("Sends all monitored data to the Polyverse tricorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.").as_str()))
+                        .arg(Arg::with_name(NODE_ID_FLAG)
+                            .short("n")
+                            .long(NODE_ID_FLAG)
+                            .default_value_if(TRICORDER_OUTPUT_FLAG, None, UNIDENTIFIED_NODE)
+                            .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more...").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
@@ -85,10 +92,18 @@ fn parse_args() -> PolytectParams {
         }
     };
 
+    let node_id = match matches.value_of(NODE_ID_FLAG) {
+        None => UNIDENTIFIED_NODE,
+        Some(n) => n,
+    };
+
     let tricorder_config = match matches.value_of(TRICORDER_OUTPUT_FLAG) {
         None => None,
         Some(v) => Some(tricorder::TricorderConfig{
-            auth_key: v.to_owned()
+            auth_key: v.to_owned(),
+            node_id: node_id.to_owned(),
+            flush_timeout: Duration::from_secs(10),
+            flush_event_count: 200,
         })
     };
 
