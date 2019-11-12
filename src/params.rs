@@ -1,16 +1,13 @@
-extern crate clap;
-
 use clap::{Arg, App};
 use std::convert::TryFrom;
 use crate::monitor;
 use std::time::Duration;
 use crate::emitter::console;
 use crate::emitter::tricorder;
+use crate::system::{PRINT_FATAL_SIGNALS_CTLNAME, EXCEPTION_TRACE_CTLNAME};
 
 const ENABLE_FATAL_SIGNALS_FLAG: &str = "enable-fatal-signals";
 const ENABLE_EXCEPTION_TRACE_FLAG: &str = "enable-exception-trace";
-const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
-const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
 
 const CONSOLE_OUTPUT_FLAG: &str = "console";
 const TRICORDER_OUTPUT_FLAG: &str = "tricorder";
@@ -30,12 +27,7 @@ pub struct PolytectParams {
     pub verbosity: u8,
 }
 
-pub fn initialize() -> PolytectParams {
-    let config = parse_args();
-    config
-}
-
-fn parse_args() -> PolytectParams {
+pub fn parse_args() -> PolytectParams {
         let matches = App::new("Polytect")
                         .version("1.0")
                         .author("Polyverse Corporation <support@polyverse.com>")

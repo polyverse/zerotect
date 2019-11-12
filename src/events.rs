@@ -1,6 +1,3 @@
-extern crate typename;
-extern crate strum;
-
 use serde::{Serialize};
 use num_derive::FromPrimitive;    
 use std::fmt::Display;
@@ -8,14 +5,13 @@ use strum_macros::{EnumString};
 use typename::TypeName;
 use std::fmt;
 use std::collections::HashMap;
-
-pub type MicrosecondsFromSystemStart = u64;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Event {
     pub facility: LogFacility,
     pub level: LogLevel,
-    pub timestamp: MicrosecondsFromSystemStart,
+    pub timestamp: DateTime<Utc>,
     pub event_type: EventType,
 }
 

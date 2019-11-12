@@ -1,15 +1,14 @@
-extern crate regex;
-extern crate num;
-extern crate timeout_iterator;
-
 use crate::events;
 use crate::monitor::kmsg;
+use crate::system;
 
 use num::FromPrimitive;
 use std::collections::HashMap;
 use regex::Regex;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration};
+use chrono::{DateTime, Utc};
+use std::ops::Add;
 
 use timeout_iterator::{TimeoutIterator};
 
@@ -17,6 +16,7 @@ use timeout_iterator::{TimeoutIterator};
 pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
     verbosity: u8,
+    system_start_time: DateTime<Utc>,
 }
 
 impl EventParser {
@@ -26,6 +26,7 @@ impl EventParser {
         EventParser {
             timeout_kmsg_iter,
             verbosity,
+            system_start_time: system::system_start_time(),
         }
     }
 
@@ -114,7 +115,7 @@ impl EventParser {
                 return Some(events::Event{
                     facility: km.facility.clone(),
                     level: km.level.clone(),
-                    timestamp: km.timestamp,
+                    timestamp: self.system_start_time.add(km.duration_from_system_start),
                     event_type: events::EventType::KernelTrap(trapinfo),
                 });
             }
@@ -165,7 +166,7 @@ impl EventParser {
                     return Some(events::Event{
                         facility: km.facility.clone(),
                         level: km.level.clone(),
-                        timestamp: km.timestamp,
+                        timestamp: self.system_start_time.add(km.duration_from_system_start),
                         event_type: events::EventType::FatalSignal(events::FatalSignalInfo{
                             signal,
                             stack_dump: self.parse_stack_dump(),
@@ -326,7 +327,7 @@ impl EventParser {
                 return Some(events::Event{
                     facility: km.facility.clone(),
                     level: km.level.clone(),
-                    timestamp: km.timestamp,
+                    timestamp: self.system_start_time.add(km.duration_from_system_start),
                     event_type: events::EventType::SuppressedCallback(suppressed_callback_info),
                 })
              }

@@ -3,10 +3,11 @@ extern crate enum_display_derive;
 #[macro_use]
 extern crate lazy_static;
 
-mod init;
+mod params;
 mod events;
 mod emitter;
 mod monitor;
+mod system;
 
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
@@ -14,7 +15,11 @@ use std::thread;
 
 
 fn main() {
-    let polytect_config = init::initialize();
+    system::ensure_linux();
+    let polytect_config = params::parse_args();
+
+    // initialize the system with config
+    system::modify_environment(&polytect_config);
 
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) = mpsc::channel();
 

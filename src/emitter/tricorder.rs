@@ -1,7 +1,7 @@
 
 use std::sync::mpsc::{channel, Sender, Receiver, RecvTimeoutError};
 use std::thread;
-use std::time;
+use std::time::Duration;
 use serde::{Serialize};
 use reqwest;
 
@@ -9,14 +9,14 @@ use crate::emitter;
 use crate::events;
 
 
-const TRICORDER_PUBLISH_ENDPOINT: &str = "https://tricorder.polyverse.com/v1/publish";
+const TRICORDER_PUBLISH_ENDPOINT: &str = "https://tricorder.polyverse.com/v1/events";
 
 pub struct TricorderConfig {
     pub auth_key: String,
     pub node_id: String,
 
     // Flush all events if none arrive for this interval
-    pub flush_timeout: time::Duration,
+    pub flush_timeout: Duration,
 
     // Flush after this number of items, even if more are arriving...
     pub flush_event_count: usize,

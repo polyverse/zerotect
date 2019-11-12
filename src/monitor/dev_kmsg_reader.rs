@@ -1,7 +1,3 @@
-extern crate regex;
-extern crate num;
-extern crate timeout_iterator;
-
 use crate::events;
 use crate::monitor::kmsg;
 use timeout_iterator::{TimeoutIterator};
@@ -11,15 +7,15 @@ use std::io::BufReader;
 use std::io::prelude::*;
 use std::str::FromStr;
 use std::time::Duration;
-
-use crate::monitor::dev_kmsg_reader::num::FromPrimitive;
+use chrono::Duration as ChronoDuration;
+use num::FromPrimitive;
 
 type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
 pub struct KMsgReaderConfig {
-    pub from_sequence_number: usize,
+    pub from_sequence_number: u64,
     pub flush_timeout: Duration,
 }
 
@@ -33,7 +29,7 @@ enum KMsgParseError {
 pub struct DevKMsgReader {
     verbosity: u8,
     kmsg_line_reader: TimeoutIterator<String>,
-    from_sequence_number: usize,
+    from_sequence_number: u64,
     flush_timeout: Duration,
 }
 
@@ -104,8 +100,10 @@ impl DevKMsgReader {
             }
             None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg facility/level (the very first part) in line: {}", line_str)))
         };
+
+        // Sequence is a 64-bit integer: https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
         let sequence_num = match meta_parts.next(){
-            Some(seqnumstr) => match DevKMsgReader::parse_fragment::<usize>(seqnumstr) {
+            Some(seqnumstr) => match DevKMsgReader::parse_fragment::<u64>(seqnumstr) {
                 Some(seqnum) => seqnum,
                 None => return Err(KMsgParseError::Generic(format!("Unable to parse sequence number into an integer: {}, Line: {}", seqnumstr, line_str)))
             },
@@ -117,9 +115,9 @@ impl DevKMsgReader {
             return Err(KMsgParseError::SequenceNumTooOld);
         }
 
-        let timestamp = match meta_parts.next() {
-            Some(tstr) => match DevKMsgReader::parse_fragment::<u64>(tstr) {
-                Some(t) => t,
+        let duration_from_system_start = match meta_parts.next() {
+            Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr) {
+                Some(t) => ChronoDuration::microseconds(t),
                 None => return Err(KMsgParseError::Generic(format!("Unable to parse timestamp into integer: {}", tstr)))
             },
             None => return Err(KMsgParseError::Generic(format!("No timestamp found in line: {}", line_str)))
@@ -134,7 +132,7 @@ impl DevKMsgReader {
         Ok(kmsg::KMsg{
             facility,
             level,
-            timestamp,
+            duration_from_system_start,
             message: message.to_owned(),
         })
     }
