@@ -2,16 +2,15 @@ use crate::events;
 use crate::monitor::kmsg;
 use crate::system;
 
-use num::FromPrimitive;
-use std::collections::HashMap;
-use regex::Regex;
-use std::str::FromStr;
-use std::time::{Duration};
 use chrono::{DateTime, Utc};
+use num::FromPrimitive;
+use regex::Regex;
+use std::collections::HashMap;
 use std::ops::Add;
+use std::str::FromStr;
+use std::time::Duration;
 
-use timeout_iterator::{TimeoutIterator};
-
+use timeout_iterator::TimeoutIterator;
 
 pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
@@ -20,7 +19,10 @@ pub struct EventParser {
 }
 
 impl EventParser {
-    pub fn from_kmsg_iterator(kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>, verbosity: u8) -> EventParser { 
+    pub fn from_kmsg_iterator(
+        kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
+        verbosity: u8,
+    ) -> EventParser {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity);
 
         EventParser {
@@ -44,22 +46,21 @@ impl EventParser {
                     } else if let Some(e) = self.parse_fatal_signal(&kmsg_entry) {
                         return Ok(e);
                     }
-                },
-                None => break
+                }
+                None => break,
             }
         }
 
         Err("Exited dmesg iterator unexpectedly.".to_owned())
     }
 
-
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
-    // Parses this basic structure: 
+    // Parses this basic structure:
     // ====>> a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
     fn parse_kernel_trap(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
-       lazy_static! {
+        lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # the procname (may have whitespace around it),
                 [[:space:]]*(?P<procname>[^\[]*)
@@ -80,39 +81,73 @@ impl EventParser {
                 [[:space:]]*$").unwrap();
 
         }
-        
-        if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Attempting to parse kernel log as kernel trap: {:?}", km); }
+
+        if self.verbosity > 2 {
+            eprintln!(
+                "Monitor:: parse_kernel_trap:: Attempting to parse kernel log as kernel trap: {:?}",
+                km
+            );
+        }
 
         if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(km.message.as_str()) {
-            if let (procname, Some(pid), Some(trap), Some(ip), Some(sp), Some(errcode), maybelocation) = 
-                (&dmesg_parts["procname"], EventParser::parse_fragment::<usize>(&dmesg_parts["pid"]), 
-                self.parse_kernel_trap_type(&dmesg_parts["message"]), EventParser::parse_hex::<usize>(&dmesg_parts["ip"]), 
-                EventParser::parse_hex::<usize>(&dmesg_parts["sp"]), EventParser::parse_hex::<u8>(&dmesg_parts["errcode"]), 
-                &dmesg_parts["maybelocation"]) {
+            if let (
+                procname,
+                Some(pid),
+                Some(trap),
+                Some(ip),
+                Some(sp),
+                Some(errcode),
+                maybelocation,
+            ) = (
+                &dmesg_parts["procname"],
+                EventParser::parse_fragment::<usize>(&dmesg_parts["pid"]),
+                self.parse_kernel_trap_type(&dmesg_parts["message"]),
+                EventParser::parse_hex::<usize>(&dmesg_parts["ip"]),
+                EventParser::parse_hex::<usize>(&dmesg_parts["sp"]),
+                EventParser::parse_hex::<u8>(&dmesg_parts["errcode"]),
+                &dmesg_parts["maybelocation"],
+            ) {
+                if self.verbosity > 2 {
+                    eprintln!(
+                        "Monitor:: parse_kernel_trap:: Successfully parsed kernel trap parts: {:?}",
+                        dmesg_parts
+                    );
+                }
 
-                if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap parts: {:?}", dmesg_parts); }
-
-                let (file, vmastart, vmasize) = if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
-                    if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap location: {:?}", location_parts); }
-                    (Some((&location_parts["file"]).to_owned()), EventParser::parse_hex::<usize>(&location_parts["vmastart"]), EventParser::parse_hex::<usize>(&location_parts["vmasize"]))
+                let (file, vmastart, vmasize) = if let Some(location_parts) =
+                    RE_LOCATION.captures(maybelocation)
+                {
+                    if self.verbosity > 2 {
+                        eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap location: {:?}", location_parts);
+                    }
+                    (
+                        Some((&location_parts["file"]).to_owned()),
+                        EventParser::parse_hex::<usize>(&location_parts["vmastart"]),
+                        EventParser::parse_hex::<usize>(&location_parts["vmasize"]),
+                    )
                 } else {
                     (None, None, None)
                 };
 
-                let trapinfo = events::KernelTrapInfo{
-                        trap,
-                        procname: procname.to_owned(),
-                        pid,
-                        ip: ip,
-                        sp: sp,
-                        errcode: events::SegfaultErrorCode::from_error_code(errcode),
-                        file,
-                        vmastart,
-                        vmasize,
+                let trapinfo = events::KernelTrapInfo {
+                    trap,
+                    procname: procname.to_owned(),
+                    pid,
+                    ip: ip,
+                    sp: sp,
+                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
+                    file,
+                    vmastart,
+                    vmasize,
                 };
 
-                if self.verbosity > 2 { eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap: {:?}", trapinfo); }
-                return Some(events::Event{
+                if self.verbosity > 2 {
+                    eprintln!(
+                        "Monitor:: parse_kernel_trap:: Successfully parsed kernel trap: {:?}",
+                        trapinfo
+                    );
+                }
+                return Some(events::Event {
                     facility: km.facility.clone(),
                     level: km.level.clone(),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
@@ -125,16 +160,21 @@ impl EventParser {
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
-    // Parses this basic structure: 
+    // Parses this basic structure:
     // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
     fn parse_kernel_trap_type(&mut self, trap_string: &str) -> Option<events::KernelTrapType> {
         lazy_static! {
-            static ref RE_SEGFAULT: Regex = Regex::new(r"(?x)^
+            static ref RE_SEGFAULT: Regex = Regex::new(
+                r"(?x)^
                 [[:space:]]*
                 segfault[[:space:]]*at[[:space:]]*(?P<location>[[:xdigit:]]*)
-                [[:space:]]*$").unwrap();
-
-            static ref RE_INVALID_OPCODE: Regex = Regex::new(r"(?x)^[[:space:]]*trap[[:space:]]*invalid[[:space:]]*opcode[[:space:]]*$").unwrap();
+                [[:space:]]*$"
+            )
+            .unwrap();
+            static ref RE_INVALID_OPCODE: Regex = Regex::new(
+                r"(?x)^[[:space:]]*trap[[:space:]]*invalid[[:space:]]*opcode[[:space:]]*$"
+            )
+            .unwrap();
         }
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
@@ -156,28 +196,36 @@ impl EventParser {
     // Signal Printed here: https://github.com/torvalds/linux/blob/master/kernel/signal.c#L1239
     // ---------------------------------------------------------------
     // potentially unexpected fatal signal 11.
-    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg) -> Option<events::Event>{
+    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
         if let Some(fatal_signal_parts) = RE_FATAL_SIGNAL.captures(km.message.as_str()) {
-            if let Some(signalnum) = EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"]) {
+            if let Some(signalnum) =
+                EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
+            {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
-                    return Some(events::Event{
+                    return Some(events::Event {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
                         timestamp: self.system_start_time.add(km.duration_from_system_start),
-                        event_type: events::EventType::FatalSignal(events::FatalSignalInfo{
+                        event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
                             signal,
                             stack_dump: self.parse_stack_dump(),
-                        })
+                        }),
                     });
                 } else {
-                    eprintln!("Unable to fatal signal number {} into known enumeration.", signalnum);
-                    return None;   
+                    eprintln!(
+                        "Unable to fatal signal number {} into known enumeration.",
+                        signalnum
+                    );
+                    return None;
                 }
             } else {
-                eprintln!("Unable to parse fatal signal integer from {}", &fatal_signal_parts["signalnumstr"]);
+                eprintln!(
+                    "Unable to parse fatal signal integer from {}",
+                    &fatal_signal_parts["signalnumstr"]
+                );
                 return None;
             }
         };
@@ -203,16 +251,25 @@ impl EventParser {
     // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
     fn parse_stack_dump(&mut self) -> Option<events::StackDump> {
-        if let ((Some(cpu), Some(pid), Some(command), Some(kernel)), hardware, taskinfo, registers) = 
-        (self.parse_fatal_signal_cpu_line(),  self.parse_fatal_signal_hardware(), self.parse_fatal_signal_task_line(), self.parse_fatal_signal_registers()) {
-            return Some(events::StackDump{
+        if let (
+            (Some(cpu), Some(pid), Some(command), Some(kernel)),
+            hardware,
+            taskinfo,
+            registers,
+        ) = (
+            self.parse_fatal_signal_cpu_line(),
+            self.parse_fatal_signal_hardware(),
+            self.parse_fatal_signal_task_line(),
+            self.parse_fatal_signal_registers(),
+        ) {
+            return Some(events::StackDump {
                 cpu,
                 pid,
                 command,
                 kernel,
                 hardware,
                 taskinfo,
-                registers
+                registers,
             });
         }
 
@@ -220,22 +277,29 @@ impl EventParser {
     }
 
     // CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1
-    fn parse_fatal_signal_cpu_line(&mut self) -> (Option<usize>, Option<usize>, Option<String>, Option<String>) {
+    fn parse_fatal_signal_cpu_line(
+        &mut self,
+    ) -> (Option<usize>, Option<usize>, Option<String>, Option<String>) {
         lazy_static! {
-            static ref RE_CPU_LINE: Regex = Regex::new(r"(?x)^
+            static ref RE_CPU_LINE: Regex = Regex::new(
+                r"(?x)^
                 [[:space:]]*CPU:[[:space:]]*(?P<cpu>[[:digit:]]*)
                 [[:space:]]*PID:[[:space:]]*(?P<pid>[[:digit:]]*)
                 [[:space:]]*Comm:[[:space:]]*(?P<command>[[:^space:]]*)
-                (?P<kernel>.*)$").unwrap();
+                (?P<kernel>.*)$"
+            )
+            .unwrap();
         }
         if let Ok(maybe_cpu_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1)) {
             if let Some(line_parts) = RE_CPU_LINE.captures(maybe_cpu_line.message.as_str()) {
-                    let retval = (EventParser::parse_fragment::<usize>(&line_parts["cpu"]), 
-                        EventParser::parse_fragment::<usize>(&line_parts["pid"]),
-                        Some(line_parts["command"].trim().to_owned()), 
-                        Some(line_parts["kernel"].trim().to_owned()));
-                    self.timeout_kmsg_iter.next(); //consume the line
-                    return retval;
+                let retval = (
+                    EventParser::parse_fragment::<usize>(&line_parts["cpu"]),
+                    EventParser::parse_fragment::<usize>(&line_parts["pid"]),
+                    Some(line_parts["command"].trim().to_owned()),
+                    Some(line_parts["kernel"].trim().to_owned()),
+                );
+                self.timeout_kmsg_iter.next(); //consume the line
+                return retval;
             }
         }
 
@@ -245,10 +309,16 @@ impl EventParser {
     // Hardware name:  BHYVE, BIOS 1.00 03/14/2014
     fn parse_fatal_signal_hardware(&mut self) -> String {
         lazy_static! {
-            static ref RE_HARDWARE_LINE: Regex = Regex::new(r"(?x)^[[:space:]]*Hardware[[:space:]]*name:[[:space:]]*(?P<hardware>.*)$").unwrap();
+            static ref RE_HARDWARE_LINE: Regex = Regex::new(
+                r"(?x)^[[:space:]]*Hardware[[:space:]]*name:[[:space:]]*(?P<hardware>.*)$"
+            )
+            .unwrap();
         }
-        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1)) {
-            if let Some(line_parts) = RE_HARDWARE_LINE.captures(maybe_hardware_line.message.as_str()) {
+        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1))
+        {
+            if let Some(line_parts) =
+                RE_HARDWARE_LINE.captures(maybe_hardware_line.message.as_str())
+            {
                 let hardware = line_parts["hardware"].trim().to_owned();
                 self.timeout_kmsg_iter.next(); //consume the line
                 return hardware;
@@ -257,19 +327,26 @@ impl EventParser {
 
         String::new()
     }
-    
+
     // task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000
     // task: ffff880076e1aa00 ti: ffff880079ed4000 task.ti: ffff880079ed4000
     fn parse_fatal_signal_task_line(&mut self) -> HashMap<String, String> {
         lazy_static! {
-            static ref RE_HARDWARE_LINE: Regex = Regex::new(r"(?x)[[:space:]]*(?P<key>task[^:]*):[[:space:]]*(?P<value>[[:xdigit:]]*)").unwrap();
+            static ref RE_HARDWARE_LINE: Regex = Regex::new(
+                r"(?x)[[:space:]]*(?P<key>task[^:]*):[[:space:]]*(?P<value>[[:xdigit:]]*)"
+            )
+            .unwrap();
         }
 
         let mut taskinfo = HashMap::<String, String>::new();
-        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1)) {
+        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1))
+        {
             for keyval in RE_HARDWARE_LINE.captures_iter(maybe_hardware_line.message.as_str()) {
                 println!("{}: {}", &keyval["key"], &keyval["value"]);
-                taskinfo.insert(keyval["key"].trim().to_owned(), keyval["value"].trim().to_owned());
+                taskinfo.insert(
+                    keyval["key"].trim().to_owned(),
+                    keyval["value"].trim().to_owned(),
+                );
             }
             if taskinfo.len() > 0 {
                 // we let go of the first iterator borrow after we cloned off it, now we can borrow again,
@@ -296,48 +373,56 @@ impl EventParser {
         HashMap::<String, String>::new()
     }
 
-
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
-    // Parses this basic structure: 
+    // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
     fn parse_callbacks_suppressed(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
         lazy_static! {
-             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(r"(?x)^
+            static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
+                r"(?x)^
                  # the function name (may have whitespace around it),
                  [[:space:]]*(?P<function>[^:]*):[[:space:]]*
                  # followed by a [number])
                  (?P<count>[[:digit:]]*)
                  # the literal 'callbacks suppressed'
-                 [[:space:]]*callbacks[[:space:]]*suppressed[[:space:]]*$").unwrap(); 
-         }
-         
-         if self.verbosity > 2 { eprintln!("Monitor:: parse_callbacks_suppressed:: Attempting to parse kernel log as suppressed number of callbacks: {:?}", km); }
- 
-         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
-             if let (function_name, Some(count)) = 
-                (&dmesg_parts["function"], EventParser::parse_fragment::<usize>(&dmesg_parts["count"])) {
-                
-                if self.verbosity > 2 { eprintln!("Monitor:: parse_callbacks_suppressed:: Successfully suppressed callbacks: {:?}", dmesg_parts); }
+                 [[:space:]]*callbacks[[:space:]]*suppressed[[:space:]]*$"
+            )
+            .unwrap();
+        }
+
+        if self.verbosity > 2 {
+            eprintln!("Monitor:: parse_callbacks_suppressed:: Attempting to parse kernel log as suppressed number of callbacks: {:?}", km);
+        }
+
+        if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
+            if let (function_name, Some(count)) = (
+                &dmesg_parts["function"],
+                EventParser::parse_fragment::<usize>(&dmesg_parts["count"]),
+            ) {
+                if self.verbosity > 2 {
+                    eprintln!("Monitor:: parse_callbacks_suppressed:: Successfully suppressed callbacks: {:?}", dmesg_parts);
+                }
 
                 let suppressed_callback_info = events::SuppressedCallbackInfo {
                     function_name: function_name.to_owned(),
                     count,
                 };
 
-                return Some(events::Event{
+                return Some(events::Event {
                     facility: km.facility.clone(),
                     level: km.level.clone(),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
                     event_type: events::EventType::SuppressedCallback(suppressed_callback_info),
-                })
-             }
-         };
- 
-         None
-     }
+                });
+            }
+        };
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F> 
-    where <F as std::str::FromStr>::Err: std::fmt::Display
+        None
+    }
+
+    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
+    where
+        <F as std::str::FromStr>::Err: std::fmt::Display,
     {
         match frag.trim().parse::<F>() {
             Ok(f) => Some(f),
@@ -349,7 +434,8 @@ impl EventParser {
     }
 
     fn parse_hex<N: num::Num + typename::TypeName>(frag: &str) -> Option<N>
-    where <N as num::Num>::FromStrRadixErr: std::fmt::Display
+    where
+        <N as num::Num>::FromStrRadixErr: std::fmt::Display,
     {
         // special case
         if frag == "(null)" {
@@ -364,12 +450,10 @@ impl EventParser {
             }
         }
     }
-
 }
 
-
 impl Iterator for EventParser {
-   // we will be counting with usize
+    // we will be counting with usize
     type Item = events::Event;
 
     // next() is the only required method
@@ -377,13 +461,15 @@ impl Iterator for EventParser {
         match self.parse_next_event() {
             Ok(event) => Some(event),
             Err(err) => {
-                eprintln!("Monitor: Error iterating over events from the dmesg parser: {}", err);
+                eprintln!(
+                    "Monitor: Error iterating over events from the dmesg parser: {}",
+                    err
+                );
                 None
             }
         }
     }
 }
-
 
 /**********************************************************************************/
 // Tests! Tests! Tests!
@@ -404,7 +490,6 @@ mod test {
         }
      };
     );
-
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
@@ -434,148 +519,249 @@ mod test {
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
-        assert_eq!(segfault, events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo{
-                trap: events::KernelTrapType::Segfault(0),
-                procname: String::from("a.out"),
-                pid: 36075,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode{
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
-            })
-        });
+        assert_eq!(
+            segfault,
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0),
+                    procname: String::from("a.out"),
+                    pid: 36075,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            }
+        );
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
-        assert_eq!(segfault, events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo{
-                trap: events::KernelTrapType::Segfault(0),
-                procname: String::from("a.out"),
-                pid: 36075,
-                ip: 0x0,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode{
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
-            })
-        });
+        assert_eq!(
+            segfault,
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0),
+                    procname: String::from("a.out"),
+                    pid: 36075,
+                    ip: 0x0,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            }
+        );
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
-        assert_eq!(segfault, events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo{
-                trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
-                procname: String::from("a.out"),
-                pid: 37659,
-                ip: 0x7fff4b8ba8b8,
-                sp: 0x00007fff4b8ba7b8,
-                errcode: events::SegfaultErrorCode{
-                    reason: events::SegfaultReason::ProtectionFault,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: true,
-                    protection_keys_block_access: false,
-                },
-                file: None,
-                vmastart: None,
-                vmasize: None,
-            })
-        });
-
+        assert_eq!(
+            segfault,
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
+                    procname: String::from("a.out"),
+                    pid: 37659,
+                    ip: 0x7fff4b8ba8b8,
+                    sp: 0x00007fff4b8ba7b8,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::ProtectionFault,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: true,
+                        protection_keys_block_access: false,
+                    },
+                    file: None,
+                    vmastart: None,
+                    vmasize: None,
+                })
+            }
+        );
     }
 
     #[test]
     fn can_parse_fatal_signal_optional_dump() {
-        let kmsgs = vec![
-            kmsg::KMsg{facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("potentially unexpected fatal signal 11."),},
-        ];
+        let kmsgs = vec![kmsg::KMsg {
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Warning,
+            timestamp: 372850970000,
+            message: String::from("potentially unexpected fatal signal 11."),
+        }];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
         let sig11 = parser.next();
         assert!(sig11.is_some());
-        assert_eq!(sig11.unwrap(), events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::FatalSignal(events::FatalSignalInfo{
-                signal: events::FatalSignalType::SIGSEGV,
-                stack_dump: None,
-            }),
-        })
+        assert_eq!(
+            sig11.unwrap(),
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
+                    signal: events::FatalSignalType::SIGSEGV,
+                    stack_dump: None,
+                }),
+            }
+        )
     }
-
 
     #[test]
     fn can_parse_fatal_signal_11() {
         let kmsgs = vec![
-            kmsg::KMsg{facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("potentially unexpected fatal signal 11."),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("RIP: 0033:0x561bc8d8f12e"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),},
-            kmsg::KMsg{ facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0"),},
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("potentially unexpected fatal signal 11."),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("RIP: 0033:0x561bc8d8f12e"),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
+                ),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
+            },
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                message: String::from(
+                    "CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0",
+                ),
+            },
         ];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
         let sig11 = parser.next();
         assert!(sig11.is_some());
-        assert_eq!(sig11.unwrap(), events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::FatalSignal(events::FatalSignalInfo{
-                signal: events::FatalSignalType::SIGSEGV,
-                stack_dump: Some(events::StackDump{
-                    cpu: 1,
-                    pid: 36075,
-                    command: "a.out".to_owned(),
-                    kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
-                    hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
-                    taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                    registers: HashMap::new(),
-                })
-            }),
-        })
+        assert_eq!(
+            sig11.unwrap(),
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
+                    signal: events::FatalSignalType::SIGSEGV,
+                    stack_dump: Some(events::StackDump {
+                        cpu: 1,
+                        pid: 36075,
+                        command: "a.out".to_owned(),
+                        kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
+                        hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
+                        taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
+                        registers: HashMap::new(),
+                    })
+                }),
+            }
+        )
     }
-
 
     #[test]
     fn is_sendable() {
@@ -591,57 +777,66 @@ mod test {
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
 
         thread::spawn(move || {
-            
             let maybe_segfault = parser.next();
             assert!(maybe_segfault.is_some());
             let segfault = maybe_segfault.unwrap();
-            assert_eq!(segfault, events::Event{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: 372850970000,
-                event_type: events::EventType::KernelTrap(events::KernelTrapInfo{
-                    trap: events::KernelTrapType::Segfault(0),
-                    procname: String::from("a.out"),
-                    pid: 36075,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode{
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: Some(String::from("a.out")),
-                    vmastart: Some(0x561bc8d8f000),
-                    vmasize: Some(0x1000),
-                })
-            });
-
+            assert_eq!(
+                segfault,
+                events::Event {
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    timestamp: 372850970000,
+                    event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
+                        trap: events::KernelTrapType::Segfault(0),
+                        procname: String::from("a.out"),
+                        pid: 36075,
+                        ip: 0x0000561bc8d8f12e,
+                        sp: 0x00007ffd5833d0c0,
+                        errcode: events::SegfaultErrorCode {
+                            reason: events::SegfaultReason::NoPageFound,
+                            access_type: events::SegfaultAccessType::Read,
+                            access_mode: events::SegfaultAccessMode::User,
+                            use_of_reserved_bit: false,
+                            instruction_fetch: false,
+                            protection_keys_block_access: false,
+                        },
+                        file: Some(String::from("a.out")),
+                        vmastart: Some(0x561bc8d8f000),
+                        vmasize: Some(0x1000),
+                    })
+                }
+            );
         });
 
-        assert!(true, "If this compiles, EventParser is Send-able across threads.");
-
+        assert!(
+            true,
+            "If this compiles, EventParser is Send-able across threads."
+        );
     }
 
     #[test]
     fn can_parse_suppressed_callback() {
-        let kmsgs = vec![
-            kmsg::KMsg{facility: events::LogFacility::Kern, level: events::LogLevel::Warning, timestamp: 372850970000, message: String::from("show_signal_msg: 9 callbacks suppressed"),},
-        ];
+        let kmsgs = vec![kmsg::KMsg {
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Warning,
+            timestamp: 372850970000,
+            message: String::from("show_signal_msg: 9 callbacks suppressed"),
+        }];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0);
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
-        assert_eq!(suppressed_callback.unwrap(), events::Event{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp: 372850970000,
-            event_type: events::EventType::SuppressedCallback(events::SuppressedCallbackInfo{
-                function_name: "show_signal_msg".to_owned(),
-                count: 9,
-            }),
-        })
+        assert_eq!(
+            suppressed_callback.unwrap(),
+            events::Event {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp: 372850970000,
+                event_type: events::EventType::SuppressedCallback(events::SuppressedCallbackInfo {
+                    function_name: "show_signal_msg".to_owned(),
+                    count: 9,
+                }),
+            }
+        )
     }
 }

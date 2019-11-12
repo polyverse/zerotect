@@ -1,6 +1,6 @@
-use serde_json;
 use crate::emitter;
 use crate::events;
+use serde_json;
 
 #[derive(Debug)]
 pub enum Format {
@@ -13,7 +13,7 @@ pub struct ConsoleConfig {
 }
 
 pub struct Console {
-    config: ConsoleConfig
+    config: ConsoleConfig,
 }
 
 impl emitter::Emitter for Console {
@@ -21,15 +21,13 @@ impl emitter::Emitter for Console {
         match self.config.console_format {
             Format::UserFriendlyText => println!("{}", event),
             Format::JSON => match serde_json::to_string(&event) {
-                 Ok(json) => println!("{}", json),
-                 Err(e) => println!("Unable to Serialize event to JSON: {}", e)
-            }
+                Ok(json) => println!("{}", json),
+                Err(e) => println!("Unable to Serialize event to JSON: {}", e),
+            },
         }
     }
 }
 
 pub fn new(config: ConsoleConfig) -> Console {
-    Console{
-        config
-    }
+    Console { config }
 }

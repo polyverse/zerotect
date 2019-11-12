@@ -2,7 +2,7 @@ pub mod dev_kmsg_reader;
 mod event_parser;
 mod kmsg;
 
-use std::sync::mpsc::{Sender};
+use std::sync::mpsc::Sender;
 
 use crate::events;
 
@@ -16,11 +16,14 @@ pub struct MonitorConfig {
 }
 
 pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
-    if mc.verbosity > 0 { eprintln!("Monitor: Reading dmesg periodically to get kernel messages..."); }
-
+    if mc.verbosity > 0 {
+        eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
+    }
 
     let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg> + Send> = match mc.monitor_type {
-         MonitorType::DevKMsgReader(c) => Box::new(dev_kmsg_reader::DevKMsgReader::with_file(c, mc.verbosity)),
+        MonitorType::DevKMsgReader(c) => {
+            Box::new(dev_kmsg_reader::DevKMsgReader::with_file(c, mc.verbosity))
+        }
     };
 
     let event_iterator = event_parser::EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity);
@@ -33,4 +36,3 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
         }
     }
 }
-

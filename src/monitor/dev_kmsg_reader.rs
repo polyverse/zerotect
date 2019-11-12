@@ -1,14 +1,14 @@
 use crate::events;
 use crate::monitor::kmsg;
-use timeout_iterator::{TimeoutIterator};
+use timeout_iterator::TimeoutIterator;
 
-use std::fs::File;
-use std::io::BufReader;
-use std::io::prelude::*;
-use std::str::FromStr;
-use std::time::Duration;
 use chrono::Duration as ChronoDuration;
 use num::FromPrimitive;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::str::FromStr;
+use std::time::Duration;
 
 type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
 
@@ -45,7 +45,11 @@ impl DevKMsgReader {
         DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter, verbosity)
     }
 
-    fn with_lines_iterator(config: KMsgReaderConfig, reader: LinesIterator, verbosity: u8) -> DevKMsgReader {
+    fn with_lines_iterator(
+        config: KMsgReaderConfig,
+        reader: LinesIterator,
+        verbosity: u8,
+    ) -> DevKMsgReader {
         let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity);
 
         DevKMsgReader {
@@ -57,7 +61,7 @@ impl DevKMsgReader {
     }
 
     // Message spec: https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/dev-kmsg
-    // Parses a kernel log line that looks like this: 
+    // Parses a kernel log line that looks like this:
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParseError> {
         let line_str: String = match self.next_kmsg_record() {
@@ -66,7 +70,7 @@ impl DevKMsgReader {
         };
 
         if line_str.trim() == "" {
-            return Err(KMsgParseError::EmptyLine)
+            return Err(KMsgParseError::EmptyLine);
         }
 
         // split this: 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
@@ -76,15 +80,35 @@ impl DevKMsgReader {
         let mut meta_and_msg = line_str.splitn(2, ';');
         let meta = match meta_and_msg.next() {
             Some(meta) => meta.trim(),
-            None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg metadata in line: {}", line_str)))
+            None => {
+                return Err(KMsgParseError::Generic(format!(
+                    "Didn't find kmsg metadata in line: {}",
+                    line_str
+                )))
+            }
         };
-        if self.verbosity > 2 {eprintln!("Monitor:: parse_kmsg:: Broken line into metadata (part 1): {}", meta);}
+        if self.verbosity > 2 {
+            eprintln!(
+                "Monitor:: parse_kmsg:: Broken line into metadata (part 1): {}",
+                meta
+            );
+        }
 
         let message = match meta_and_msg.next() {
             Some(message) => message.trim(),
-            None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg message (even if empty) in line: {}", line_str)))
+            None => {
+                return Err(KMsgParseError::Generic(format!(
+                    "Didn't find kmsg message (even if empty) in line: {}",
+                    line_str
+                )))
+            }
         };
-        if self.verbosity > 2 {eprintln!("Monitor:: parse_kmsg:: Broken line into message (part 2): {}", message);}
+        if self.verbosity > 2 {
+            eprintln!(
+                "Monitor:: parse_kmsg:: Broken line into message (part 2): {}",
+                message
+            );
+        }
 
         let mut meta_parts = meta.splitn(4, ",");
         let (facility, level) = match meta_parts.next() {
@@ -102,12 +126,22 @@ impl DevKMsgReader {
         };
 
         // Sequence is a 64-bit integer: https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
-        let sequence_num = match meta_parts.next(){
+        let sequence_num = match meta_parts.next() {
             Some(seqnumstr) => match DevKMsgReader::parse_fragment::<u64>(seqnumstr) {
                 Some(seqnum) => seqnum,
-                None => return Err(KMsgParseError::Generic(format!("Unable to parse sequence number into an integer: {}, Line: {}", seqnumstr, line_str)))
+                None => {
+                    return Err(KMsgParseError::Generic(format!(
+                        "Unable to parse sequence number into an integer: {}, Line: {}",
+                        seqnumstr, line_str
+                    )))
+                }
             },
-            None => return Err(KMsgParseError::Generic(format!("No sequence number found in line: {}", line_str)))
+            None => {
+                return Err(KMsgParseError::Generic(format!(
+                    "No sequence number found in line: {}",
+                    line_str
+                )))
+            }
         };
 
         // exit if sequence number is less than where desired
@@ -118,18 +152,31 @@ impl DevKMsgReader {
         let duration_from_system_start = match meta_parts.next() {
             Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr) {
                 Some(t) => ChronoDuration::microseconds(t),
-                None => return Err(KMsgParseError::Generic(format!("Unable to parse timestamp into integer: {}", tstr)))
+                None => {
+                    return Err(KMsgParseError::Generic(format!(
+                        "Unable to parse timestamp into integer: {}",
+                        tstr
+                    )))
+                }
             },
-            None => return Err(KMsgParseError::Generic(format!("No timestamp found in line: {}", line_str)))
+            None => {
+                return Err(KMsgParseError::Generic(format!(
+                    "No timestamp found in line: {}",
+                    line_str
+                )))
+            }
         };
 
         if self.verbosity > 2 {
             if let Some(ignored) = meta_parts.next() {
-                eprintln!("Monitor:: parse_kmsg:: Ignored metadata in kmsg: {}", ignored); 
+                eprintln!(
+                    "Monitor:: parse_kmsg:: Ignored metadata in kmsg: {}",
+                    ignored
+                );
             }
         }
 
-        Ok(kmsg::KMsg{
+        Ok(kmsg::KMsg {
             facility,
             level,
             duration_from_system_start,
@@ -155,18 +202,19 @@ impl DevKMsgReader {
                             } else {
                                 break;
                             }
-                        },
-                        Err(_) => break
+                        }
+                        Err(_) => break,
                     }
                 }
-            },
-            None => return Err(KMsgParseError::Completed)
+            }
+            None => return Err(KMsgParseError::Completed),
         }
         Ok(line_str)
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F> 
-    where <F as std::str::FromStr>::Err: std::fmt::Display
+    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
+    where
+        <F as std::str::FromStr>::Err: std::fmt::Display,
     {
         match frag.trim().parse::<F>() {
             Ok(f) => Some(f),
@@ -197,18 +245,18 @@ impl Iterator for DevKMsgReader {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
                         continue;
-                    },
+                    }
                     KMsgParseError::EmptyLine => {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
                         continue;
-                    },
+                    }
                     KMsgParseError::Generic(msg) => {
                         // don't exit because there may be bad lines...
                         eprintln!("Error parsing kmsg line due to error: {}", msg);
                         continue;
                     }
-                }
+                },
             }
         }
     }
@@ -219,8 +267,8 @@ impl Iterator for DevKMsgReader {
 
 #[cfg(test)]
 mod test {
-    use std::thread;
     use super::*;
+    use std::thread;
 
     #[test]
     fn can_parse_kmsg_entries() {
@@ -230,8 +278,16 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
-        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0, flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        let peekable_line_iter =
+            (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(
+            KMsgReaderConfig {
+                from_sequence_number: 0,
+                flush_timeout: Duration::from_secs(1),
+            },
+            peekable_line_iter,
+            3,
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -256,22 +312,30 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"),
-        });
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from(
+                    "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
+                ),
+            }
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-        });        
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+            }
+        );
     }
 
     #[test]
@@ -282,20 +346,30 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
-        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 3,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        let peekable_line_iter =
+            (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(
+            KMsgReaderConfig {
+                from_sequence_number: 3,
+                flush_timeout: Duration::from_secs(1),
+            },
+            peekable_line_iter,
+            3,
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-        });     
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+            }
+        );
     }
-
 
     #[test]
     fn can_parse_kmsg_entries_with_bad_line() {
@@ -305,8 +379,16 @@ mod test {
 6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
-        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        let peekable_line_iter =
+            (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(
+            KMsgReaderConfig {
+                from_sequence_number: 0,
+                flush_timeout: Duration::from_secs(1),
+            },
+            peekable_line_iter,
+            3,
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -316,17 +398,20 @@ mod test {
             level: events::LogLevel::Emergency,
             timestamp: 0,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
-        });    
+        });
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-        });     
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+            }
+        );
     }
 
     #[test]
@@ -339,8 +424,16 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
-        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0,  flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        let peekable_line_iter =
+            (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(
+            KMsgReaderConfig {
+                from_sequence_number: 0,
+                flush_timeout: Duration::from_secs(1),
+            },
+            peekable_line_iter,
+            3,
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -367,25 +460,33 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"),
-        });
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from(
+                    "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
+                ),
+            }
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            timestamp: 0,
-            message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-        });        
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                timestamp: 0,
+                message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
+            }
+        );
     }
 
-        #[test]
+    #[test]
     fn is_sendable() {
         let realistic_message = r"
 5,0,0,-;Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019
@@ -393,8 +494,16 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter = (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
-        let mut iter = DevKMsgReader::with_lines_iterator(KMsgReaderConfig{from_sequence_number: 0, flush_timeout: Duration::from_secs(1)}, peekable_line_iter, 3);
+        let peekable_line_iter =
+            (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
+        let mut iter = DevKMsgReader::with_lines_iterator(
+            KMsgReaderConfig {
+                from_sequence_number: 0,
+                flush_timeout: Duration::from_secs(1),
+            },
+            peekable_line_iter,
+            3,
+        );
         thread::spawn(move || {
             let maybe_entry = iter.next();
             assert!(maybe_entry.is_some());
@@ -404,8 +513,11 @@ mod test {
                 level: events::LogLevel::Emergency,
                 timestamp: 0,
                 message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
-            });            
+            });
         });
-        assert!(true, "If this compiles, DevKMsgReader is Send'able across threads.");
+        assert!(
+            true,
+            "If this compiles, DevKMsgReader is Send'able across threads."
+        );
     }
 }

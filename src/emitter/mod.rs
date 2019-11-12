@@ -1,6 +1,5 @@
-
-use std::sync::mpsc::{Receiver};
 use crate::events;
+use std::sync::mpsc::Receiver;
 pub mod console;
 pub mod tricorder;
 
@@ -18,7 +17,7 @@ pub struct EmitterConfig {
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
     eprintln!("Emitter: Initializing...");
 
-    let mut emitters : Vec<Box<dyn Emitter>> = vec!();
+    let mut emitters: Vec<Box<dyn Emitter>> = vec![];
     if let Some(cc) = ec.console_config {
         eprintln!("Emitter: Initialized Console emitter. Expect messages to be printed to Standard Output.");
         emitters.push(Box::new(console::new(cc)));
@@ -27,12 +26,14 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
         eprintln!("Emitter: Initialized Tricorder emitter. Expect messages to be phoned home to the Polyverse tricorder service.");
         emitters.push(Box::new(tricorder::new(tc)));
     }
-    
+
     loop {
         match source.recv() {
-            Ok(event) => for emitter in &emitters  {
-                emitter.emit(&event)
-            },
+            Ok(event) => {
+                for emitter in &emitters {
+                    emitter.emit(&event)
+                }
+            }
             Err(e) => {
                 eprintln!("Emitter: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e);
                 return;

@@ -3,16 +3,15 @@ extern crate enum_display_derive;
 #[macro_use]
 extern crate lazy_static;
 
-mod params;
-mod events;
 mod emitter;
+mod events;
 mod monitor;
+mod params;
 mod system;
 
-use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-
 
 fn main() {
     system::ensure_linux();
@@ -21,12 +20,13 @@ fn main() {
     // initialize the system with config
     system::modify_environment(&polytect_config);
 
-    let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) = mpsc::channel();
+    let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
+        mpsc::channel();
 
     let mverbosity = polytect_config.verbosity;
     let monitor_type = polytect_config.monitor_type;
     let monitor_handle = thread::spawn(move || {
-        let mc = monitor::MonitorConfig{
+        let mc = monitor::MonitorConfig {
             verbosity: mverbosity,
             monitor_type,
         };
@@ -34,10 +34,10 @@ fn main() {
     });
 
     let everbosity = polytect_config.verbosity;
-    let console_config =  polytect_config.console_config;
+    let console_config = polytect_config.console_config;
     let tricorder_config = polytect_config.tricorder_config;
     let emitter_handle = thread::spawn(move || {
-        let ec = emitter::EmitterConfig{
+        let ec = emitter::EmitterConfig {
             verbosity: everbosity,
             console_config,
             tricorder_config,
@@ -46,7 +46,10 @@ fn main() {
     });
 
     eprintln!("Waiting indefinitely until monitor and emitter exit....");
-    monitor_handle.join().expect("Unable to join on the monitoring thread");
-    emitter_handle.join().expect("Unable to join on the emitter thread");
+    monitor_handle
+        .join()
+        .expect("Unable to join on the monitoring thread");
+    emitter_handle
+        .join()
+        .expect("Unable to join on the emitter thread");
 }
-

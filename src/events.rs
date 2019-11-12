@@ -1,11 +1,11 @@
-use serde::{Serialize};
-use num_derive::FromPrimitive;    
-use std::fmt::Display;
-use strum_macros::{EnumString};
-use typename::TypeName;
-use std::fmt;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
+use num_derive::FromPrimitive;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Display;
+use strum_macros::EnumString;
+use typename::TypeName;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Event {
@@ -17,11 +17,18 @@ pub struct Event {
 
 impl fmt::Display for Event {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Event<{},{},{}>::{}", self.facility, self.level, self.timestamp, match &self.event_type {
-            EventType::KernelTrap(k) => format!("{}", k),
-            EventType::FatalSignal(f) => format!("{}", f),
-            EventType::SuppressedCallback(s) => format!("{}", s),
-        })
+        write!(
+            f,
+            "Event<{},{},{}>::{}",
+            self.facility,
+            self.level,
+            self.timestamp,
+            match &self.event_type {
+                EventType::KernelTrap(k) => format!("{}", k),
+                EventType::FatalSignal(f) => format!("{}", f),
+                EventType::SuppressedCallback(s) => format!("{}", s),
+            }
+        )
     }
 }
 
@@ -29,73 +36,73 @@ impl fmt::Display for Event {
 pub enum EventType {
     KernelTrap(KernelTrapInfo),
     FatalSignal(FatalSignalInfo),
-    SuppressedCallback(SuppressedCallbackInfo)
+    SuppressedCallback(SuppressedCallbackInfo),
 }
 
 #[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
 pub enum LogFacility {
-    #[strum(serialize="kern")]
+    #[strum(serialize = "kern")]
     Kern = 0,
 
-    #[strum(serialize="user")]
+    #[strum(serialize = "user")]
     User,
 
-    #[strum(serialize="mail")]
+    #[strum(serialize = "mail")]
     Mail,
 
-    #[strum(serialize="daemon")]
+    #[strum(serialize = "daemon")]
     Daemon,
 
-    #[strum(serialize="auth")]
+    #[strum(serialize = "auth")]
     Auth,
 
-    #[strum(serialize="syslog")]
+    #[strum(serialize = "syslog")]
     Syslog,
 
-    #[strum(serialize="lpr")]
+    #[strum(serialize = "lpr")]
     Lpr,
 
-    #[strum(serialize="news")]
+    #[strum(serialize = "news")]
     News,
 
-    #[strum(serialize="uucp")]
+    #[strum(serialize = "uucp")]
     UUCP,
 
-    #[strum(serialize="cron")]
+    #[strum(serialize = "cron")]
     Cron,
 
-    #[strum(serialize="authpriv")]
+    #[strum(serialize = "authpriv")]
     AuthPriv,
 
-    #[strum(serialize="ftp")]
+    #[strum(serialize = "ftp")]
     FTP,
 }
 
 #[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
 pub enum LogLevel {
-    #[strum(serialize="emerg")]
+    #[strum(serialize = "emerg")]
     Emergency = 0,
 
-    #[strum(serialize="alert")]
+    #[strum(serialize = "alert")]
     Alert,
 
-    #[strum(serialize="crit")]
+    #[strum(serialize = "crit")]
     Critical,
 
-    #[strum(serialize="err")]
+    #[strum(serialize = "err")]
     Error,
 
-    #[strum(serialize="warn")]
+    #[strum(serialize = "warn")]
     Warning,
 
-    #[strum(serialize="notice")]
+    #[strum(serialize = "notice")]
     Notice,
 
-    #[strum(serialize="info")]
+    #[strum(serialize = "info")]
     Info,
 
-    #[strum(serialize="debug")]
-    Debug
+    #[strum(serialize = "debug")]
+    Debug,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
@@ -113,18 +120,30 @@ pub struct KernelTrapInfo {
 
 impl fmt::Display for KernelTrapInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-
-        let location = if let (Some(file), Some(vmastart), Some(vmasize)) = (self.file.as_ref(), self.vmasize, self.vmasize) {
-            Some(format!("in file {} (VMM region {} of size {})", file, vmastart, vmasize))
+        let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
+            (self.file.as_ref(), self.vmasize, self.vmasize)
+        {
+            Some(format!(
+                "in file {} (VMM region {} of size {})",
+                file, vmastart, vmasize
+            ))
         } else {
             None
         };
 
-        write!(f, "{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.", 
-            self.trap, self.errcode, self.procname, self.pid, self.ip, self.sp, location.unwrap_or_default())
+        write!(
+            f,
+            "{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.",
+            self.trap,
+            self.errcode,
+            self.procname,
+            self.pid,
+            self.ip,
+            self.sp,
+            location.unwrap_or_default()
+        )
     }
 }
-
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum KernelTrapType {
@@ -137,28 +156,30 @@ impl fmt::Display for KernelTrapType {
         match self {
             KernelTrapType::Segfault(location) => write!(f, "Segfault at location {}", location),
             KernelTrapType::InvalidOpcode => write!(f, "Invalid Opcode"),
-            KernelTrapType::Generic(message) => write!(f, "Please parse this kernel trap: {}", message),
+            KernelTrapType::Generic(message) => {
+                write!(f, "Please parse this kernel trap: {}", message)
+            }
         }
     }
 }
 
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultReason {
-    #[strum(serialize="kern")]
+    #[strum(serialize = "kern")]
     NoPageFound,
-    ProtectionFault
+    ProtectionFault,
 }
 
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultAccessType {
     Read,
-    Write
+    Write,
 }
 
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultAccessMode {
     Kernel,
-    User
+    User,
 }
 
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
@@ -197,7 +218,9 @@ impl SegfaultErrorCode {
             },
             use_of_reserved_bit: (code & SegfaultErrorCode::USE_OF_RESERVED_BIT) > 0,
             instruction_fetch: (code & SegfaultErrorCode::INSTRUCTION_FETCH_BIT) > 0,
-            protection_keys_block_access: (code & SegfaultErrorCode::PROTECTION_KEYS_BLOCK_ACCESS_BIT) > 0,
+            protection_keys_block_access: (code
+                & SegfaultErrorCode::PROTECTION_KEYS_BLOCK_ACCESS_BIT)
+                > 0,
         }
     }
 }
@@ -205,17 +228,20 @@ impl SegfaultErrorCode {
 impl fmt::Display for SegfaultErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.use_of_reserved_bit {
-             
             write!(f, "use of reserved bits in the page table entry detected")
         } else if self.protection_keys_block_access {
-            write!(f, "protection keys block access (needs more documentation)")            
+            write!(f, "protection keys block access (needs more documentation)")
         } else {
             let data_or_instruction = match self.instruction_fetch {
                 false => "data",
                 true => "instruction fetch",
             };
 
-            write!(f, "{} triggered by a {}-mode {} {}", self.reason, self.access_mode, data_or_instruction, self.access_type)
+            write!(
+                f,
+                "{} triggered by a {}-mode {} {}",
+                self.reason, self.access_mode, data_or_instruction, self.access_type
+            )
         }
     }
 }
@@ -228,7 +254,12 @@ pub struct FatalSignalInfo {
 
 impl fmt::Display for FatalSignalInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut retval = write!(f, "Fatal Signal: {}({})", self.signal, self.signal.clone() as u8);
+        let mut retval = write!(
+            f,
+            "Fatal Signal: {}({})",
+            self.signal,
+            self.signal.clone() as u8
+        );
         if self.stack_dump.is_some() {
             retval = write!(f, "{}", self.stack_dump.as_ref().unwrap());
         }
@@ -272,7 +303,6 @@ pub enum FatalSignalType {
     SIGPWR,
 }
 
-
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct StackDump {
     pub cpu: usize,
@@ -281,15 +311,16 @@ pub struct StackDump {
     pub kernel: String,
     pub hardware: String,
     pub taskinfo: HashMap<String, String>,
-    pub registers: HashMap<String, String>
+    pub registers: HashMap<String, String>,
 }
 
 impl fmt::Display for StackDump {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CPU: {} PID: {} Comm: {} {}", self.cpu, 
-            self.pid, 
-            self.command, 
-            self.kernel)
+        write!(
+            f,
+            "CPU: {} PID: {} Comm: {} {}",
+            self.cpu, self.pid, self.command, self.kernel
+        )
     }
 }
 
@@ -301,6 +332,10 @@ pub struct SuppressedCallbackInfo {
 
 impl fmt::Display for SuppressedCallbackInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Suppressed {} callbacks to {}", self.count, &self.function_name)
+        write!(
+            f,
+            "Suppressed {} callbacks to {}",
+            self.count, &self.function_name
+        )
     }
 }

@@ -1,10 +1,10 @@
-use clap::{Arg, App};
-use std::convert::TryFrom;
-use crate::monitor;
-use std::time::Duration;
 use crate::emitter::console;
 use crate::emitter::tricorder;
-use crate::system::{PRINT_FATAL_SIGNALS_CTLNAME, EXCEPTION_TRACE_CTLNAME};
+use crate::monitor;
+use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME};
+use clap::{App, Arg};
+use std::convert::TryFrom;
+use std::time::Duration;
 
 const ENABLE_FATAL_SIGNALS_FLAG: &str = "enable-fatal-signals";
 const ENABLE_EXCEPTION_TRACE_FLAG: &str = "enable-exception-trace";
@@ -18,7 +18,7 @@ const UNIDENTIFIED_NODE: &str = "unidentified";
 pub struct PolytectParams {
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,
-    
+
     pub monitor_type: monitor::MonitorType,
 
     pub console_config: Option<console::ConsoleConfig>,
@@ -28,7 +28,7 @@ pub struct PolytectParams {
 }
 
 pub fn parse_args() -> PolytectParams {
-        let matches = App::new("Polytect")
+    let matches = App::new("Polytect")
                         .version("1.0")
                         .author("Polyverse Corporation <support@polyverse.com>")
                         .about("Detect attempted (and ultimately failed) attacks and exploits using known and unknown vulnerabilities by observing side effects (segfaults, crashes, etc.)")
@@ -64,24 +64,27 @@ pub fn parse_args() -> PolytectParams {
 
     let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG);
     let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG);
-    let verbosity = u8::try_from(matches.occurrences_of("verbose")).ok().unwrap();
-    
-    let monitor_type = monitor::MonitorType::DevKMsgReader(monitor::dev_kmsg_reader::KMsgReaderConfig{
-        from_sequence_number: 0,
-        flush_timeout: Duration::from_secs(1),
-    });
+    let verbosity = u8::try_from(matches.occurrences_of("verbose"))
+        .ok()
+        .unwrap();
+
+    let monitor_type =
+        monitor::MonitorType::DevKMsgReader(monitor::dev_kmsg_reader::KMsgReaderConfig {
+            from_sequence_number: 0,
+            flush_timeout: Duration::from_secs(1),
+        });
 
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
         None => None,
         Some(v) => match v.to_ascii_lowercase().as_str() {
-            "text" => Some(console::ConsoleConfig{
-                console_format: console::Format::UserFriendlyText
-                }),
-            "json" => Some(console::ConsoleConfig{
-                console_format: console::Format::JSON
-                }),
+            "text" => Some(console::ConsoleConfig {
+                console_format: console::Format::UserFriendlyText,
+            }),
+            "json" => Some(console::ConsoleConfig {
+                console_format: console::Format::JSON,
+            }),
             _ => None,
-        }
+        },
     };
 
     let node_id = match matches.value_of(NODE_ID_FLAG) {
@@ -91,16 +94,16 @@ pub fn parse_args() -> PolytectParams {
 
     let tricorder_config = match matches.value_of(TRICORDER_OUTPUT_FLAG) {
         None => None,
-        Some(v) => Some(tricorder::TricorderConfig{
+        Some(v) => Some(tricorder::TricorderConfig {
             auth_key: v.to_owned(),
             node_id: node_id.to_owned(),
             flush_timeout: Duration::from_secs(10),
             flush_event_count: 10,
-        })
+        }),
     };
 
-    PolytectParams{
-        exception_trace, 
+    PolytectParams {
+        exception_trace,
         fatal_signals,
         monitor_type,
         console_config,
@@ -113,9 +116,9 @@ fn bool_flag(matches: &clap::ArgMatches, flag_name: &str) -> Option<bool> {
     match matches.occurrences_of(flag_name) {
         1 => Some(true),
         0 => None,
-        _ => { 
-            eprintln!("You specified {} flag {} number of times. Please specify it at most once or never at all. Ignoring this flag entirely.", flag_name, matches.occurrences_of(flag_name)); 
+        _ => {
+            eprintln!("You specified {} flag {} number of times. Please specify it at most once or never at all. Ignoring this flag entirely.", flag_name, matches.occurrences_of(flag_name));
             None
-        },
+        }
     }
 }
