@@ -492,7 +492,6 @@ impl Iterator for EventParser {
 mod test {
     use super::*;
     use chrono::offset::TimeZone;
-    use rand::prelude::*;
     use std::thread;
 
     macro_rules! map(
@@ -509,9 +508,8 @@ mod test {
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(5233635);
 
         let kmsgs = vec![
             kmsg::KMsg{
@@ -626,13 +624,16 @@ mod test {
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event3);
+
+        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:24.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":0},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
+        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:30.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":0},\"procname\":\"a.out\",\"pid\":36075,\"ip\":0,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
+        assert_eq!(serde_json::to_string(&event3).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:26.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":140734460831928},\"procname\":\"a.out\",\"pid\":37659,\"ip\":140734460831928,\"sp\":140734460831672,\"errcode\":{\"reason\":\"ProtectionFault\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":true,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
     }
 
     #[test]
     fn can_parse_kernel_trap_invalid_opcode() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(5233345875);
 
         let kmsgs = vec![
             kmsg::KMsg{
@@ -712,13 +713,15 @@ mod test {
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
+
+        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-03-06T21:16:37.845Z\",\"event_type\":{\"KernelTrap\":{\"trap\":\"InvalidOpcode\",\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
+        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-03-06T21:16:41.845Z\",\"event_type\":{\"KernelTrap\":{\"trap\":\"InvalidOpcode\",\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
     }
 
     #[test]
     fn can_parse_kernel_trap_generic() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(98952353);
 
         let kmsgs = vec![
             kmsg::KMsg{
@@ -798,13 +801,15 @@ mod test {
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
+
+        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Generic\":\" foo\"},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
+        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-06T11:03:28.323Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Generic\":\" bar\"},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
     }
 
     #[test]
     fn can_parse_fatal_signal_optional_dump() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(3236754);
 
         let kmsgs = vec![kmsg::KMsg {
             facility: events::LogFacility::Kern,
@@ -836,9 +841,8 @@ mod test {
 
     #[test]
     fn can_parse_fatal_signal_11() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(6433742);
 
         let kmsgs = vec![
             kmsg::KMsg {
@@ -974,9 +978,8 @@ mod test {
 
     #[test]
     fn is_sendable() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(57533475);
 
         let kmsgs = vec![
             kmsg::KMsg{
@@ -1033,9 +1036,8 @@ mod test {
 
     #[test]
     fn can_parse_suppressed_callback() {
-        let mut rng = rand::thread_rng();
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(10000 + (rng.gen::<i64>() % 50000));
+        let system_start_time = Utc.timestamp_millis(803835);
 
         let kmsgs = vec![kmsg::KMsg {
             facility: events::LogFacility::Kern,
