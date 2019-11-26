@@ -165,7 +165,6 @@ impl fmt::Display for KernelTrapType {
 
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
 pub enum SegfaultReason {
-    #[strum(serialize = "kern")]
     NoPageFound,
     ProtectionFault,
 }

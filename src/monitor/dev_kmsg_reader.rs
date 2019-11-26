@@ -295,7 +295,7 @@ mod test {
         assert_eq!(entry, kmsg::KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
-            timestamp: 0,
+            duration_from_system_start: ChronoDuration::microseconds(0),
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
         });
 
@@ -305,7 +305,7 @@ mod test {
         assert_eq!(entry, kmsg::KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
-            timestamp: 0,
+            duration_from_system_start: ChronoDuration::microseconds(0),
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });
 
@@ -317,7 +317,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
                 ),
@@ -332,7 +332,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
         );
@@ -365,7 +365,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
         );
@@ -396,7 +396,7 @@ mod test {
         assert_eq!(entry, kmsg::KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
-            timestamp: 0,
+            duration_from_system_start: ChronoDuration::microseconds(0),
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });
 
@@ -408,7 +408,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
         );
@@ -441,7 +441,7 @@ mod test {
         assert_eq!(entry, kmsg::KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
-            timestamp: 0,
+            duration_from_system_start: ChronoDuration::microseconds(0),
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
         });
 
@@ -451,7 +451,7 @@ mod test {
         assert_eq!(entry, kmsg::KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
-            timestamp: 0,
+            duration_from_system_start: ChronoDuration::microseconds(0),
             message: String::from(r"Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
  LINE2=foobar
  LINE 3 = foobar ; with semicolon"),
@@ -465,7 +465,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
                 ),
@@ -480,7 +480,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
         );
@@ -511,7 +511,7 @@ mod test {
             assert_eq!(entry, kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: 0,
+                duration_from_system_start: ChronoDuration::microseconds(0),
                 message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
             });
         });
