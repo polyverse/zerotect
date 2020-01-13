@@ -17,15 +17,16 @@ fn main() {
     system::ensure_linux();
     let polytect_config = params::parse_args();
 
+    let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
+        mpsc::channel();
+
     let env_config_copy = polytect_config.clone();
+    let config_event_sink = monitor_sink.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
     thread::spawn(move || {
         // initialize the system with config
-        system::modify_environment(&env_config_copy);        
+        system::modify_environment(env_config_copy, config_event_sink);        
     });
-
-    let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
-        mpsc::channel();
 
     let mverbosity = polytect_config.verbosity;
     let monitor_type = polytect_config.monitor_type;

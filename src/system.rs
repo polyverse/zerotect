@@ -62,13 +62,17 @@ pub fn ensure_linux() {
     }
 }
 
-pub fn modify_environment(config: &params::PolytectParams) {
+pub fn modify_environment(config: params::PolytectParams, warn_if_different: bool) -> Vec<events::Event> {
+    let env_events = <Vec<events::Event>>Vec!();
+
     eprintln!("Configuring kernel paramters as requested...");
     if let Some(exception_trace) = config.exception_trace {
-        ensure_systemctl(
+        if let event = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
             bool_to_sysctl_string(exception_trace),
-        );
+        ) {
+
+        }
     }
 
     if let Some(fatal_signals) = config.fatal_signals {
@@ -77,6 +81,8 @@ pub fn modify_environment(config: &params::PolytectParams) {
             bool_to_sysctl_string(fatal_signals),
         );
     }
+
+    return env_events;
 }
 
 fn ensure_systemctl(ctlstr: &str, valuestr: &str) {
@@ -89,6 +95,10 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) {
     if prev_value_str == valuestr {
         eprintln!("====> Already enabled, not reenabling: {}", ctlstr);
     } else {
+        if warn_if_different {
+            eprintln!("Value ")
+        }
+
         let real_value_str = ctl.set_value_string(valuestr).expect(
             format!(
                 "Unable to set value of {} to {}, from a previous value of {}",
