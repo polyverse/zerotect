@@ -17,8 +17,12 @@ fn main() {
     system::ensure_linux();
     let polytect_config = params::parse_args();
 
-    // initialize the system with config
-    system::modify_environment(&polytect_config);
+    let env_config_copy = polytect_config.clone();
+    // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
+    thread::spawn(move || {
+        // initialize the system with config
+        system::modify_environment(&env_config_copy);        
+    });
 
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();

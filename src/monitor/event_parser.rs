@@ -2,7 +2,7 @@ use crate::events;
 use crate::monitor::kmsg;
 use crate::system;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Utc};
 use num::FromPrimitive;
 use regex::Regex;
 use std::collections::HashMap;
@@ -32,6 +32,7 @@ impl EventParser {
         }
     }
 
+    #[test]
     pub fn from_kmsg_iterator_and_system_start_time(
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,

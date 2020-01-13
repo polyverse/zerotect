@@ -14,6 +14,7 @@ type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
+#[derive(Clone)]
 pub struct KMsgReaderConfig {
     pub from_sequence_number: u64,
     pub flush_timeout: Duration,

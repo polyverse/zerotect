@@ -15,6 +15,7 @@ const TRICORDER_OUTPUT_FLAG: &str = "tricorder";
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
 
+#[derive(Clone)]
 pub struct PolytectParams {
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,

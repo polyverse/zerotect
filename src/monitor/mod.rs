@@ -6,10 +6,12 @@ use std::sync::mpsc::Sender;
 
 use crate::events;
 
+#[derive(Clone)]
 pub enum MonitorType {
     DevKMsgReader(dev_kmsg_reader::KMsgReaderConfig),
 }
 
+#[derive(Clone)]
 pub struct MonitorConfig {
     pub monitor_type: MonitorType,
     pub verbosity: u8,

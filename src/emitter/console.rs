@@ -2,12 +2,13 @@ use crate::emitter;
 use crate::events;
 use serde_json;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Format {
     UserFriendlyText,
     JSON,
 }
 
+#[derive(Clone)]
 pub struct ConsoleConfig {
     pub console_format: Format,
 }

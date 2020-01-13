@@ -9,6 +9,7 @@ use crate::events;
 
 const TRICORDER_PUBLISH_ENDPOINT: &str = "https://tricorder.polyverse.com/v1/events";
 
+#[derive(Clone)]
 pub struct TricorderConfig {
     pub auth_key: String,
     pub node_id: String,
