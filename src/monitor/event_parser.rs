@@ -32,7 +32,6 @@ impl EventParser {
         }
     }
 
-    #[test]
     pub fn from_kmsg_iterator_and_system_start_time(
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,
@@ -492,6 +491,7 @@ impl Iterator for EventParser {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::Duration as ChronoDuration;
     use chrono::offset::TimeZone;
     use std::thread;
 

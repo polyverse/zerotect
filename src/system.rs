@@ -1,4 +1,5 @@
 use crate::params;
+use crate::events;
 use chrono::Duration as ChronoDuration;
 use chrono::{DateTime, Utc};
 use std::fs;
@@ -62,43 +63,43 @@ pub fn ensure_linux() {
     }
 }
 
-pub fn modify_environment(config: params::PolytectParams, warn_if_different: bool) -> Vec<events::Event> {
-    let env_events = <Vec<events::Event>>Vec!();
+pub fn modify_environment(config: &params::PolytectParams) -> Vec<events::Event> {
+    let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
     if let Some(exception_trace) = config.exception_trace {
-        if let event = ensure_systemctl(
+        if let Some(event) = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
             bool_to_sysctl_string(exception_trace),
         ) {
-
+            env_events.push(event);
         }
     }
 
     if let Some(fatal_signals) = config.fatal_signals {
-        ensure_systemctl(
+        if let Some(event) = ensure_systemctl(
             PRINT_FATAL_SIGNALS_CTLNAME,
             bool_to_sysctl_string(fatal_signals),
-        );
+        ) {
+            env_events.push(event);
+        }
     }
 
-    return env_events;
+    env_events
 }
 
-fn ensure_systemctl(ctlstr: &str, valuestr: &str) {
+fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr).unwrap();
     let prev_value_str = ctl
         .value_string()
         .expect(format!("Unable to read value of {}", ctlstr).as_str());
+
     if prev_value_str == valuestr {
         eprintln!("====> Already enabled, not reenabling: {}", ctlstr);
+        None
     } else {
-        if warn_if_different {
-            eprintln!("Value ")
-        }
-
         let real_value_str = ctl.set_value_string(valuestr).expect(
             format!(
                 "Unable to set value of {} to {}, from a previous value of {}",
@@ -112,7 +113,17 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) {
             ctlstr,
             valuestr,
             real_value_str
-        )
+        );
+        Some(events::Event{
+            facility: events::LogFacility::Polytect,
+            level: events::LogLevel::Error,
+            timestamp: Utc::now(),
+            event_type: events::EventType::ConfigMismatch(events::ConfigMisMatchInfo{
+                key: ctlstr.to_owned(),
+                expected_value: valuestr.to_owned(),
+                observed_value: prev_value_str.to_owned(),
+            }),
+        })
     }
 }
 

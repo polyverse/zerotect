@@ -12,6 +12,8 @@ pub struct Event {
     pub facility: LogFacility,
     pub level: LogLevel,
     pub timestamp: DateTime<Utc>,
+
+    // "type" is a reserved keyword, hence event_type
     pub event_type: EventType,
 }
 
@@ -27,6 +29,7 @@ impl fmt::Display for Event {
                 EventType::KernelTrap(k) => format!("{}", k),
                 EventType::FatalSignal(f) => format!("{}", f),
                 EventType::SuppressedCallback(s) => format!("{}", s),
+                EventType::ConfigMismatch(c) => format!("{}", c)
             }
         )
     }
@@ -37,6 +40,7 @@ pub enum EventType {
     KernelTrap(KernelTrapInfo),
     FatalSignal(FatalSignalInfo),
     SuppressedCallback(SuppressedCallbackInfo),
+    ConfigMismatch(ConfigMisMatchInfo),
 }
 
 #[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
@@ -76,6 +80,9 @@ pub enum LogFacility {
 
     #[strum(serialize = "ftp")]
     FTP,
+
+    #[strum(serialize = "polytect")]
+    Polytect,
 }
 
 #[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
@@ -335,6 +342,26 @@ impl fmt::Display for SuppressedCallbackInfo {
             f,
             "Suppressed {} callbacks to {}",
             self.count, &self.function_name
+        )
+    }
+}
+
+// This value is set internally by the agent when it finds
+// configuration it was asked to set, was reverted or changed.
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct ConfigMisMatchInfo {
+    pub key: String,
+    pub expected_value: String,
+    pub observed_value: String,
+}
+
+
+impl fmt::Display for ConfigMisMatchInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Configuration key {} should have been {}, but found to be {}",
+            &self.key, &self.expected_value, &self.observed_value
         )
     }
 }
