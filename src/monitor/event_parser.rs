@@ -32,6 +32,9 @@ impl EventParser {
         }
     }
 
+    // Ignore deadcode warnings. This is used by test, and #[test] cannot be applied
+    // to associated functions.
+    #[allow(dead_code)]
     pub fn from_kmsg_iterator_and_system_start_time(
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,

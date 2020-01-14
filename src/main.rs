@@ -12,6 +12,7 @@ mod system;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 fn main() {
     system::ensure_linux();
@@ -38,6 +39,9 @@ fn main() {
             }
 
             first = false;
+
+            // ensure configuratione very five minutes.
+            thread::sleep(Duration::from_secs(300));
         }
     });
 
