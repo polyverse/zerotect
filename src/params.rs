@@ -1,5 +1,5 @@
 use crate::emitter::console;
-use crate::emitter::tricorder;
+use crate::emitter::polycorder;
 use crate::monitor;
 use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME};
 use clap::{App, Arg};
@@ -10,7 +10,7 @@ const ENABLE_FATAL_SIGNALS_FLAG: &str = "enable-fatal-signals";
 const ENABLE_EXCEPTION_TRACE_FLAG: &str = "enable-exception-trace";
 
 const CONSOLE_OUTPUT_FLAG: &str = "console";
-const TRICORDER_OUTPUT_FLAG: &str = "tricorder";
+const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
@@ -23,7 +23,7 @@ pub struct PolytectParams {
     pub monitor_type: monitor::MonitorType,
 
     pub console_config: Option<console::ConsoleConfig>,
-    pub tricorder_config: Option<tricorder::TricorderConfig>,
+    pub polycorder_config: Option<polycorder::PolycorderConfig>,
 
     pub verbosity: u8,
 }
@@ -46,15 +46,15 @@ pub fn parse_args() -> PolytectParams {
                             .long(CONSOLE_OUTPUT_FLAG)
                             .default_value_if(CONSOLE_OUTPUT_FLAG, None, "text")
                             .help(format!("Prints all monitored data to the console. Optionally takes a value of 'text' or 'json'").as_str()))
-                        .arg(Arg::with_name(TRICORDER_OUTPUT_FLAG)
-                            .short("t")
-                            .long(TRICORDER_OUTPUT_FLAG)
+                        .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
+                            .short("p")
+                            .long(POLYCORDER_OUTPUT_FLAG)
                             .takes_value(true)
-                            .help(format!("Sends all monitored data to the Polyverse tricorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.").as_str()))
+                            .help(format!("Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.").as_str()))
                         .arg(Arg::with_name(NODE_ID_FLAG)
                             .short("n")
                             .long(NODE_ID_FLAG)
-                            .default_value_if(TRICORDER_OUTPUT_FLAG, None, UNIDENTIFIED_NODE)
+                            .default_value_if(POLYCORDER_OUTPUT_FLAG, None, UNIDENTIFIED_NODE)
                             .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more...").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
@@ -93,9 +93,9 @@ pub fn parse_args() -> PolytectParams {
         Some(n) => n,
     };
 
-    let tricorder_config = match matches.value_of(TRICORDER_OUTPUT_FLAG) {
+    let polycorder_config = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
         None => None,
-        Some(v) => Some(tricorder::TricorderConfig {
+        Some(v) => Some(polycorder::PolycorderConfig {
             auth_key: v.to_owned(),
             node_id: node_id.to_owned(),
             flush_timeout: Duration::from_secs(10),
@@ -108,7 +108,7 @@ pub fn parse_args() -> PolytectParams {
         fatal_signals,
         monitor_type,
         console_config,
-        tricorder_config,
+        polycorder_config,
         verbosity,
     }
 }

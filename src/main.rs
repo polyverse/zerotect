@@ -57,12 +57,12 @@ fn main() {
 
     let everbosity = polytect_config.verbosity;
     let console_config = polytect_config.console_config;
-    let tricorder_config = polytect_config.tricorder_config;
+    let polycorder_config = polytect_config.polycorder_config;
     let emitter_handle = thread::spawn(move || {
         let ec = emitter::EmitterConfig {
             verbosity: everbosity,
             console_config,
-            tricorder_config,
+            polycorder_config,
         };
         emitter::emit(ec, emitter_source);
     });

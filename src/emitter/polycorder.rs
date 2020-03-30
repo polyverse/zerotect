@@ -7,10 +7,10 @@ use std::time::Duration;
 use crate::emitter;
 use crate::events;
 
-const TRICORDER_PUBLISH_ENDPOINT: &str = "https://tricorder.polyverse.com/v1/events";
+const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 
 #[derive(Clone)]
-pub struct TricorderConfig {
+pub struct PolycorderConfig {
     pub auth_key: String,
     pub node_id: String,
 
@@ -21,36 +21,36 @@ pub struct TricorderConfig {
     pub flush_event_count: usize,
 }
 
-pub struct Tricorder {
+pub struct Polycorder {
     sender: Sender<events::Event>,
 }
 
-// The structure to send data to tricorder in...
+// The structure to send data to Polycorder in...
 #[derive(Serialize)]
 struct Report<'l> {
     node_id: &'l str,
     events: &'l Vec<events::Event>,
 }
 
-impl emitter::Emitter for Tricorder {
+impl emitter::Emitter for Polycorder {
     fn emit(&self, event: &events::Event) {
         let movable_copy = (*event).clone();
         if let Err(e) = self.sender.send(movable_copy) {
-            eprintln!("Error queing event to tricorder: {}", e);
+            eprintln!("Error queing event to Polycorder: {}", e);
         }
     }
 }
 
-pub fn new(config: TricorderConfig) -> Tricorder {
+pub fn new(config: PolycorderConfig) -> Polycorder {
     let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
 
     thread::spawn(move || {
-        eprintln!("Emitter to Tricorder initialized.");
+        eprintln!("Emitter to Polycorder initialized.");
         let client = reqwest::Client::new();
 
         // This live-tests the built-in URL early.
-        if let Err(e) = reqwest::Url::parse(TRICORDER_PUBLISH_ENDPOINT) {
-            eprintln!("Tricorder: Aborting. Unable to parse built-in tricorder URL into a reqwest library url: {}", e);
+        if let Err(e) = reqwest::Url::parse(POLYCORDER_PUBLISH_ENDPOINT) {
+            eprintln!("Polycorder: Aborting. Unable to parse built-in Polycorder URL into a reqwest library url: {}", e);
             return;
         };
 
@@ -69,7 +69,7 @@ pub fn new(config: TricorderConfig) -> Tricorder {
                 Err(e) => match e {
                     RecvTimeoutError::Timeout => true,
                     _ => {
-                        eprintln!("Tricorder: Error receiving message from monitor: {}", e);
+                        eprintln!("Polycorder: Error receiving message from monitor: {}", e);
                         false
                     }
                 },
@@ -82,20 +82,20 @@ pub fn new(config: TricorderConfig) -> Tricorder {
                 };
 
                 let res = client
-                    .post(TRICORDER_PUBLISH_ENDPOINT)
+                    .post(POLYCORDER_PUBLISH_ENDPOINT)
                     .bearer_auth(&config.auth_key)
                     .json(&report)
                     .send();
 
                 match res {
                     Ok(r) => eprintln!(
-                        "Published {} events. Response from tricorder: {:?}",
+                        "Published {} events. Response from Polycorder: {:?}",
                         events.len(),
                         r
                     ),
                     Err(e) => eprintln!(
-                        "Tricorder: error publishing event to service {}: {}",
-                        TRICORDER_PUBLISH_ENDPOINT, e
+                        "Polycorder: error publishing event to service {}: {}",
+                        POLYCORDER_PUBLISH_ENDPOINT, e
                     ),
                 }
 
@@ -104,5 +104,5 @@ pub fn new(config: TricorderConfig) -> Tricorder {
         }
     });
 
-    Tricorder { sender }
+    Polycorder { sender }
 }

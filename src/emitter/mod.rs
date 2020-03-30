@@ -1,7 +1,7 @@
 use crate::events;
 use std::sync::mpsc::Receiver;
 pub mod console;
-pub mod tricorder;
+pub mod polycorder;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
@@ -11,7 +11,7 @@ pub trait Emitter {
 pub struct EmitterConfig {
     pub verbosity: u8,
     pub console_config: Option<console::ConsoleConfig>,
-    pub tricorder_config: Option<tricorder::TricorderConfig>,
+    pub polycorder_config: Option<polycorder::PolycorderConfig>,
 }
 
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
@@ -22,9 +22,9 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
         eprintln!("Emitter: Initialized Console emitter. Expect messages to be printed to Standard Output.");
         emitters.push(Box::new(console::new(cc)));
     }
-    if let Some(tc) = ec.tricorder_config {
+    if let Some(tc) = ec.polycorder_config {
         eprintln!("Emitter: Initialized Tricorder emitter. Expect messages to be phoned home to the Polyverse tricorder service.");
-        emitters.push(Box::new(tricorder::new(tc)));
+        emitters.push(Box::new(polycorder::new(tc)));
     }
 
     loop {
