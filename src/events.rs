@@ -2,26 +2,29 @@ use chrono::{DateTime, Utc};
 use num_derive::FromPrimitive;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use strum_macros::EnumString;
 use typename::TypeName;
+use schemars::{JsonSchema};
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct Event {
+    pub version: Version,
+    pub platform: Platform,
+    pub timestamp: DateTime<Utc>,
     pub facility: LogFacility,
     pub level: LogLevel,
-    pub timestamp: DateTime<Utc>,
-
     // "type" is a reserved keyword, hence event_type
     pub event_type: EventType,
 }
 
-impl fmt::Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for Event {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
-            "Event<{},{},{}>::{}",
+            "Event<{},{},{},{},{}>::{}",
+            self.version,
+            self.platform,
             self.facility,
             self.level,
             self.timestamp,
@@ -35,15 +38,17 @@ impl fmt::Display for Event {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
-pub enum EventType {
-    KernelTrap(KernelTrapInfo),
-    FatalSignal(FatalSignalInfo),
-    SuppressedCallback(SuppressedCallbackInfo),
-    ConfigMismatch(ConfigMisMatchInfo),
+#[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
+pub enum Version {
+    V1
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
+#[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
+pub enum Platform {
+    Linux
+}
+
+#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
     Kern = 0,
@@ -85,7 +90,7 @@ pub enum LogFacility {
     Polytect,
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize)]
+#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
     Emergency = 0,
@@ -112,7 +117,17 @@ pub enum LogLevel {
     Debug,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+pub enum EventType {
+    KernelTrap(KernelTrapInfo),
+    FatalSignal(FatalSignalInfo),
+    SuppressedCallback(SuppressedCallbackInfo),
+    ConfigMismatch(ConfigMisMatchInfo),
+}
+
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct KernelTrapInfo {
     pub trap: KernelTrapType,
     pub procname: String,
@@ -125,8 +140,8 @@ pub struct KernelTrapInfo {
     pub vmasize: Option<usize>,
 }
 
-impl fmt::Display for KernelTrapInfo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for KernelTrapInfo {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
             (self.file.as_ref(), self.vmasize, self.vmasize)
         {
@@ -152,14 +167,14 @@ impl fmt::Display for KernelTrapInfo {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub enum KernelTrapType {
     Generic(String),
     Segfault(usize),
     InvalidOpcode,
 }
-impl fmt::Display for KernelTrapType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for KernelTrapType {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
             KernelTrapType::Segfault(location) => write!(f, "Segfault at location {}", location),
             KernelTrapType::InvalidOpcode => write!(f, "Invalid Opcode"),
@@ -170,19 +185,19 @@ impl fmt::Display for KernelTrapType {
     }
 }
 
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
 pub enum SegfaultReason {
     NoPageFound,
     ProtectionFault,
 }
 
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
 pub enum SegfaultAccessType {
     Read,
     Write,
 }
 
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
 pub enum SegfaultAccessMode {
     Kernel,
     User,
@@ -190,7 +205,7 @@ pub enum SegfaultAccessMode {
 
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
 // https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct SegfaultErrorCode {
     pub reason: SegfaultReason,
     pub access_type: SegfaultAccessType,
@@ -231,8 +246,8 @@ impl SegfaultErrorCode {
     }
 }
 
-impl fmt::Display for SegfaultErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for SegfaultErrorCode {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         if self.use_of_reserved_bit {
             write!(f, "use of reserved bits in the page table entry detected")
         } else if self.protection_keys_block_access {
@@ -252,14 +267,14 @@ impl fmt::Display for SegfaultErrorCode {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct FatalSignalInfo {
     pub signal: FatalSignalType,
     pub stack_dump: Option<StackDump>,
 }
 
-impl fmt::Display for FatalSignalInfo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for FatalSignalInfo {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         let mut retval = write!(
             f,
             "Fatal Signal: {}({})",
@@ -275,7 +290,7 @@ impl fmt::Display for FatalSignalInfo {
 }
 
 // POSIX signals in the linux kernel: https://github.com/torvalds/linux/blob/master/include/linux/signal.h#L339
-#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone, Serialize)]
+#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone, Serialize, JsonSchema)]
 pub enum FatalSignalType {
     SIGHUP = 1,
     SIGINT,
@@ -309,7 +324,7 @@ pub enum FatalSignalType {
     SIGPWR,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct StackDump {
     pub cpu: usize,
     pub pid: usize,
@@ -320,8 +335,8 @@ pub struct StackDump {
     pub registers: HashMap<String, String>,
 }
 
-impl fmt::Display for StackDump {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for StackDump {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
             "CPU: {} PID: {} Comm: {} {}",
@@ -330,14 +345,14 @@ impl fmt::Display for StackDump {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct SuppressedCallbackInfo {
     pub function_name: String,
     pub count: usize,
 }
 
-impl fmt::Display for SuppressedCallbackInfo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for SuppressedCallbackInfo {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
             "Suppressed {} callbacks to {}",
@@ -348,7 +363,7 @@ impl fmt::Display for SuppressedCallbackInfo {
 
 // This value is set internally by the agent when it finds
 // configuration it was asked to set, was reverted or changed.
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct ConfigMisMatchInfo {
     pub key: String,
     pub expected_value: String,
@@ -356,8 +371,8 @@ pub struct ConfigMisMatchInfo {
 }
 
 
-impl fmt::Display for ConfigMisMatchInfo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for ConfigMisMatchInfo {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
             "Configuration key {} should have been {}, but found to be {}",

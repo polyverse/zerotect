@@ -7,6 +7,11 @@ use std::time::Duration;
 use crate::emitter;
 use crate::events;
 
+// `block_on` blocks the current thread until the provided future has run to
+// completion. Other executors provide more complex behavior, like scheduling
+// multiple futures onto the same thread.
+use futures::executor::block_on;
+
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 
 #[derive(Clone)]
@@ -81,11 +86,11 @@ pub fn new(config: PolycorderConfig) -> Polycorder {
                     events: &events,
                 };
 
-                let res = client
+                let res = block_on(client
                     .post(POLYCORDER_PUBLISH_ENDPOINT)
                     .bearer_auth(&config.auth_key)
                     .json(&report)
-                    .send();
+                    .send());
 
                 match res {
                     Ok(r) => eprintln!(

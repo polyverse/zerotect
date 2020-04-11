@@ -2,6 +2,9 @@
 
 # polytect
 
+Polytect is the optional client-side daemon/agent that helps pro*tect* 
+against
+
 An attack/exploit Detector that utilizes Polymorphism and Diversity.
 
 Polytect relies on the fact that exploits are targeted to specific

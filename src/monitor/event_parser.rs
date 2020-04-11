@@ -165,6 +165,8 @@ impl EventParser {
                     );
                 }
                 return Some(events::Event {
+                    version: events::Version::V1,
+                    platform: events::Platform::Linux,
                     facility: km.facility.clone(),
                     level: km.level.clone(),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
@@ -223,6 +225,8 @@ impl EventParser {
             {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Event {
+                        version: events::Version::V1,
+                        platform: events::Platform::Linux,
                         facility: km.facility.clone(),
                         level: km.level.clone(),
                         timestamp: self.system_start_time.add(km.duration_from_system_start),
@@ -426,6 +430,8 @@ impl EventParser {
                 };
 
                 return Some(events::Event {
+                    version: events::Version::V1,
+                    platform: events::Platform::Linux,
                     facility: km.facility.clone(),
                     level: km.level.clone(),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),

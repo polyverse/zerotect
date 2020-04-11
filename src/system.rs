@@ -115,6 +115,8 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
             real_value_str
         );
         Some(events::Event{
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Polytect,
             level: events::LogLevel::Error,
             timestamp: Utc::now(),
