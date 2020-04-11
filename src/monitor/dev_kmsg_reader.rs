@@ -269,6 +269,7 @@ impl Iterator for DevKMsgReader {
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::assert_eq;
     use std::thread;
 
     #[test]
@@ -449,14 +450,19 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
-            duration_from_system_start: ChronoDuration::microseconds(0),
-            message: String::from(r"Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
+        assert_eq!(
+            entry,
+            kmsg::KMsg {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Emergency,
+                duration_from_system_start: ChronoDuration::microseconds(0),
+                message: String::from(
+                    r"Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
  LINE2=foobar
- LINE 3 = foobar ; with semicolon"),
-        });
+ LINE 3 = foobar ; with semicolon"
+                ),
+            }
+        );
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());

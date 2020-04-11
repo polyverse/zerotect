@@ -1,20 +1,37 @@
 use chrono::{DateTime, Utc};
 use num_derive::FromPrimitive;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use strum_macros::EnumString;
 use typename::TypeName;
-use schemars::{JsonSchema};
 
+/// This Event generates the following Authoritative JSON schema
+/// guarded by a built-in doc-test
+///
+/// ```test
+/// let schema = schema_for!(Event);
+/// ```
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct Event {
+    /// This dictates the structure of the rest of the fields
     pub version: Version,
-    pub platform: Platform,
+
+    /// This is probably universal and important so comes first
     pub timestamp: DateTime<Utc>,
-    pub facility: LogFacility,
+
+    /// Platform dictates everything else that comes after
+    pub platform: Platform,
+
+    /// A Log-level for this event - was it critical?
     pub level: LogLevel,
-    // "type" is a reserved keyword, hence event_type
+
+    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+    pub facility: LogFacility,
+
+    /// "type" is a reserved keyword, hence event_type
+    /// This contains the details of this event and might come in many variants
     pub event_type: EventType,
 }
 
@@ -32,7 +49,7 @@ impl Display for Event {
                 EventType::KernelTrap(k) => format!("{}", k),
                 EventType::FatalSignal(f) => format!("{}", f),
                 EventType::SuppressedCallback(s) => format!("{}", s),
-                EventType::ConfigMismatch(c) => format!("{}", c)
+                EventType::ConfigMismatch(c) => format!("{}", c),
             }
         )
     }
@@ -40,15 +57,17 @@ impl Display for Event {
 
 #[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
 pub enum Version {
-    V1
+    V1,
 }
 
 #[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
 pub enum Platform {
-    Linux
+    Linux,
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
+#[derive(
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+)]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
     Kern = 0,
@@ -90,7 +109,9 @@ pub enum LogFacility {
     Polytect,
 }
 
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
+#[derive(
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+)]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
     Emergency = 0,
@@ -117,7 +138,6 @@ pub enum LogLevel {
     Debug,
 }
 
-
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub enum EventType {
     KernelTrap(KernelTrapInfo),
@@ -125,7 +145,6 @@ pub enum EventType {
     SuppressedCallback(SuppressedCallbackInfo),
     ConfigMismatch(ConfigMisMatchInfo),
 }
-
 
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct KernelTrapInfo {
@@ -370,7 +389,6 @@ pub struct ConfigMisMatchInfo {
     pub observed_value: String,
 }
 
-
 impl Display for ConfigMisMatchInfo {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
@@ -378,5 +396,20 @@ impl Display for ConfigMisMatchInfo {
             "Configuration key {} should have been {}, but found to be {}",
             &self.key, &self.expected_value, &self.observed_value
         )
+    }
+}
+
+/**********************************************************************************/
+// Tests! Tests! Tests!
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use schemars::schema_for;
+
+    #[test]
+    fn print_json_schema() {
+        let schema = schema_for!(Event);
+        println!("{}", serde_json::to_string_pretty(&schema).unwrap());
     }
 }

@@ -1,5 +1,5 @@
-use crate::params;
 use crate::events;
+use crate::params;
 use chrono::Duration as ChronoDuration;
 use chrono::{DateTime, Utc};
 use std::fs;
@@ -114,13 +114,13 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
             valuestr,
             real_value_str
         );
-        Some(events::Event{
+        Some(events::Event {
             version: events::Version::V1,
             platform: events::Platform::Linux,
             facility: events::LogFacility::Polytect,
             level: events::LogLevel::Error,
             timestamp: Utc::now(),
-            event_type: events::EventType::ConfigMismatch(events::ConfigMisMatchInfo{
+            event_type: events::EventType::ConfigMismatch(events::ConfigMisMatchInfo {
                 key: ctlstr.to_owned(),
                 expected_value: valuestr.to_owned(),
                 observed_value: prev_value_str.to_owned(),

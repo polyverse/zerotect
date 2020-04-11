@@ -29,9 +29,13 @@ fn main() {
         loop {
             // initialize the system with config
             let events = system::modify_environment(&env_config_copy);
-            if !first { // let the first time go
+            if !first {
+                // let the first time go
                 for event in events.into_iter() {
-                    eprintln!("System Configuration Thread: Configuration not stable. {}", &event);
+                    eprintln!(
+                        "System Configuration Thread: Configuration not stable. {}",
+                        &event
+                    );
                     if let Err(e) = config_event_sink.send(event) {
                         eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
                     }

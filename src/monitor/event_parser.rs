@@ -201,12 +201,16 @@ impl EventParser {
                 Some(events::KernelTrapType::Segfault(location))
             } else {
                 eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);
-                Some(events::KernelTrapType::Generic(trap_string.to_owned()))
+                Some(events::KernelTrapType::Generic(
+                    trap_string.trim().to_owned(),
+                ))
             }
         } else if RE_INVALID_OPCODE.is_match(trap_string) {
             Some(events::KernelTrapType::InvalidOpcode)
         } else {
-            Some(events::KernelTrapType::Generic(trap_string.to_owned()))
+            Some(events::KernelTrapType::Generic(
+                trap_string.trim().to_owned(),
+            ))
         }
     }
 
@@ -500,8 +504,10 @@ impl Iterator for EventParser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::Duration as ChronoDuration;
     use chrono::offset::TimeZone;
+    use chrono::Duration as ChronoDuration;
+    use pretty_assertions::assert_eq;
+    use serde_json::{from_str, to_value};
     use std::thread;
 
     macro_rules! map(
@@ -526,13 +532,13 @@ mod test {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372850970000),
-                message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                message: String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372856970000),
-                message: String::from(" a.out[36075]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                message: String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
@@ -543,13 +549,15 @@ mod test {
         ];
 
         let event1 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Segfault(0),
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 36175,
                 ip: 0x0000561bc8d8f12e,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -567,13 +575,15 @@ mod test {
         };
 
         let event2 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372856970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Segfault(0),
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 36275,
                 ip: 0x0,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -591,6 +601,8 @@ mod test {
         };
 
         let event3 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372852970000)),
@@ -635,9 +647,111 @@ mod test {
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event3);
 
-        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:24.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":0},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
-        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:30.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":0},\"procname\":\"a.out\",\"pid\":36075,\"ip\":0,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
-        assert_eq!(serde_json::to_string(&event3).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-05T09:01:26.605Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Segfault\":140734460831928},\"procname\":\"a.out\",\"pid\":37659,\"ip\":140734460831928,\"sp\":140734460831672,\"errcode\":{\"reason\":\"ProtectionFault\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":true,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
+        assert_eq!(
+            to_value(&event1).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-01-05T09:01:24.605Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": {
+                  "Segfault": 0
+                },
+                "procname": "a.out",
+                "pid": 36175,
+                "ip": 94677333766446,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "file": "a.out",
+                "vmasize": 4096,
+                "vmastart": 94677333766144
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            to_value(&event2).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-01-05T09:01:30.605Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": {
+                  "Segfault": 0
+                },
+                "procname": "a.out",
+                "pid": 36275,
+                "ip": 0,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "file": "a.out",
+                "vmastart": 94677333766144,
+                "vmasize": 4096
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            to_value(&event3).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-01-05T09:01:26.605Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": {
+                  "Segfault": 140734460831928
+                },
+                "procname": "a.out",
+                "pid": 37659,
+                "ip": 140734460831928,
+                "sp": 140734460831672,
+                "errcode": {
+                  "reason": "ProtectionFault",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": true,
+                  "protection_keys_block_access": false
+                },
+                "file": null,
+                "vmasize": null,
+                "vmastart": null
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -650,24 +764,26 @@ mod test {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372851970000),
-                message: String::from(" a.out[36075]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                message: String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372855970000),
-                message: String::from(" a.out[36075]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
+                message: String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
             },
         ];
 
         let event1 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::InvalidOpcode,
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 38175,
                 ip: 0x0000561bc8d8f12e,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -685,13 +801,15 @@ mod test {
         };
 
         let event2 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::InvalidOpcode,
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 38275,
                 ip: 0x0000561bc8d8f12e,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -724,8 +842,72 @@ mod test {
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
 
-        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-03-06T21:16:37.845Z\",\"event_type\":{\"KernelTrap\":{\"trap\":\"InvalidOpcode\",\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
-        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-03-06T21:16:41.845Z\",\"event_type\":{\"KernelTrap\":{\"trap\":\"InvalidOpcode\",\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
+        assert_eq!(
+            to_value(&event1).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-03-06T21:16:37.845Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": "InvalidOpcode",
+                "procname": "a.out",
+                "pid": 38175,
+                "ip": 94677333766446,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "file": "a.out",
+                "vmastart": 94677333766144,
+                "vmasize": 4096
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            to_value(&event2).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-03-06T21:16:41.845Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": "InvalidOpcode",
+                "procname": "a.out",
+                "pid": 38275,
+                "ip": 94677333766446,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "file": null,
+                "vmastart": null,
+                "vmasize": null
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -738,24 +920,26 @@ mod test {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372851970000),
-                message: String::from(" a.out[36075]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                message: String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 duration_from_system_start: ChronoDuration::microseconds(372855970000),
-                message: String::from(" a.out[36075]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
+                message: String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
             },
         ];
 
         let event1 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Generic(" foo".to_owned()),
+                trap: events::KernelTrapType::Generic("foo".to_owned()),
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 39175,
                 ip: 0x0000561bc8d8f12e,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -773,13 +957,15 @@ mod test {
         };
 
         let event2 = events::Event {
+            version: events::Version::V1,
+            platform: events::Platform::Linux,
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Generic(" bar".to_owned()),
+                trap: events::KernelTrapType::Generic("bar".to_owned()),
                 procname: String::from("a.out"),
-                pid: 36075,
+                pid: 39275,
                 ip: 0x0000561bc8d8f12e,
                 sp: 0x00007ffd5833d0c0,
                 errcode: events::SegfaultErrorCode {
@@ -812,8 +998,76 @@ mod test {
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
 
-        assert_eq!(serde_json::to_string(&event1).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Generic\":\" foo\"},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}}");
-        assert_eq!(serde_json::to_string(&event2).unwrap(), "{\"facility\":\"Kern\",\"level\":\"Warning\",\"timestamp\":\"1970-01-06T11:03:28.323Z\",\"event_type\":{\"KernelTrap\":{\"trap\":{\"Generic\":\" bar\"},\"procname\":\"a.out\",\"pid\":36075,\"ip\":94677333766446,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":null,\"vmastart\":null,\"vmasize\":null}}}");
+        assert_eq!(
+            to_value(&event1).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-01-06T11:03:24.323Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": {
+                  "Generic": "foo"
+                },
+                "procname": "a.out",
+                "pid": 39175,
+                "ip": 94677333766446,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "vmastart": 94677333766144,
+                "file": "a.out",
+                "vmasize": 4096
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            to_value(&event2).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+            "version": "V1",
+            "platform": "Linux",
+            "timestamp": "1970-01-06T11:03:28.323Z",
+            "facility": "Kern",
+            "level": "Warning",
+            "event_type": {
+              "KernelTrap": {
+                "trap": {
+                  "Generic": "bar"
+                },
+                "procname": "a.out",
+                "pid": 39275,
+                "ip": 94677333766446,
+                "sp": 140726083244224,
+                "errcode": {
+                  "reason": "NoPageFound",
+                  "access_type": "Read",
+                  "access_mode": "User",
+                  "use_of_reserved_bit": false,
+                  "instruction_fetch": false,
+                  "protection_keys_block_access": false
+                },
+                "vmastart": null,
+                "vmasize": null,
+                "file": null
+              }
+            }
+          }"#
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -838,6 +1092,8 @@ mod test {
         assert_eq!(
             sig11.unwrap(),
             events::Event {
+                version: events::Version::V1,
+                platform: events::Platform::Linux,
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
@@ -967,6 +1223,8 @@ mod test {
         assert_eq!(
             sig11.unwrap(),
             events::Event {
+                version: events::Version::V1,
+                platform: events::Platform::Linux,
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372858970000)),
@@ -1013,6 +1271,8 @@ mod test {
             assert_eq!(
                 segfault,
                 events::Event {
+                    version: events::Version::V1,
+                    platform: events::Platform::Linux,
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
@@ -1066,6 +1326,8 @@ mod test {
         assert_eq!(
             suppressed_callback.unwrap(),
             events::Event {
+                version: events::Version::V1,
+                platform: events::Platform::Linux,
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),

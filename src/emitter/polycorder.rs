@@ -86,11 +86,13 @@ pub fn new(config: PolycorderConfig) -> Polycorder {
                     events: &events,
                 };
 
-                let res = block_on(client
-                    .post(POLYCORDER_PUBLISH_ENDPOINT)
-                    .bearer_auth(&config.auth_key)
-                    .json(&report)
-                    .send());
+                let res = block_on(
+                    client
+                        .post(POLYCORDER_PUBLISH_ENDPOINT)
+                        .bearer_auth(&config.auth_key)
+                        .json(&report)
+                        .send(),
+                );
 
                 match res {
                     Ok(r) => eprintln!(
