@@ -166,9 +166,10 @@ impl EventParser {
                 }
                 return Some(events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux,
-                    facility: km.facility.clone(),
-                    level: km.level.clone(),
+                    platform: events::Platform::Linux(events::LinuxEventProperties{
+                        facility: km.facility.clone(),
+                        level: km.level.clone()    
+                    }),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
                     event_type: events::EventType::KernelTrap(trapinfo),
                 });
@@ -230,9 +231,10 @@ impl EventParser {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Event {
                         version: events::Version::V1,
-                        platform: events::Platform::Linux,
-                        facility: km.facility.clone(),
-                        level: km.level.clone(),
+                        platform: events::Platform::Linux(events::LinuxEventProperties{
+                            facility: km.facility.clone(),
+                            level: km.level.clone()    
+                        }),
                         timestamp: self.system_start_time.add(km.duration_from_system_start),
                         event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
                             signal,
@@ -435,9 +437,10 @@ impl EventParser {
 
                 return Some(events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux,
-                    facility: km.facility.clone(),
-                    level: km.level.clone(),
+                    platform: events::Platform::Linux(events::LinuxEventProperties{
+                        facility: km.facility.clone(),
+                        level: km.level.clone()    
+                    }),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
                     event_type: events::EventType::SuppressedCallback(suppressed_callback_info),
                 });
@@ -550,9 +553,10 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Segfault(0),
@@ -576,9 +580,10 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372856970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Segfault(0),
@@ -602,9 +607,10 @@ mod test {
 
         let event3 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372852970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
@@ -652,10 +658,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"
+                }
+            },
             "timestamp": "1970-01-05T09:01:24.605Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": {
@@ -687,10 +696,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-01-05T09:01:30.605Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": {
@@ -722,10 +734,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-01-05T09:01:26.605Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": {
@@ -776,9 +791,10 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::InvalidOpcode,
@@ -802,9 +818,10 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::InvalidOpcode,
@@ -847,10 +864,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-03-06T21:16:37.845Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": "InvalidOpcode",
@@ -880,10 +900,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-03-06T21:16:41.845Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": "InvalidOpcode",
@@ -932,9 +955,10 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Generic("foo".to_owned()),
@@ -958,9 +982,10 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux,
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
+            platform: events::Platform::Linux(events::LinuxEventProperties{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning    
+            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
             event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                 trap: events::KernelTrapType::Generic("bar".to_owned()),
@@ -1003,10 +1028,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-01-06T11:03:24.323Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": {
@@ -1038,10 +1066,13 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "platform": "Linux",
+            "platform": {
+                "Linux": {
+                    "facility": "Kern",
+                    "level": "Warning"        
+                }
+            },
             "timestamp": "1970-01-06T11:03:28.323Z",
-            "facility": "Kern",
-            "level": "Warning",
             "event_type": {
               "KernelTrap": {
                 "trap": {
@@ -1093,9 +1124,10 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux,
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                platform: events::Platform::Linux(events::LinuxEventProperties{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning    
+                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
                 event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
                     signal: events::FatalSignalType::SIGSEGV,
@@ -1224,9 +1256,10 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux,
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                platform: events::Platform::Linux(events::LinuxEventProperties{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning    
+                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372858970000)),
                 event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
                     signal: events::FatalSignalType::SIGSEGV,
@@ -1272,9 +1305,10 @@ mod test {
                 segfault,
                 events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux,
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning,
+                    platform: events::Platform::Linux(events::LinuxEventProperties{
+                        facility: events::LogFacility::Kern,
+                        level: events::LogLevel::Warning    
+                    }),
                     timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
                     event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
                         trap: events::KernelTrapType::Segfault(0),
@@ -1327,9 +1361,10 @@ mod test {
             suppressed_callback.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux,
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                platform: events::Platform::Linux(events::LinuxEventProperties{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning    
+                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
                 event_type: events::EventType::SuppressedCallback(events::SuppressedCallbackInfo {
                     function_name: "show_signal_msg".to_owned(),

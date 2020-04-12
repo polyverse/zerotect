@@ -7,12 +7,11 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use strum_macros::EnumString;
 use typename::TypeName;
 
-/// This Event generates the following Authoritative JSON schema
-/// guarded by a built-in doc-test
-///
-/// ```test
-/// let schema = schema_for!(Event);
-/// ```
+/// This object is the complete event that gets serialized
+/// and logged to Polycorder. The JSON serialization/schema
+/// of this event is considered the canonical standard for
+/// all detection mechanisms by Polyverse.
+/// 
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 pub struct Event {
     /// This dictates the structure of the rest of the fields
@@ -24,12 +23,6 @@ pub struct Event {
     /// Platform dictates everything else that comes after
     pub platform: Platform,
 
-    /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
-
-    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
-
     /// "type" is a reserved keyword, hence event_type
     /// This contains the details of this event and might come in many variants
     pub event_type: EventType,
@@ -39,11 +32,9 @@ impl Display for Event {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
-            "Event<{},{},{},{},{}>::{}",
+            "Event<{},{},{}>::{}",
             self.version,
             self.platform,
-            self.facility,
-            self.level,
             self.timestamp,
             match &self.event_type {
                 EventType::KernelTrap(k) => format!("{}", k),
@@ -62,12 +53,28 @@ pub enum Version {
 
 #[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
 pub enum Platform {
-    Linux,
+    Linux(LinuxEventProperties),
 }
 
-#[derive(
-    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
-)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+pub struct LinuxEventProperties {
+        /// A Log-level for this event - was it critical?
+        pub level: LogLevel,
+
+        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+        pub facility: LogFacility,    
+}
+
+impl Display for LinuxEventProperties {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f,
+            "log_level={}, log_facility={}",
+            self.level,
+            self.facility)
+    }
+}
+
+#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
     Kern = 0,
