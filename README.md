@@ -2,6 +2,18 @@
 
 [![Build Status](https://travis-ci.org/polyverse/polytect.svg?branch=master)](https://travis-ci.org/polyverse/polytect)
 
+## Table of Contents
+
+* [What is Polytect] (#what_is)
+* [Installing Polytect] (#installation)
+* Usage (#usage)
+  * [Recommended usage] (#recommended_usage)
+  * [All usage options] (#all_usage)
+  * [Notable flags and options] (#notable_flags)
+* [Polytect Log Format] (#log_format)
+
+## What is Polytect {#what_is}
+
 Polytect is the reference implementation for Polyverse's zero-day detection
 framework. Its main purpose is to support Polycorder (the Polyverse-hosted
 zero-day attack detection and analytics service), but also serve as the
@@ -14,19 +26,15 @@ which makes anomalies stand out in a loud and noisy manner in terms of side-effe
 Polytect looks for these side-effects, specifically caused by attacking a Polymorphic system,
 and reports them to analytics tools.
 
-## Polytect Log Format
+## Installing Polytect {#installation}
 
-An up-to-date JSON Schema of Polytect's log format is always maintained here:
-[./schema.json](./schema.json).
+[Installation Documentation](./install/README.md) explains using Polytect in real at-scale practical deployments.
 
-## Usage
-
-> NOTE: This section covers usage of polytect the compiled binary program. For practical
-polytect usage at scale, see the [Installation Documentation](./install).
+## Usage {#usage}
 
 Polytect is built as a single statically linked binary (only for Linux) at the moment.
 
-### Recommended usage
+### Recommended usage {#recommended_usage}
 
 The most common mode to run Polytect is with two flags and one option:
 
@@ -38,7 +46,7 @@ The authkey is obtainable in the Polyverse Account Manager hosted at [https://po
 
 It is unlikely you would manually run Polytect though, unless for testing or special circumstances. For most production use, we recommend setting it up as a background daemon. This is described more in the [Installation section](./install).
 
-### All usage options
+### All usage options {#all_usage}
 
 ```bash
 polytect --help
@@ -62,7 +70,7 @@ OPTIONS:
     -p, --polycorder <authkey>      Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
 ```
 
-#### Notable flags and options
+#### Notable flags and options {#notable_flags}
 
 Two flags and one option are most notable in intended usage.
 
@@ -71,3 +79,10 @@ Two flags and one option are most notable in intended usage.
 2. *-f, --enable-fatal-signals*: Setting this flag commands Polytect to set a kernel flag that enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
 
 3. *-p, --polycorder \<authkey\>*: Setting this option commands polytect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the Polyverse Account Manager.
+
+## Polytect Log Format {#log_format}
+
+An up-to-date JSON Schema of Polytect's log format is always maintained here:
+[./schema.json](./schema.json).
+
+The log format is important for processing data emitted by Polytect. This enables users of Polycorder to send it data from agents other than Polytect. It enables analytics tools to consume structured Polytect data and make sense of it.
