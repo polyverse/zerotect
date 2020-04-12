@@ -30,7 +30,7 @@ and reports them to analytics tools.
 
 [Installation Documentation](./install/README.md) explains using Polytect in real at-scale practical deployments.
 
-## Usage {#usage}
+## Usage
 
 Polytect is built as a single statically linked binary (only for Linux) at the moment.
 
