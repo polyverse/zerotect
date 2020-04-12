@@ -44,7 +44,7 @@ polytect -e -f -p <authkey>
 
 The authkey is obtainable in the Polyverse Account Manager hosted at [https://polyverse.com](https://polyverse.com).
 
-It is unlikely you would manually run Polytect though, unless for testing or special circumstances. For most production use, we recommend setting it up as a background daemon. This is described more in the [Installation section](./install).
+It is unlikely you would manually run Polytect though, unless for testing or special circumstances. For most production use, we recommend setting it up as a background daemon. This is described more in the [Installation section](./install/README.md).
 
 ### All usage options
 
