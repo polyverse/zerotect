@@ -4,9 +4,9 @@
 
 ## Table of Contents
 
-* [What is Polytect](#[what-is-polytect])
+* [What is Polytect](#what-is-polytect)
 * [Installing Polytect](#installing-polytect)
-* Usage (#usage)
+* [Usage](#usage)
   * [Recommended usage](#recommended-usage)
   * [All usage options](#all-usage-options)
   * [Notable flags and options](#notable-flags-and-options)
