@@ -166,12 +166,12 @@ impl EventParser {
                 }
                 return Some(events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux(events::LinuxEventProperties{
-                        facility: km.facility.clone(),
-                        level: km.level.clone()    
-                    }),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
-                    event_type: events::EventType::KernelTrap(trapinfo),
+                    platform: events::Platform::Linux(events::LinuxPlatform{
+                        facility: km.facility.clone(),
+                        level: km.level.clone(),
+                        event: events::LinuxEvent::KernelTrap(trapinfo)
+                    }),
                 });
             }
         };
@@ -231,14 +231,14 @@ impl EventParser {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Event {
                         version: events::Version::V1,
-                        platform: events::Platform::Linux(events::LinuxEventProperties{
-                            facility: km.facility.clone(),
-                            level: km.level.clone()    
-                        }),
                         timestamp: self.system_start_time.add(km.duration_from_system_start),
-                        event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
-                            signal,
-                            stack_dump: self.parse_stack_dump(),
+                        platform: events::Platform::Linux(events::LinuxPlatform{
+                            facility: km.facility.clone(),
+                            level: km.level.clone(),
+                            event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
+                                signal,
+                                stack_dump: self.parse_stack_dump(),
+                            })
                         }),
                     });
                 } else {
@@ -437,12 +437,12 @@ impl EventParser {
 
                 return Some(events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux(events::LinuxEventProperties{
-                        facility: km.facility.clone(),
-                        level: km.level.clone()    
-                    }),
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
-                    event_type: events::EventType::SuppressedCallback(suppressed_callback_info),
+                    platform: events::Platform::Linux(events::LinuxPlatform{
+                        facility: km.facility.clone(),
+                        level: km.level.clone(),
+                        event: events::LinuxEvent::SuppressedCallback(suppressed_callback_info)
+                    }),
                 });
             }
         };
@@ -553,82 +553,82 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Segfault(0),
-                procname: String::from("a.out"),
-                pid: 36175,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
-            }),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0),
+                    procname: String::from("a.out"),
+                    pid: 36175,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            })
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372856970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Segfault(0),
-                procname: String::from("a.out"),
-                pid: 36275,
-                ip: 0x0,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
-            }),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0),
+                    procname: String::from("a.out"),
+                    pid: 36275,
+                    ip: 0x0,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            })
         };
 
         let event3 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372852970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
-                procname: String::from("a.out"),
-                pid: 37659,
-                ip: 0x7fff4b8ba8b8,
-                sp: 0x00007fff4b8ba7b8,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::ProtectionFault,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: true,
-                    protection_keys_block_access: false,
-                },
-                file: None,
-                vmastart: None,
-                vmasize: None,
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
+                    procname: String::from("a.out"),
+                    pid: 37659,
+                    ip: 0x7fff4b8ba8b8,
+                    sp: 0x00007fff4b8ba7b8,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::ProtectionFault,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: true,
+                        protection_keys_block_access: false,
+                    },
+                    file: None,
+                    vmastart: None,
+                    vmasize: None,
+                })
             }),
         };
 
@@ -658,34 +658,34 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-01-05T09:01:24.605Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": {
+                            "Segfault": 0
+                          },
+                          "procname": "a.out",
+                          "pid": 36175,
+                          "ip": 94677333766446,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "file": "a.out",
+                          "vmasize": 4096,
+                          "vmastart": 94677333766144
+                        }
+                      }
                 }
-            },
-            "timestamp": "1970-01-05T09:01:24.605Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": {
-                  "Segfault": 0
-                },
-                "procname": "a.out",
-                "pid": 36175,
-                "ip": 94677333766446,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "file": "a.out",
-                "vmasize": 4096,
-                "vmastart": 94677333766144
-              }
             }
           }"#
             )
@@ -696,34 +696,34 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-01-05T09:01:30.605Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": {
+                            "Segfault": 0
+                          },
+                          "procname": "a.out",
+                          "pid": 36275,
+                          "ip": 0,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "file": "a.out",
+                          "vmastart": 94677333766144,
+                          "vmasize": 4096
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-01-05T09:01:30.605Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": {
-                  "Segfault": 0
-                },
-                "procname": "a.out",
-                "pid": 36275,
-                "ip": 0,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "file": "a.out",
-                "vmastart": 94677333766144,
-                "vmasize": 4096
-              }
             }
           }"#
             )
@@ -734,34 +734,34 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-01-05T09:01:26.605Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": {
+                            "Segfault": 140734460831928
+                          },
+                          "procname": "a.out",
+                          "pid": 37659,
+                          "ip": 140734460831928,
+                          "sp": 140734460831672,
+                          "errcode": {
+                            "reason": "ProtectionFault",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": true,
+                            "protection_keys_block_access": false
+                          },
+                          "file": null,
+                          "vmasize": null,
+                          "vmastart": null
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-01-05T09:01:26.605Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": {
-                  "Segfault": 140734460831928
-                },
-                "procname": "a.out",
-                "pid": 37659,
-                "ip": 140734460831928,
-                "sp": 140734460831672,
-                "errcode": {
-                  "reason": "ProtectionFault",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": true,
-                  "protection_keys_block_access": false
-                },
-                "file": null,
-                "vmasize": null,
-                "vmastart": null
-              }
             }
           }"#
             )
@@ -791,56 +791,56 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::InvalidOpcode,
-                procname: String::from("a.out"),
-                pid: 38175,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::InvalidOpcode,
+                    procname: String::from("a.out"),
+                    pid: 38175,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
             }),
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::InvalidOpcode,
-                procname: String::from("a.out"),
-                pid: 38275,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: None,
-                vmastart: None,
-                vmasize: None,
-            }),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::InvalidOpcode,
+                    procname: String::from("a.out"),
+                    pid: 38275,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: None,
+                    vmastart: None,
+                    vmasize: None,
+                })
+            })
         };
 
         let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
@@ -864,32 +864,32 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-03-06T21:16:37.845Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": "InvalidOpcode",
+                          "procname": "a.out",
+                          "pid": 38175,
+                          "ip": 94677333766446,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "file": "a.out",
+                          "vmastart": 94677333766144,
+                          "vmasize": 4096
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-03-06T21:16:37.845Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": "InvalidOpcode",
-                "procname": "a.out",
-                "pid": 38175,
-                "ip": 94677333766446,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "file": "a.out",
-                "vmastart": 94677333766144,
-                "vmasize": 4096
-              }
             }
           }"#
             )
@@ -900,32 +900,32 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-03-06T21:16:41.845Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": "InvalidOpcode",
+                          "procname": "a.out",
+                          "pid": 38275,
+                          "ip": 94677333766446,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "file": null,
+                          "vmastart": null,
+                          "vmasize": null
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-03-06T21:16:41.845Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": "InvalidOpcode",
-                "procname": "a.out",
-                "pid": 38275,
-                "ip": 94677333766446,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "file": null,
-                "vmastart": null,
-                "vmasize": null
-              }
             }
           }"#
             )
@@ -955,56 +955,56 @@ mod test {
 
         let event1 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Generic("foo".to_owned()),
-                procname: String::from("a.out"),
-                pid: 39175,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: Some(String::from("a.out")),
-                vmastart: Some(0x561bc8d8f000),
-                vmasize: Some(0x1000),
-            }),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Generic("foo".to_owned()),
+                    procname: String::from("a.out"),
+                    pid: 39175,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: Some(String::from("a.out")),
+                    vmastart: Some(0x561bc8d8f000),
+                    vmasize: Some(0x1000),
+                })
+            })
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
-            platform: events::Platform::Linux(events::LinuxEventProperties{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning    
-            }),
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
-            event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                trap: events::KernelTrapType::Generic("bar".to_owned()),
-                procname: String::from("a.out"),
-                pid: 39275,
-                ip: 0x0000561bc8d8f12e,
-                sp: 0x00007ffd5833d0c0,
-                errcode: events::SegfaultErrorCode {
-                    reason: events::SegfaultReason::NoPageFound,
-                    access_type: events::SegfaultAccessType::Read,
-                    access_mode: events::SegfaultAccessMode::User,
-                    use_of_reserved_bit: false,
-                    instruction_fetch: false,
-                    protection_keys_block_access: false,
-                },
-                file: None,
-                vmastart: None,
-                vmasize: None,
-            }),
+            platform: events::Platform::Linux(events::LinuxPlatform{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                    trap: events::KernelTrapType::Generic("bar".to_owned()),
+                    procname: String::from("a.out"),
+                    pid: 39275,
+                    ip: 0x0000561bc8d8f12e,
+                    sp: 0x00007ffd5833d0c0,
+                    errcode: events::SegfaultErrorCode {
+                        reason: events::SegfaultReason::NoPageFound,
+                        access_type: events::SegfaultAccessType::Read,
+                        access_mode: events::SegfaultAccessMode::User,
+                        use_of_reserved_bit: false,
+                        instruction_fetch: false,
+                        protection_keys_block_access: false,
+                    },
+                    file: None,
+                    vmastart: None,
+                    vmasize: None,
+                })
+            })
         };
 
         let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
@@ -1028,34 +1028,34 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-01-06T11:03:24.323Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": {
+                            "Generic": "foo"
+                          },
+                          "procname": "a.out",
+                          "pid": 39175,
+                          "ip": 94677333766446,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "vmastart": 94677333766144,
+                          "file": "a.out",
+                          "vmasize": 4096
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-01-06T11:03:24.323Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": {
-                  "Generic": "foo"
-                },
-                "procname": "a.out",
-                "pid": 39175,
-                "ip": 94677333766446,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "vmastart": 94677333766144,
-                "file": "a.out",
-                "vmasize": 4096
-              }
             }
           }"#
             )
@@ -1066,34 +1066,34 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
+            "timestamp": "1970-01-06T11:03:28.323Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
-                    "level": "Warning"        
+                    "level": "Warning",
+                    "event": {
+                        "KernelTrap": {
+                          "trap": {
+                            "Generic": "bar"
+                          },
+                          "procname": "a.out",
+                          "pid": 39275,
+                          "ip": 94677333766446,
+                          "sp": 140726083244224,
+                          "errcode": {
+                            "reason": "NoPageFound",
+                            "access_type": "Read",
+                            "access_mode": "User",
+                            "use_of_reserved_bit": false,
+                            "instruction_fetch": false,
+                            "protection_keys_block_access": false
+                          },
+                          "vmastart": null,
+                          "vmasize": null,
+                          "file": null
+                        }
+                    }
                 }
-            },
-            "timestamp": "1970-01-06T11:03:28.323Z",
-            "event_type": {
-              "KernelTrap": {
-                "trap": {
-                  "Generic": "bar"
-                },
-                "procname": "a.out",
-                "pid": 39275,
-                "ip": 94677333766446,
-                "sp": 140726083244224,
-                "errcode": {
-                  "reason": "NoPageFound",
-                  "access_type": "Read",
-                  "access_mode": "User",
-                  "use_of_reserved_bit": false,
-                  "instruction_fetch": false,
-                  "protection_keys_block_access": false
-                },
-                "vmastart": null,
-                "vmasize": null,
-                "file": null
-              }
             }
           }"#
             )
@@ -1124,15 +1124,15 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux(events::LinuxEventProperties{
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning    
-                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
-                    signal: events::FatalSignalType::SIGSEGV,
-                    stack_dump: None,
-                }),
+                platform: events::Platform::Linux(events::LinuxPlatform{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
+                        signal: events::FatalSignalType::SIGSEGV,
+                        stack_dump: None,
+                    })
+                })
             }
         )
     }
@@ -1256,23 +1256,23 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux(events::LinuxEventProperties{
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning    
-                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372858970000)),
-                event_type: events::EventType::FatalSignal(events::FatalSignalInfo {
-                    signal: events::FatalSignalType::SIGSEGV,
-                    stack_dump: Some(events::StackDump {
-                        cpu: 1,
-                        pid: 36075,
-                        command: "a.out".to_owned(),
-                        kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
-                        hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
-                        taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                        registers: HashMap::new(),
+                platform: events::Platform::Linux(events::LinuxPlatform{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
+                        signal: events::FatalSignalType::SIGSEGV,
+                        stack_dump: Some(events::StackDump {
+                            cpu: 1,
+                            pid: 36075,
+                            command: "a.out".to_owned(),
+                            kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
+                            hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
+                            taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
+                            registers: HashMap::new(),
+                        })
                     })
-                }),
+                })
             }
         )
     }
@@ -1305,28 +1305,28 @@ mod test {
                 segfault,
                 events::Event {
                     version: events::Version::V1,
-                    platform: events::Platform::Linux(events::LinuxEventProperties{
-                        facility: events::LogFacility::Kern,
-                        level: events::LogLevel::Warning    
-                    }),
                     timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                    event_type: events::EventType::KernelTrap(events::KernelTrapInfo {
-                        trap: events::KernelTrapType::Segfault(0),
-                        procname: String::from("a.out"),
-                        pid: 36075,
-                        ip: 0x0000561bc8d8f12e,
-                        sp: 0x00007ffd5833d0c0,
-                        errcode: events::SegfaultErrorCode {
-                            reason: events::SegfaultReason::NoPageFound,
-                            access_type: events::SegfaultAccessType::Read,
-                            access_mode: events::SegfaultAccessMode::User,
-                            use_of_reserved_bit: false,
-                            instruction_fetch: false,
-                            protection_keys_block_access: false,
-                        },
-                        file: Some(String::from("a.out")),
-                        vmastart: Some(0x561bc8d8f000),
-                        vmasize: Some(0x1000),
+                    platform: events::Platform::Linux(events::LinuxPlatform{
+                        facility: events::LogFacility::Kern,
+                        level: events::LogLevel::Warning,
+                        event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
+                            trap: events::KernelTrapType::Segfault(0),
+                            procname: String::from("a.out"),
+                            pid: 36075,
+                            ip: 0x0000561bc8d8f12e,
+                            sp: 0x00007ffd5833d0c0,
+                            errcode: events::SegfaultErrorCode {
+                                reason: events::SegfaultReason::NoPageFound,
+                                access_type: events::SegfaultAccessType::Read,
+                                access_mode: events::SegfaultAccessMode::User,
+                                use_of_reserved_bit: false,
+                                instruction_fetch: false,
+                                protection_keys_block_access: false,
+                            },
+                            file: Some(String::from("a.out")),
+                            vmastart: Some(0x561bc8d8f000),
+                            vmasize: Some(0x1000),
+                        })
                     })
                 }
             );
@@ -1361,15 +1361,16 @@ mod test {
             suppressed_callback.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                platform: events::Platform::Linux(events::LinuxEventProperties{
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning    
-                }),
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                event_type: events::EventType::SuppressedCallback(events::SuppressedCallbackInfo {
-                    function_name: "show_signal_msg".to_owned(),
-                    count: 9,
-                }),
+                platform: events::Platform::Linux(events::LinuxPlatform{
+                    facility: events::LogFacility::Kern,
+                    level: events::LogLevel::Warning,
+                    event: events::LinuxEvent::SuppressedCallback(events::SuppressedCallbackInfo {
+                        function_name: "show_signal_msg".to_owned(),
+                        count: 9,
+                    }),
+
+                })
             }
         )
     }

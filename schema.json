@@ -1,0 +1,520 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event",
+  "description": "Event is the complete structure that Polycorder (Polyverse-hosted zero-day detection service) understands. This structure is also the reference schema/format for all detect-efforts.\n\nAs such, it is encouraged to have many detectors that emit data in this structure.\n\nDifferent implementations of the structure may very. Various fields may come or go.\n\nAll parsers are encouraged to first test the \"Version\" field and then parse the correct structure. The field `version` is guaranteed to exist on ALL versions and instances of Event. Any structure/data that does not contain the version field, is considered invalid.",
+  "type": "object",
+  "required": [
+    "platform",
+    "timestamp",
+    "version"
+  ],
+  "properties": {
+    "platform": {
+      "description": "Platform records fields specific to a specific mechanism/platform.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Platform"
+        }
+      ]
+    },
+    "timestamp": {
+      "description": "This is universal and important for all events. They occur at a time.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "description": "Version is guaranteed to exist. All other fields may change or not exist, and it is recommended to use a different version when making breaking changes to all other fields. It allows parsers to test on version and determine if they know what to do with the rest.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Version"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "ConfigMisMatchInfo": {
+      "description": "Information about a configuration mismatch between what Polytect was commanded to configure and what was actually found.\n\nThis may indicate a user-override or a malicious process trying to blind polytect from detecting attacks.",
+      "type": "object",
+      "required": [
+        "expected_value",
+        "key",
+        "observed_value"
+      ],
+      "properties": {
+        "expected_value": {
+          "description": "The value polytect configured and thus expected.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The key in question whose values mismatched.",
+          "type": "string"
+        },
+        "observed_value": {
+          "description": "The value polytect observed.",
+          "type": "string"
+        }
+      }
+    },
+    "FatalSignalInfo": {
+      "description": "Information when a process throws a Fatal",
+      "type": "object",
+      "required": [
+        "signal"
+      ],
+      "properties": {
+        "signal": {
+          "description": "The type of Fatal triggered",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FatalSignalType"
+            }
+          ]
+        },
+        "stack_dump": {
+          "description": "An Optional Stack Dump if one was found and parsable.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StackDump"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "FatalSignalType": {
+      "description": "The type of Fatal Signal detected Comprehensive list of POSIX signals in the linux kernel can be found int he kernel source tree: https://github.com/torvalds/linux/blob/master/include/linux/signal.h#L339\n\nA bit more detail may be found in the man-pages: http://man7.org/linux/man-pages/man7/signal.7.html",
+      "enum": [
+        "SIGHUP",
+        "SIGINT",
+        "SIGQUIT",
+        "SIGILL",
+        "SIGTRAP",
+        "SIGIOT",
+        "SIGBUS",
+        "SIGFPE",
+        "SIGKILL",
+        "SIGUSR1",
+        "SIGSEGV",
+        "SIGUSR2",
+        "SIGPIPE",
+        "SIGALRM",
+        "SIGTERM",
+        "SIGSTKFLT",
+        "SIGCHLD",
+        "SIGCONT",
+        "SIGSTOP",
+        "SIGTSTP",
+        "SIGTTIN",
+        "SIGTTOU",
+        "SIGURG",
+        "SIGXCPU",
+        "SIGXFSZ",
+        "SIGVTALRM",
+        "SIGPROF",
+        "SIGWINCH",
+        "SIGIO",
+        "SIGPWR"
+      ]
+    },
+    "KernelTrapInfo": {
+      "description": "Details on a Kernel Trap event.",
+      "type": "object",
+      "required": [
+        "errcode",
+        "ip",
+        "pid",
+        "procname",
+        "sp",
+        "trap"
+      ],
+      "properties": {
+        "errcode": {
+          "description": "The error code for the trap",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SegfaultErrorCode"
+            }
+          ]
+        },
+        "file": {
+          "description": "(Optional) File in which the trap occurred (could be the main executable or library).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ip": {
+          "description": "Instruction Pointer (what memory address was executing)",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "pid": {
+          "description": "Process ID",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "procname": {
+          "description": "Name of the process in which the trap occurred",
+          "type": "string"
+        },
+        "sp": {
+          "description": "Stack Pointer",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "trap": {
+          "description": "The type of kernel trap triggered",
+          "allOf": [
+            {
+              "$ref": "#/definitions/KernelTrapType"
+            }
+          ]
+        },
+        "vmasize": {
+          "description": "(Optional) The Virtual Memory Size of this file's mapping.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "vmastart": {
+          "description": "(Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "KernelTrapType": {
+      "description": "The types of kernel traps understood",
+      "anyOf": [
+        {
+          "enum": [
+            "InvalidOpcode"
+          ]
+        },
+        {
+          "description": "This is type Polytect doesn't know how to parse. So it captures and stores the string description.",
+          "type": "object",
+          "required": [
+            "Generic"
+          ],
+          "properties": {
+            "Generic": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Segfault occurs when an invalid memory access is performed (writing to read-only memory, executing non-executable memory, etc.)",
+          "type": "object",
+          "required": [
+            "Segfault"
+          ],
+          "properties": {
+            "Segfault": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          }
+        }
+      ]
+    },
+    "LinuxEvent": {
+      "description": "Enumerates the types of events polytect can capture",
+      "anyOf": [
+        {
+          "description": "A Kernel Trap event - the kernel stops process execution for attempting something stupid",
+          "type": "object",
+          "required": [
+            "KernelTrap"
+          ],
+          "properties": {
+            "KernelTrap": {
+              "$ref": "#/definitions/KernelTrapInfo"
+            }
+          }
+        },
+        {
+          "description": "A Fatal Signal from the process because the process did something stupid",
+          "type": "object",
+          "required": [
+            "FatalSignal"
+          ],
+          "properties": {
+            "FatalSignal": {
+              "$ref": "#/definitions/FatalSignalInfo"
+            }
+          }
+        },
+        {
+          "description": "When too many other events are generated in series, repeat events are suppressed. This event captures how many events were suppressed. This is important for analyzing a Blind ROP attack where the attacker may generate thousands of Segfaults which can easily get suppressed.",
+          "type": "object",
+          "required": [
+            "SuppressedCallback"
+          ],
+          "properties": {
+            "SuppressedCallback": {
+              "$ref": "#/definitions/SuppressedCallbackInfo"
+            }
+          }
+        },
+        {
+          "description": "This is a Polytect-internal event. Polytect can be commanded to set and ensure certain configuration settings to capture events, such as enabling kernel fatal-signals, or core dumps.\n\nThis event is triggered when, after Polytect has configured a machine as commanded, the configuration later mismatched. It means someone attempted to undo those changes.\n\nThis event usually tells an observer they may not be seeing other events because they may be disabled.",
+          "type": "object",
+          "required": [
+            "ConfigMismatch"
+          ],
+          "properties": {
+            "ConfigMismatch": {
+              "$ref": "#/definitions/ConfigMisMatchInfo"
+            }
+          }
+        }
+      ]
+    },
+    "LinuxPlatform": {
+      "description": "Details on a Linux event",
+      "type": "object",
+      "required": [
+        "event",
+        "facility",
+        "level"
+      ],
+      "properties": {
+        "event": {
+          "description": "The type records details of the event based on the type of event that occurred.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LinuxEvent"
+            }
+          ]
+        },
+        "facility": {
+          "description": "A Log-facility - most OSes would have one, but this is Linux-specific for now",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LogFacility"
+            }
+          ]
+        },
+        "level": {
+          "description": "A Log-level for this event - was it critical?",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LogLevel"
+            }
+          ]
+        }
+      }
+    },
+    "LogFacility": {
+      "description": "Linux kmesg (kernel message buffer) Log Facility.",
+      "enum": [
+        "Kern",
+        "User",
+        "Mail",
+        "Daemon",
+        "Auth",
+        "Syslog",
+        "Lpr",
+        "News",
+        "UUCP",
+        "Cron",
+        "AuthPriv",
+        "FTP",
+        "Polytect"
+      ]
+    },
+    "LogLevel": {
+      "description": "Linux kmesg (kernel message buffer) Log Level.",
+      "enum": [
+        "Emergency",
+        "Alert",
+        "Critical",
+        "Error",
+        "Warning",
+        "Notice",
+        "Info",
+        "Debug"
+      ]
+    },
+    "Platform": {
+      "description": "The Platform this event originated on.",
+      "anyOf": [
+        {
+          "description": "The Linux platform and event details in the Linux context",
+          "type": "object",
+          "required": [
+            "Linux"
+          ],
+          "properties": {
+            "Linux": {
+              "$ref": "#/definitions/LinuxPlatform"
+            }
+          }
+        }
+      ]
+    },
+    "SegfaultAccessMode": {
+      "description": "The context under which the Segmentation Fault was triggered",
+      "enum": [
+        "Kernel",
+        "User"
+      ]
+    },
+    "SegfaultAccessType": {
+      "description": "The type of Access that triggered this Segmentation Fault",
+      "enum": [
+        "Read",
+        "Write"
+      ]
+    },
+    "SegfaultErrorCode": {
+      "description": "Segmentation Fault ErrorCode flags parsed into a structure See more: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167 See more: https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning",
+      "type": "object",
+      "required": [
+        "access_mode",
+        "access_type",
+        "instruction_fetch",
+        "protection_keys_block_access",
+        "reason",
+        "use_of_reserved_bit"
+      ],
+      "properties": {
+        "access_mode": {
+          "description": "The mode under which access was performed",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SegfaultAccessMode"
+            }
+          ]
+        },
+        "access_type": {
+          "description": "The type of access causing the fault",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SegfaultAccessType"
+            }
+          ]
+        },
+        "instruction_fetch": {
+          "description": "fault was an instruction fetch, not data read or write",
+          "type": "boolean"
+        },
+        "protection_keys_block_access": {
+          "description": "Memory Protection Keys related. Not sure what exactly triggers this. See more: https://lore.kernel.org/patchwork/patch/633070/",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "The reason for the segmentation fault",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SegfaultReason"
+            }
+          ]
+        },
+        "use_of_reserved_bit": {
+          "description": "use of reserved bits in the page table entry detected (the kernel will panic if this happens)",
+          "type": "boolean"
+        }
+      }
+    },
+    "SegfaultReason": {
+      "description": "The reason for the Segmentation Fault",
+      "enum": [
+        "NoPageFound",
+        "ProtectionFault"
+      ]
+    },
+    "StackDump": {
+      "description": "Stack Dump (when parsed)",
+      "type": "object",
+      "required": [
+        "command",
+        "cpu",
+        "hardware",
+        "kernel",
+        "pid",
+        "registers",
+        "taskinfo"
+      ],
+      "properties": {
+        "command": {
+          "description": "Command (how was the process executed)",
+          "type": "string"
+        },
+        "cpu": {
+          "description": "Which CPU/Core it dumped on",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "hardware": {
+          "description": "Hardware descriptor",
+          "type": "string"
+        },
+        "kernel": {
+          "description": "Kernel descriptor",
+          "type": "string"
+        },
+        "pid": {
+          "description": "Process ID",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "registers": {
+          "description": "Arbitrary register value key-pairs",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "taskinfo": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "SuppressedCallbackInfo": {
+      "description": "Information about a suppressed callback i.e. when a particular type of error happens so much it is suppressed 'n' times.\n\nThis captures what the log was, and how many times it was suppressed.\n\nThis is a crucial data point because under Blind ROP attacks an error might happen thousands of times but may only be logged once, with all the remaining attempts being suppressed.",
+      "type": "object",
+      "required": [
+        "count",
+        "function_name"
+      ],
+      "properties": {
+        "count": {
+          "description": "Number of times it was suppressed.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "function_name": {
+          "description": "Name of the function being suppressed/folded.",
+          "type": "string"
+        }
+      }
+    },
+    "Version": {
+      "description": "The Version of this event structure",
+      "enum": [
+        "V1"
+      ]
+    }
+  }
+}
