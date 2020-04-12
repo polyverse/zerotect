@@ -4,15 +4,15 @@
 
 ## Table of Contents
 
-* [What is Polytect] (#what_is)
-* [Installing Polytect] (#installation)
+* [What is Polytect](#[what-is-polytect])
+* [Installing Polytect](#installing-polytect)
 * Usage (#usage)
-  * [Recommended usage] (#recommended_usage)
-  * [All usage options] (#all_usage)
-  * [Notable flags and options] (#notable_flags)
-* [Polytect Log Format] (#log_format)
+  * [Recommended usage](#recommended-usage)
+  * [All usage options](#all-usage-options)
+  * [Notable flags and options](#notable-flags-and-options)
+* [Polytect Log Format](#polytect-log-format)
 
-## What is Polytect {#what_is}
+## What is Polytect
 
 Polytect is the reference implementation for Polyverse's zero-day detection
 framework. Its main purpose is to support Polycorder (the Polyverse-hosted
@@ -26,7 +26,7 @@ which makes anomalies stand out in a loud and noisy manner in terms of side-effe
 Polytect looks for these side-effects, specifically caused by attacking a Polymorphic system,
 and reports them to analytics tools.
 
-## Installing Polytect {#installation}
+## Installing Polytect
 
 [Installation Documentation](./install/README.md) explains using Polytect in real at-scale practical deployments.
 
@@ -34,7 +34,7 @@ and reports them to analytics tools.
 
 Polytect is built as a single statically linked binary (only for Linux) at the moment.
 
-### Recommended usage {#recommended_usage}
+### Recommended usage
 
 The most common mode to run Polytect is with two flags and one option:
 
@@ -46,7 +46,7 @@ The authkey is obtainable in the Polyverse Account Manager hosted at [https://po
 
 It is unlikely you would manually run Polytect though, unless for testing or special circumstances. For most production use, we recommend setting it up as a background daemon. This is described more in the [Installation section](./install).
 
-### All usage options {#all_usage}
+### All usage options
 
 ```bash
 polytect --help
@@ -70,7 +70,7 @@ OPTIONS:
     -p, --polycorder <authkey>      Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
 ```
 
-#### Notable flags and options {#notable_flags}
+#### Notable flags and options
 
 Two flags and one option are most notable in intended usage.
 
@@ -80,7 +80,7 @@ Two flags and one option are most notable in intended usage.
 
 3. *-p, --polycorder \<authkey\>*: Setting this option commands polytect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the Polyverse Account Manager.
 
-## Polytect Log Format {#log_format}
+## Polytect Log Format
 
 An up-to-date JSON Schema of Polytect's log format is always maintained here:
 [./schema.json](./schema.json).
