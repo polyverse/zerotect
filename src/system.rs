@@ -117,15 +117,15 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
         Some(events::Event {
             version: events::Version::V1,
             timestamp: Utc::now(),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Polytect,
                 level: events::LogLevel::Error,
                 event: events::LinuxEvent::ConfigMismatch(events::ConfigMisMatchInfo {
                     key: ctlstr.to_owned(),
                     expected_value: valuestr.to_owned(),
                     observed_value: prev_value_str.to_owned(),
-                })
-            })
+                }),
+            }),
         })
     }
 }

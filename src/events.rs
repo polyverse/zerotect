@@ -42,9 +42,7 @@ impl Display for Event {
         write!(
             f,
             "Event<{},{}>::{}",
-            self.version,
-            self.timestamp,
-            self.platform
+            self.version, self.timestamp, self.platform
         )
     }
 }
@@ -78,7 +76,8 @@ pub struct LinuxPlatform {
 
 impl Display for LinuxPlatform {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f,
+        write!(
+            f,
             "<log_level: {}, log_facility: {}, Event: {}>",
             self.level,
             self.facility,
@@ -87,12 +86,15 @@ impl Display for LinuxPlatform {
                 LinuxEvent::FatalSignal(f) => format!("{}", f),
                 LinuxEvent::SuppressedCallback(s) => format!("{}", s),
                 LinuxEvent::ConfigMismatch(c) => format!("{}", c),
-            })
+            }
+        )
     }
 }
 
 /// Linux kmesg (kernel message buffer) Log Facility.
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
+#[derive(
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+)]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
     Kern = 0,
@@ -135,7 +137,9 @@ pub enum LogFacility {
 }
 
 /// Linux kmesg (kernel message buffer) Log Level.
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema)]
+#[derive(
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+)]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
     Emergency = 0,
@@ -590,7 +594,6 @@ impl Display for ConfigMisMatchInfo {
         )
     }
 }
-
 
 /**********************************************************************************/
 // Tests! Tests! Tests!

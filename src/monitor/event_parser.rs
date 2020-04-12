@@ -167,10 +167,10 @@ impl EventParser {
                 return Some(events::Event {
                     version: events::Version::V1,
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
-                    platform: events::Platform::Linux(events::LinuxPlatform{
+                    platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
-                        event: events::LinuxEvent::KernelTrap(trapinfo)
+                        event: events::LinuxEvent::KernelTrap(trapinfo),
                     }),
                 });
             }
@@ -232,13 +232,13 @@ impl EventParser {
                     return Some(events::Event {
                         version: events::Version::V1,
                         timestamp: self.system_start_time.add(km.duration_from_system_start),
-                        platform: events::Platform::Linux(events::LinuxPlatform{
+                        platform: events::Platform::Linux(events::LinuxPlatform {
                             facility: km.facility.clone(),
                             level: km.level.clone(),
                             event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
                                 signal,
                                 stack_dump: self.parse_stack_dump(),
-                            })
+                            }),
                         }),
                     });
                 } else {
@@ -438,10 +438,10 @@ impl EventParser {
                 return Some(events::Event {
                     version: events::Version::V1,
                     timestamp: self.system_start_time.add(km.duration_from_system_start),
-                    platform: events::Platform::Linux(events::LinuxPlatform{
+                    platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
-                        event: events::LinuxEvent::SuppressedCallback(suppressed_callback_info)
+                        event: events::LinuxEvent::SuppressedCallback(suppressed_callback_info),
                     }),
                 });
             }
@@ -554,7 +554,7 @@ mod test {
         let event1 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -574,14 +574,14 @@ mod test {
                     file: Some(String::from("a.out")),
                     vmastart: Some(0x561bc8d8f000),
                     vmasize: Some(0x1000),
-                })
-            })
+                }),
+            }),
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372856970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -601,14 +601,14 @@ mod test {
                     file: Some(String::from("a.out")),
                     vmastart: Some(0x561bc8d8f000),
                     vmasize: Some(0x1000),
-                })
-            })
+                }),
+            }),
         };
 
         let event3 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372852970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -628,7 +628,7 @@ mod test {
                     file: None,
                     vmastart: None,
                     vmasize: None,
-                })
+                }),
             }),
         };
 
@@ -792,7 +792,7 @@ mod test {
         let event1 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -812,14 +812,14 @@ mod test {
                     file: Some(String::from("a.out")),
                     vmastart: Some(0x561bc8d8f000),
                     vmasize: Some(0x1000),
-                })
+                }),
             }),
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -839,8 +839,8 @@ mod test {
                     file: None,
                     vmastart: None,
                     vmasize: None,
-                })
-            })
+                }),
+            }),
         };
 
         let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
@@ -956,7 +956,7 @@ mod test {
         let event1 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -976,14 +976,14 @@ mod test {
                     file: Some(String::from("a.out")),
                     vmastart: Some(0x561bc8d8f000),
                     vmasize: Some(0x1000),
-                })
-            })
+                }),
+            }),
         };
 
         let event2 = events::Event {
             version: events::Version::V1,
             timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
-            platform: events::Platform::Linux(events::LinuxPlatform{
+            platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -1003,8 +1003,8 @@ mod test {
                     file: None,
                     vmastart: None,
                     vmasize: None,
-                })
-            })
+                }),
+            }),
         };
 
         let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
@@ -1125,7 +1125,7 @@ mod test {
             events::Event {
                 version: events::Version::V1,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                platform: events::Platform::Linux(events::LinuxPlatform{
+                platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
@@ -1257,7 +1257,7 @@ mod test {
             events::Event {
                 version: events::Version::V1,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372858970000)),
-                platform: events::Platform::Linux(events::LinuxPlatform{
+                platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
@@ -1306,7 +1306,7 @@ mod test {
                 events::Event {
                     version: events::Version::V1,
                     timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                    platform: events::Platform::Linux(events::LinuxPlatform{
+                    platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
                         event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
@@ -1362,14 +1362,13 @@ mod test {
             events::Event {
                 version: events::Version::V1,
                 timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
-                platform: events::Platform::Linux(events::LinuxPlatform{
+                platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     event: events::LinuxEvent::SuppressedCallback(events::SuppressedCallbackInfo {
                         function_name: "show_signal_msg".to_owned(),
                         count: 9,
                     }),
-
                 })
             }
         )
