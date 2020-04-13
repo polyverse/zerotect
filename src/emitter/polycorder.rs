@@ -2,10 +2,10 @@ use reqwest;
 use serde::Serialize;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::Duration;
 
 use crate::emitter;
 use crate::events;
+use crate::params;
 
 // `block_on` blocks the current thread until the provided future has run to
 // completion. Other executors provide more complex behavior, like scheduling
@@ -13,18 +13,6 @@ use crate::events;
 use futures::executor::block_on;
 
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
-
-#[derive(Clone)]
-pub struct PolycorderConfig {
-    pub auth_key: String,
-    pub node_id: String,
-
-    // Flush all events if none arrive for this interval
-    pub flush_timeout: Duration,
-
-    // Flush after this number of items, even if more are arriving...
-    pub flush_event_count: usize,
-}
 
 pub struct Polycorder {
     sender: Sender<events::Event>,
@@ -46,7 +34,7 @@ impl emitter::Emitter for Polycorder {
     }
 }
 
-pub fn new(config: PolycorderConfig) -> Polycorder {
+pub fn new(config: params::PolycorderConfig) -> Polycorder {
     let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
 
     thread::spawn(move || {

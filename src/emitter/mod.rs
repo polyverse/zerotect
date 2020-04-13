@@ -1,4 +1,5 @@
 use crate::events;
+use crate::params;
 use std::sync::mpsc::Receiver;
 pub mod console;
 pub mod polycorder;
@@ -10,8 +11,8 @@ pub trait Emitter {
 
 pub struct EmitterConfig {
     pub verbosity: u8,
-    pub console_config: Option<console::ConsoleConfig>,
-    pub polycorder_config: Option<polycorder::PolycorderConfig>,
+    pub console_config: Option<params::ConsoleConfig>,
+    pub polycorder_config: Option<params::PolycorderConfig>,
 }
 
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {

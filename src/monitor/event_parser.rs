@@ -6,11 +6,22 @@ use chrono::{DateTime, Utc};
 use num::FromPrimitive;
 use regex::Regex;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
 
 use timeout_iterator::TimeoutIterator;
+
+#[derive(Debug)]
+struct EventParserError(String);
+impl Error for EventParserError {}
+impl Display for EventParserError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "EventParserError:: {}", &self)
+    }
+}
 
 pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
@@ -49,7 +60,7 @@ impl EventParser {
         }
     }
 
-    fn parse_next_event(&mut self) -> Result<events::Event, String> {
+    fn parse_next_event(&mut self) -> Result<events::Event, EventParserError> {
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
@@ -68,7 +79,9 @@ impl EventParser {
             }
         }
 
-        Err("Exited dmesg iterator unexpectedly.".to_owned())
+        Err(EventParserError(
+            "Exited dmesg iterator unexpectedly.".to_owned(),
+        ))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230

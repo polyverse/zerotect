@@ -67,19 +67,19 @@ pub fn modify_environment(config: &params::PolytectParams) -> Vec<events::Event>
     let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
-    if let Some(exception_trace) = config.exception_trace {
+    if config.exception_trace {
         if let Some(event) = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
-            bool_to_sysctl_string(exception_trace),
+            bool_to_sysctl_string(config.exception_trace),
         ) {
             env_events.push(event);
         }
     }
 
-    if let Some(fatal_signals) = config.fatal_signals {
+    if config.fatal_signals {
         if let Some(event) = ensure_systemctl(
             PRINT_FATAL_SIGNALS_CTLNAME,
-            bool_to_sysctl_string(fatal_signals),
+            bool_to_sysctl_string(config.fatal_signals),
         ) {
             env_events.push(event);
         }

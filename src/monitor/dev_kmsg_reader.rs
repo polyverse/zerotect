@@ -4,6 +4,8 @@ use timeout_iterator::TimeoutIterator;
 
 use chrono::Duration as ChronoDuration;
 use num::FromPrimitive;
+use std::error::Error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -20,11 +22,28 @@ pub struct KMsgReaderConfig {
     pub flush_timeout: Duration,
 }
 
+#[derive(Debug)]
 enum KMsgParseError {
     Completed,
     SequenceNumTooOld,
     EmptyLine,
     Generic(String),
+}
+impl Error for KMsgParseError {}
+impl Display for KMsgParseError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(
+            f,
+            "KMsgParseError:: {}",
+            match self {
+                KMsgParseError::Completed => "Completed Parsing",
+                KMsgParseError::SequenceNumTooOld =>
+                    "sequence number too old (we've parsed newer messages than these)",
+                KMsgParseError::EmptyLine => "Empty line",
+                KMsgParseError::Generic(s) => s,
+            }
+        )
+    }
 }
 
 pub struct DevKMsgReader {
@@ -65,10 +84,7 @@ impl DevKMsgReader {
     // Parses a kernel log line that looks like this:
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParseError> {
-        let line_str: String = match self.next_kmsg_record() {
-            Ok(l) => l,
-            Err(e) => return Err(e),
-        };
+        let line_str: String = self.next_kmsg_record()?;
 
         if line_str.trim() == "" {
             return Err(KMsgParseError::EmptyLine);

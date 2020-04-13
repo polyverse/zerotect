@@ -3,17 +3,12 @@ mod event_parser;
 mod kmsg;
 
 use std::sync::mpsc::Sender;
+use std::time::Duration;
 
 use crate::events;
 
 #[derive(Clone)]
-pub enum MonitorType {
-    DevKMsgReader(dev_kmsg_reader::KMsgReaderConfig),
-}
-
-#[derive(Clone)]
 pub struct MonitorConfig {
-    pub monitor_type: MonitorType,
     pub verbosity: u8,
 }
 
@@ -22,11 +17,14 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) {
         eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
     }
 
-    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg> + Send> = match mc.monitor_type {
-        MonitorType::DevKMsgReader(c) => {
-            Box::new(dev_kmsg_reader::DevKMsgReader::with_file(c, mc.verbosity))
-        }
+    let monitor_config = dev_kmsg_reader::KMsgReaderConfig {
+        from_sequence_number: 0,
+        flush_timeout: Duration::from_secs(1),
     };
+
+    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg> + Send> = Box::new(
+        dev_kmsg_reader::DevKMsgReader::with_file(monitor_config, mc.verbosity),
+    );
 
     let event_iterator = event_parser::EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity);
 

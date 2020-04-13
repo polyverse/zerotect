@@ -50,11 +50,9 @@ fn main() {
     });
 
     let mverbosity = polytect_config.verbosity;
-    let monitor_type = polytect_config.monitor_type;
     let monitor_handle = thread::spawn(move || {
         let mc = monitor::MonitorConfig {
             verbosity: mverbosity,
-            monitor_type,
         };
         monitor::monitor(mc, monitor_sink);
     });
