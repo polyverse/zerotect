@@ -15,11 +15,19 @@ use std::time::Duration;
 use timeout_iterator::TimeoutIterator;
 
 #[derive(Debug)]
-struct EventParserError(String);
+pub struct EventParserError(String);
 impl Error for EventParserError {}
 impl Display for EventParserError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "EventParserError:: {}", &self)
+    }
+}
+impl From<system::SystemStartTimeReadError> for EventParserError {
+    fn from(err: system::SystemStartTimeReadError) -> EventParserError {
+        EventParserError(format!(
+            "Unable to read system start time. Inner system::SystemStartTimeReadError :: {}",
+            err
+        ))
     }
 }
 
@@ -33,14 +41,14 @@ impl EventParser {
     pub fn from_kmsg_iterator(
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,
-    ) -> EventParser {
+    ) -> Result<EventParser, EventParserError> {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity);
 
-        EventParser {
+        Ok(EventParser {
             timeout_kmsg_iter,
             verbosity,
-            system_start_time: system::system_start_time(),
-        }
+            system_start_time: system::system_start_time()?,
+        })
     }
 
     // Ignore deadcode warnings. This is used by test, and #[test] cannot be applied

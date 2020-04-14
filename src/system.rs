@@ -2,9 +2,13 @@ use crate::events;
 use crate::params;
 use chrono::Duration as ChronoDuration;
 use chrono::{DateTime, Utc};
+use std::error::Error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
-use std::io::Read;
+use std::io;
+use std::num;
 use std::ops::Sub;
+use std::str;
 use sys_info::os_type;
 use sysctl::Sysctl;
 
@@ -12,109 +16,136 @@ pub const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
 pub const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
 pub const PROC_UPTIME: &str = "/proc/uptime";
 
-pub fn system_start_time() -> DateTime<Utc> {
-    let system_uptime_nanos: i64 = (system_uptime_secs() * 1000000000.0) as i64;
-    Utc::now().sub(ChronoDuration::nanoseconds(system_uptime_nanos))
+#[derive(Debug)]
+pub struct OperatingSystemValidationError(String);
+impl Error for OperatingSystemValidationError {}
+impl Display for OperatingSystemValidationError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "OperatingSystemValidationError:: {}", self)
+    }
+}
+impl From<sys_info::Error> for OperatingSystemValidationError {
+    fn from(err: sys_info::Error) -> OperatingSystemValidationError {
+        OperatingSystemValidationError(format!("Inner sys_info::Error :: {}", err))
+    }
+}
+
+#[derive(Debug)]
+pub struct SystemUptimeReadError(String);
+impl Error for SystemUptimeReadError {}
+impl Display for SystemUptimeReadError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "SystemUptimeReadError:: {}", self)
+    }
+}
+impl From<io::Error> for SystemUptimeReadError {
+    fn from(err: io::Error) -> SystemUptimeReadError {
+        SystemUptimeReadError(format!("Inner io::Error :: {}", err))
+    }
+}
+impl From<str::Utf8Error> for SystemUptimeReadError {
+    fn from(err: str::Utf8Error) -> SystemUptimeReadError {
+        SystemUptimeReadError(format!("Inner str::Utf8Error :: {}", err))
+    }
+}
+impl From<num::ParseFloatError> for SystemUptimeReadError {
+    fn from(err: num::ParseFloatError) -> SystemUptimeReadError {
+        SystemUptimeReadError(format!("Inner num::ParseFloatError :: {}", err))
+    }
+}
+
+#[derive(Debug)]
+pub struct SystemStartTimeReadError(String);
+impl Error for SystemStartTimeReadError {}
+impl Display for SystemStartTimeReadError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "SystemStartTimeReadError:: {}", self)
+    }
+}
+impl From<SystemUptimeReadError> for SystemStartTimeReadError {
+    fn from(err: SystemUptimeReadError) -> SystemStartTimeReadError {
+        SystemStartTimeReadError(format!("Inner SystemUptimeReadError :: {}", err))
+    }
+}
+
+#[derive(Debug)]
+pub struct SystemCtlError(String);
+impl Error for SystemCtlError {}
+impl Display for SystemCtlError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "SystemCtlError:: {}", self)
+    }
+}
+impl From<sysctl::SysctlError> for SystemCtlError {
+    fn from(err: sysctl::SysctlError) -> SystemCtlError {
+        SystemCtlError(format!("Inner ysctl::ctl_error::SysctlError :: {}", err))
+    }
+}
+
+pub fn system_start_time() -> Result<DateTime<Utc>, SystemStartTimeReadError> {
+    let system_uptime_nanos: i64 = (system_uptime_secs()? * 1000000000.0) as i64;
+    Ok(Utc::now().sub(ChronoDuration::nanoseconds(system_uptime_nanos)))
 }
 
 // https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/deployment_guide/s2-proc-uptime
-pub fn system_uptime_secs() -> f64 {
-    match fs::File::open(PROC_UPTIME) {
-        Err(e) => {
-            eprintln!(
-                "Unable to open the file {} to read uptime: {}",
-                PROC_UPTIME, e
-            );
-            0.0
-        }
-        Ok(mut proc_uptime) => {
-            let mut contents = String::new();
-            match proc_uptime.read_to_string(&mut contents) {
-                Err(e) => {
-                    eprintln!(
-                        "Unable to read contents of the file {} to read uptime: {}",
-                        PROC_UPTIME, e
-                    );
-                    0.0
-                }
-                Ok(_) => match contents.split_whitespace().next() {
-                    None => {
-                        eprintln!("Contents of the file {} not what was expected. Unable to parse the first number from: {}", PROC_UPTIME, contents);
-                        0.0
-                    }
-                    Some(numstr) => match numstr.trim().parse::<f64>() {
-                        Err(e) => {
-                            eprintln!("Unable to parse the first number (of seconds of uptime) {} as a floating point number: {}", numstr, e);
-                            0.0
-                        }
-                        Ok(num) => num,
-                    },
-                },
-            }
-        }
+pub fn system_uptime_secs() -> Result<f64, SystemUptimeReadError> {
+    let contentsu8 = fs::read(PROC_UPTIME)?;
+    let contents = str::from_utf8(&contentsu8)?;
+    match contents.split_whitespace().next() {
+        None => Err(SystemUptimeReadError(format!("Contents of the file {} not what was expected. Unable to parse the first number from: {}", PROC_UPTIME, contents))),
+        Some(numstr) => Ok(numstr.trim().parse::<f64>()?),
     }
 }
 
-pub fn ensure_linux() {
-    const OS_DETECT_FAILURE: &str = "Unable to detect Operating System type. This program modifies the operating system in fundamental ways and fails safely when unable to detect the operating system.";
-    let osname = os_type().expect(OS_DETECT_FAILURE);
+pub fn ensure_linux() -> Result<(), OperatingSystemValidationError> {
+    let osname = os_type()?;
     if osname != "Linux" {
-        panic!("The Operating System detected is {} and not supported. This program modifies operating system settings in funamental ways and thus fails safely when it is not supported.", osname)
+        return Err(OperatingSystemValidationError(format!("The Operating System detected is {} and not supported. This program modifies operating system settings in funamental ways and thus fails safely when it is not supported.", osname)));
     }
+    Ok(())
 }
 
-pub fn modify_environment(config: &params::PolytectParams) -> Vec<events::Event> {
+pub fn modify_environment(
+    config: &params::PolytectParams,
+) -> Result<Vec<events::Event>, SystemCtlError> {
     let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
     if config.exception_trace {
-        if let Some(event) = ensure_systemctl(
+        let maybe_event = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
             bool_to_sysctl_string(config.exception_trace),
-        ) {
+        )?;
+        if let Some(event) = maybe_event {
             env_events.push(event);
         }
     }
 
     if config.fatal_signals {
-        if let Some(event) = ensure_systemctl(
+        let maybe_event = ensure_systemctl(
             PRINT_FATAL_SIGNALS_CTLNAME,
             bool_to_sysctl_string(config.fatal_signals),
-        ) {
+        )?;
+        if let Some(event) = maybe_event {
             env_events.push(event);
         }
     }
 
-    env_events
+    Ok(env_events)
 }
 
-fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
+fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event>, SystemCtlError> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
-    let ctl = sysctl::Ctl::new(ctlstr).unwrap();
-    let prev_value_str = ctl
-        .value_string()
-        .expect(format!("Unable to read value of {}", ctlstr).as_str());
+    let ctl = sysctl::Ctl::new(ctlstr)?;
+    let prev_value_str = ctl.value_string()?;
 
     if prev_value_str == valuestr {
         eprintln!("====> Already enabled, not reenabling: {}", ctlstr);
-        None
+        Ok(None)
     } else {
-        let real_value_str = ctl.set_value_string(valuestr).expect(
-            format!(
-                "Unable to set value of {} to {}, from a previous value of {}",
-                ctlstr, valuestr, prev_value_str
-            )
-            .as_str(),
-        );
-        assert!(
-            real_value_str == valuestr,
-            "The value of {} was set to {} successfully, but value returned {}.",
-            ctlstr,
-            valuestr,
-            real_value_str
-        );
-        Some(events::Event {
+        ctl.set_value_string(valuestr)?;
+        Ok(Some(events::Event {
             version: events::Version::V1,
             timestamp: Utc::now(),
             platform: events::Platform::Linux(events::LinuxPlatform {
@@ -126,7 +157,7 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Option<events::Event> {
                     observed_value: prev_value_str.to_owned(),
                 }),
             }),
-        })
+        }))
     }
 }
 

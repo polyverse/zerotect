@@ -14,9 +14,18 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
+use std::process;
+
 fn main() {
-    system::ensure_linux();
-    let polytect_config = params::parse_args();
+    if let Err(e) = system::ensure_linux() {
+        eprintln!(
+            "Error ensuring the operating system we're running on is Linux: {}",
+            e
+        );
+        process::exit(1);
+    }
+
+    let polytect_config = params::parse_args(None);
 
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
@@ -25,24 +34,36 @@ fn main() {
     let config_event_sink = monitor_sink.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
     thread::spawn(move || {
-        let mut first: bool = true;
+        // initialize the system with config
+        if let Err(e) = system::modify_environment(&env_config_copy) {
+            eprintln!(
+                "Error modifying the system settings to enable monitoring (as commanded): {}",
+                e
+            );
+            process::exit(1);
+        }
+
+        // let the first time go from config-mismatch event reporting
         loop {
-            // initialize the system with config
-            let events = system::modify_environment(&env_config_copy);
-            if !first {
-                // let the first time go
-                for event in events.into_iter() {
-                    eprintln!(
-                        "System Configuration Thread: Configuration not stable. {}",
-                        &event
-                    );
-                    if let Err(e) = config_event_sink.send(event) {
-                        eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
+            // reinforce the system with config
+            match system::modify_environment(&env_config_copy) {
+                Err(e) => {
+                    eprintln!("Error modifying the system settings to enable monitoring (as commanded): {}", e);
+                    process::exit(1);
+                }
+                Ok(events) => {
+                    for event in events.into_iter() {
+                        eprintln!(
+                            "System Configuration Thread: Configuration not stable. {}",
+                            &event
+                        );
+                        if let Err(e) = config_event_sink.send(event) {
+                            eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
+                            process::exit(1);
+                        }
                     }
                 }
             }
-
-            first = false;
 
             // ensure configuratione very five minutes.
             thread::sleep(Duration::from_secs(300));
@@ -54,7 +75,10 @@ fn main() {
         let mc = monitor::MonitorConfig {
             verbosity: mverbosity,
         };
-        monitor::monitor(mc, monitor_sink);
+        if let Err(e) = monitor::monitor(mc, monitor_sink) {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
     });
 
     let everbosity = polytect_config.verbosity;

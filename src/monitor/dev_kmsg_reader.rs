@@ -23,24 +23,33 @@ pub struct KMsgReaderConfig {
 }
 
 #[derive(Debug)]
-enum KMsgParseError {
+pub struct KMsgParserError(String);
+impl Error for KMsgParserError {}
+impl Display for KMsgParserError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "KMsgParserError:: {}", self)
+    }
+}
+
+#[derive(Debug)]
+enum KMsgParsingError {
     Completed,
     SequenceNumTooOld,
     EmptyLine,
     Generic(String),
 }
-impl Error for KMsgParseError {}
-impl Display for KMsgParseError {
+impl Error for KMsgParsingError {}
+impl Display for KMsgParsingError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(
             f,
-            "KMsgParseError:: {}",
+            "KMsgParsingError:: {}",
             match self {
-                KMsgParseError::Completed => "Completed Parsing",
-                KMsgParseError::SequenceNumTooOld =>
+                KMsgParsingError::Completed => "Completed Parsing",
+                KMsgParsingError::SequenceNumTooOld =>
                     "sequence number too old (we've parsed newer messages than these)",
-                KMsgParseError::EmptyLine => "Empty line",
-                KMsgParseError::Generic(s) => s,
+                KMsgParsingError::EmptyLine => "Empty line",
+                KMsgParsingError::Generic(s) => s,
             }
         )
     }
@@ -54,10 +63,18 @@ pub struct DevKMsgReader {
 }
 
 impl DevKMsgReader {
-    pub fn with_file(config: KMsgReaderConfig, verbosity: u8) -> DevKMsgReader {
+    pub fn with_file(
+        config: KMsgReaderConfig,
+        verbosity: u8,
+    ) -> Result<DevKMsgReader, KMsgParserError> {
         let dev_kmsg_file = match File::open(DEV_KMSG_LOCATION) {
             Ok(f) => f,
-            Err(e) => panic!("Unable to open file {}: {}", DEV_KMSG_LOCATION, e),
+            Err(e) => {
+                return Err(KMsgParserError(format!(
+                    "Unable to open file {}: {}",
+                    DEV_KMSG_LOCATION, e
+                )))
+            }
         };
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
@@ -69,25 +86,25 @@ impl DevKMsgReader {
         config: KMsgReaderConfig,
         reader: LinesIterator,
         verbosity: u8,
-    ) -> DevKMsgReader {
+    ) -> Result<DevKMsgReader, KMsgParserError> {
         let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity);
 
-        DevKMsgReader {
+        Ok(DevKMsgReader {
             verbosity,
             kmsg_line_reader,
             from_sequence_number: config.from_sequence_number,
             flush_timeout: config.flush_timeout,
-        }
+        })
     }
 
     // Message spec: https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/dev-kmsg
     // Parses a kernel log line that looks like this:
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
-    fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParseError> {
+    fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParsingError> {
         let line_str: String = self.next_kmsg_record()?;
 
         if line_str.trim() == "" {
-            return Err(KMsgParseError::EmptyLine);
+            return Err(KMsgParsingError::EmptyLine);
         }
 
         // split this: 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
@@ -98,7 +115,7 @@ impl DevKMsgReader {
         let meta = match meta_and_msg.next() {
             Some(meta) => meta.trim(),
             None => {
-                return Err(KMsgParseError::Generic(format!(
+                return Err(KMsgParsingError::Generic(format!(
                     "Didn't find kmsg metadata in line: {}",
                     line_str
                 )))
@@ -114,7 +131,7 @@ impl DevKMsgReader {
         let message = match meta_and_msg.next() {
             Some(message) => message.trim(),
             None => {
-                return Err(KMsgParseError::Generic(format!(
+                return Err(KMsgParsingError::Generic(format!(
                     "Didn't find kmsg message (even if empty) in line: {}",
                     line_str
                 )))
@@ -134,12 +151,12 @@ impl DevKMsgReader {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev >> 3)) {
                          (Some(facility), Some(level)) => (facility, level),
-                         _ => return Err(KMsgParseError::Generic(format!("Unable to parse {} into log facility and level. Line: {}", faclev, line_str)))
+                         _ => return Err(KMsgParsingError::Generic(format!("Unable to parse {} into log facility and level. Line: {}", faclev, line_str)))
                     }
                 },
-                None => return Err(KMsgParseError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", faclevstr, line_str)))
+                None => return Err(KMsgParsingError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", faclevstr, line_str)))
             }
-            None => return Err(KMsgParseError::Generic(format!("Didn't find kmsg facility/level (the very first part) in line: {}", line_str)))
+            None => return Err(KMsgParsingError::Generic(format!("Didn't find kmsg facility/level (the very first part) in line: {}", line_str)))
         };
 
         // Sequence is a 64-bit integer: https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg
@@ -147,14 +164,14 @@ impl DevKMsgReader {
             Some(seqnumstr) => match DevKMsgReader::parse_fragment::<u64>(seqnumstr) {
                 Some(seqnum) => seqnum,
                 None => {
-                    return Err(KMsgParseError::Generic(format!(
+                    return Err(KMsgParsingError::Generic(format!(
                         "Unable to parse sequence number into an integer: {}, Line: {}",
                         seqnumstr, line_str
                     )))
                 }
             },
             None => {
-                return Err(KMsgParseError::Generic(format!(
+                return Err(KMsgParsingError::Generic(format!(
                     "No sequence number found in line: {}",
                     line_str
                 )))
@@ -163,21 +180,21 @@ impl DevKMsgReader {
 
         // exit if sequence number is less than where desired
         if sequence_num < self.from_sequence_number {
-            return Err(KMsgParseError::SequenceNumTooOld);
+            return Err(KMsgParsingError::SequenceNumTooOld);
         }
 
         let duration_from_system_start = match meta_parts.next() {
             Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr) {
                 Some(t) => ChronoDuration::microseconds(t),
                 None => {
-                    return Err(KMsgParseError::Generic(format!(
+                    return Err(KMsgParsingError::Generic(format!(
                         "Unable to parse timestamp into integer: {}",
                         tstr
                     )))
                 }
             },
             None => {
-                return Err(KMsgParseError::Generic(format!(
+                return Err(KMsgParsingError::Generic(format!(
                     "No timestamp found in line: {}",
                     line_str
                 )))
@@ -201,7 +218,7 @@ impl DevKMsgReader {
         })
     }
 
-    fn next_kmsg_record(&mut self) -> Result<String, KMsgParseError> {
+    fn next_kmsg_record(&mut self) -> Result<String, KMsgParsingError> {
         // read next line
         let mut line_str = String::new();
         match self.kmsg_line_reader.next() {
@@ -224,7 +241,7 @@ impl DevKMsgReader {
                     }
                 }
             }
-            None => return Err(KMsgParseError::Completed),
+            None => return Err(KMsgParsingError::Completed),
         }
         Ok(line_str)
     }
@@ -253,22 +270,22 @@ impl Iterator for DevKMsgReader {
             match self.parse_kmsg() {
                 Ok(km) => return Some(km),
                 Err(e) => match e {
-                    KMsgParseError::Completed => {
+                    KMsgParsingError::Completed => {
                         // don't exit because there may be bad lines...
                         eprintln!("Iterator completed. No more messages expected");
                         return None;
                     }
-                    KMsgParseError::SequenceNumTooOld => {
+                    KMsgParsingError::SequenceNumTooOld => {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
                         continue;
                     }
-                    KMsgParseError::EmptyLine => {
+                    KMsgParsingError::EmptyLine => {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
                         continue;
                     }
-                    KMsgParseError::Generic(msg) => {
+                    KMsgParsingError::Generic(msg) => {
                         // don't exit because there may be bad lines...
                         eprintln!("Error parsing kmsg line due to error: {}", msg);
                         continue;
@@ -305,7 +322,8 @@ mod test {
             },
             peekable_line_iter,
             3,
-        );
+        )
+        .unwrap();
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -373,7 +391,8 @@ mod test {
             },
             peekable_line_iter,
             3,
-        );
+        )
+        .unwrap();
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -406,7 +425,8 @@ mod test {
             },
             peekable_line_iter,
             3,
-        );
+        )
+        .unwrap();
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -451,7 +471,8 @@ mod test {
             },
             peekable_line_iter,
             3,
-        );
+        )
+        .unwrap();
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
@@ -526,7 +547,8 @@ mod test {
             },
             peekable_line_iter,
             3,
-        );
+        )
+        .unwrap();
         thread::spawn(move || {
             let maybe_entry = iter.next();
             assert!(maybe_entry.is_some());

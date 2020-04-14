@@ -3,6 +3,7 @@ use clap::{App, Arg};
 use serde::Deserialize;
 use std::convert::TryFrom;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
 use std::io;
@@ -17,7 +18,7 @@ const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum ConsoleOutputFormat {
     UserFriendlyText,
     JSON,
@@ -121,7 +122,20 @@ pub fn parse_config_file(
 }
 
 /// Parse command-line arguments
-pub fn parse_args() -> PolytectParams {
+/// maybe_args - allows unit-testing of arguments. Use None to parse
+///     arguments from the operating system.
+pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> PolytectParams {
+    let args: Vec<OsString> = match maybe_args {
+        Some(args) => args,
+        None => {
+            let mut osargs = vec![];
+            for arg in std::env::args_os().into_iter() {
+                osargs.push(arg);
+            }
+            osargs
+        }
+    };
+
     let matches = App::new("Polytect")
                         .version("1.0")
                         .author("Polyverse Corporation <support@polyverse.com>")
@@ -161,7 +175,7 @@ pub fn parse_args() -> PolytectParams {
                             .long("verbose")
                             .multiple(true)
                             .help(format!("Increase debug verbosity of polytect.").as_str()))
-                        .get_matches();
+                        .get_matches_from(args);
 
     let file_configured_params = match parse_config_file(matches.value_of("configfile")) {
         Ok(p) => p,
@@ -189,7 +203,7 @@ pub fn parse_args() -> PolytectParams {
     };
 
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
-        Some(v) => match v.to_ascii_lowercase().as_str() {
+        Some(v) => match v.trim().to_ascii_lowercase().as_str() {
             "text" => Some(ConsoleConfig {
                 console_format: ConsoleOutputFormat::UserFriendlyText,
             }),
@@ -212,7 +226,7 @@ pub fn parse_args() -> PolytectParams {
     // First we need a polycorder auth key - either from CLI and then the file as
     // the secondary source.
     let maybe_polycorder_auth_key = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
-        Some(key) => Some(key.to_owned()),
+        Some(key) => Some(key.trim().to_owned()),
         None => match file_configured_params.polycorder_config.as_ref() {
             Some(pc) => match pc.auth_key.as_ref() {
                 Some(ak) => Some(ak.to_owned()),
@@ -231,7 +245,7 @@ pub fn parse_args() -> PolytectParams {
         }
         Some(auth_key) => {
             let node_id = match matches.value_of(NODE_ID_FLAG) {
-                Some(n) => n.to_owned(),
+                Some(n) => n.trim().to_owned(),
                 None => match file_configured_params.polycorder_config.as_ref() {
                     Some(pc) => match pc.node_id.as_ref() {
                         Some(node_id) => node_id.to_owned(),
@@ -280,8 +294,111 @@ fn bool_flag(matches: &clap::ArgMatches, flag_name: &str) -> Option<bool> {
         1 => Some(true),
         0 => None,
         _ => {
-            eprintln!("You specified {} flag {} number of times. Please specify it at most once or never at all. Ignoring this flag entirely.", flag_name, matches.occurrences_of(flag_name));
+            eprintln!("You specified {} flag {} number of times. Please specify it at most once. Aborting program.", flag_name, matches.occurrences_of(flag_name));
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::ffi::OsString;
+    use std::panic;
+    use std::time;
+
+    #[test]
+    fn commandline_args_parse_all() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. First param ignored."),
+            OsString::from("-e"),
+            OsString::from("-f"),
+            OsString::from("-c"),
+            OsString::from("text"),
+            OsString::from("-p"),
+            OsString::from("authkey"),
+            OsString::from("-n"),
+            OsString::from("nodeid"),
+            OsString::from("-v"),
+        ];
+
+        let config = parse_args(Some(args));
+
+        assert_eq!(true, config.exception_trace);
+        assert_eq!(true, config.fatal_signals);
+        assert_eq!(true, config.console_config.is_some());
+        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(1, config.verbosity);
+
+        let cc = config.console_config.unwrap();
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+
+        let pc = config.polycorder_config.unwrap();
+        assert_eq!("authkey", pc.auth_key);
+        assert_eq!("nodeid", pc.node_id);
+        assert_eq!(time::Duration::from_secs(10), pc.flush_timeout);
+        assert_eq!(10, pc.flush_event_count);
+    }
+
+    #[test]
+    fn commandline_args_parse_space_within_param() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-e"),
+            OsString::from("-f"),
+            OsString::from("-c text"),
+            OsString::from("-p"),
+            OsString::from("authkey"),
+            OsString::from("-n"),
+            OsString::from("nodeid"),
+            OsString::from("-v"),
+        ];
+
+        let config = parse_args(Some(args));
+
+        assert_eq!(true, config.exception_trace);
+        assert_eq!(true, config.fatal_signals);
+        assert_eq!(true, config.console_config.is_some());
+        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(1, config.verbosity);
+
+        let cc = config.console_config.unwrap();
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+
+        let pc = config.polycorder_config.unwrap();
+        assert_eq!("authkey", pc.auth_key);
+        assert_eq!("nodeid", pc.node_id);
+        assert_eq!(time::Duration::from_secs(10), pc.flush_timeout);
+        assert_eq!(10, pc.flush_event_count);
+    }
+
+    #[test]
+    fn commandline_args_parse_bools_off() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-c text"),
+            OsString::from("-p"),
+            OsString::from("authkey"),
+            OsString::from("-n"),
+            OsString::from("nodeid"),
+            OsString::from("-v"),
+        ];
+
+        let config = parse_args(Some(args));
+
+        assert_eq!(false, config.exception_trace);
+        assert_eq!(false, config.fatal_signals);
+        assert_eq!(true, config.console_config.is_some());
+        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(1, config.verbosity);
+
+        let cc = config.console_config.unwrap();
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+
+        let pc = config.polycorder_config.unwrap();
+        assert_eq!("authkey", pc.auth_key);
+        assert_eq!("nodeid", pc.node_id);
+        assert_eq!(time::Duration::from_secs(10), pc.flush_timeout);
+        assert_eq!(10, pc.flush_event_count);
     }
 }

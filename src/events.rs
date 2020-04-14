@@ -392,17 +392,18 @@ pub struct FatalSignalInfo {
 
 impl Display for FatalSignalInfo {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        let mut retval = write!(
+        let retval = write!(
             f,
             "Fatal Signal: {}({})",
-            self.signal,
+            &self.signal,
             self.signal.clone() as u8
         );
-        if self.stack_dump.is_some() {
-            retval = write!(f, "{}", self.stack_dump.as_ref().unwrap());
-        }
 
-        retval
+        if let Some(sd) = &self.stack_dump {
+            write!(f, ":: StackDump: {}", sd)
+        } else {
+            retval
+        }
     }
 }
 
