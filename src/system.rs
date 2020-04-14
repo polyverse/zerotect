@@ -35,7 +35,7 @@ pub struct SystemUptimeReadError(String);
 impl Error for SystemUptimeReadError {}
 impl Display for SystemUptimeReadError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "SystemUptimeReadError:: {}", self)
+        write!(f, "SystemUptimeReadError:: {}", self.0)
     }
 }
 impl From<io::Error> for SystemUptimeReadError {
@@ -59,7 +59,7 @@ pub struct SystemStartTimeReadError(String);
 impl Error for SystemStartTimeReadError {}
 impl Display for SystemStartTimeReadError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "SystemStartTimeReadError:: {}", self)
+        write!(f, "SystemStartTimeReadError:: {}", self.0)
     }
 }
 impl From<SystemUptimeReadError> for SystemStartTimeReadError {
@@ -73,7 +73,7 @@ pub struct SystemCtlError(String);
 impl Error for SystemCtlError {}
 impl Display for SystemCtlError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "SystemCtlError:: {}", self)
+        write!(f, "SystemCtlError:: {}", self.0)
     }
 }
 impl From<sysctl::SysctlError> for SystemCtlError {

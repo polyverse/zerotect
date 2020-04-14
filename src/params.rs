@@ -1,12 +1,13 @@
 use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME};
 use clap::{App, Arg};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
 use std::io;
+use std::str;
 use std::time::Duration;
 
 const ENABLE_FATAL_SIGNALS_FLAG: &str = "enable-fatal-signals";
@@ -83,14 +84,16 @@ pub struct PolytectParamOptions {
 }
 
 #[derive(Debug)]
-pub enum InnerError{
+pub enum InnerError {
     None,
     IoError(io::Error),
     ClapError(clap::Error),
+    Utf8Error(str::Utf8Error),
+    TomlDeserializationError(toml::de::Error),
 }
 
 #[derive(Debug)]
-pub struct ParsingError{
+pub struct ParsingError {
     pub message: String,
     pub inner_error: InnerError,
 }
@@ -102,7 +105,7 @@ impl Display for ParsingError {
 }
 impl From<io::Error> for ParsingError {
     fn from(err: io::Error) -> ParsingError {
-        ParsingError{
+        ParsingError {
             message: format!("Inner io::Error :: {}", err),
             inner_error: InnerError::IoError(err),
         }
@@ -110,18 +113,32 @@ impl From<io::Error> for ParsingError {
 }
 impl From<clap::Error> for ParsingError {
     fn from(err: clap::Error) -> ParsingError {
-        ParsingError{
+        ParsingError {
             message: format!("Inner clap::Error :: {}", err),
             inner_error: InnerError::ClapError(err),
+        }
+    }
+}
+impl From<str::Utf8Error> for ParsingError {
+    fn from(err: str::Utf8Error) -> ParsingError {
+        ParsingError {
+            message: format!("Inner str::Utf8Error :: {}", err),
+            inner_error: InnerError::Utf8Error(err),
+        }
+    }
+}
+impl From<toml::de::Error> for ParsingError {
+    fn from(err: toml::de::Error) -> ParsingError {
+        ParsingError {
+            message: format!("Inner toml::de::Error :: {}", err),
+            inner_error: InnerError::TomlDeserializationError(err),
         }
     }
 }
 
 /// Parse params from config file if one was provided
 /// https://github.com/clap-rs/clap/issues/748
-pub fn parse_config_file(
-    maybe_file: Option<&str>,
-) -> Result<PolytectParamOptions, ParsingError> {
+pub fn parse_config_file(maybe_file: Option<&str>) -> Result<PolytectParamOptions, ParsingError> {
     match maybe_file {
         None => Ok(PolytectParamOptions {
             exception_trace: None,
@@ -131,15 +148,10 @@ pub fn parse_config_file(
             verbosity: None,
         }),
         Some(filepath) => {
-            let _filecontents = fs::read(filepath)?;
-
-            Ok(PolytectParamOptions {
-                exception_trace: None,
-                fatal_signals: None,
-                console_config: None,
-                polycorder_config: None,
-                verbosity: None,
-            })
+            let filecontents = fs::read(filepath)?;
+            let polytect_param_options: PolytectParamOptions =
+                toml::from_str(str::from_utf8(&filecontents)?)?;
+            Ok(polytect_param_options)
         }
     }
 }
@@ -203,9 +215,11 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
 
     let file_configured_params = parse_config_file(matches.value_of("CONFIG_FILE_FLAG"))?;
 
-    let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG)? || file_configured_params.exception_trace.unwrap_or(false);
+    let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG)?
+        || file_configured_params.exception_trace.unwrap_or(false);
 
-    let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG)? || file_configured_params.fatal_signals.unwrap_or(false);
+    let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG)?
+        || file_configured_params.fatal_signals.unwrap_or(false);
 
     let cmd_verbosity_result = u8::try_from(matches.occurrences_of("verbose"));
     let verbosity = match cmd_verbosity_result {
@@ -317,10 +331,10 @@ fn bool_flag(matches: &clap::ArgMatches, flag_name: &str) -> Result<bool, Parsin
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand::Rng;
     use std::ffi::OsString;
     use std::panic;
     use std::time;
-    use rand::Rng;
 
     #[test]
     fn commandline_args_parse_all() {
@@ -430,7 +444,6 @@ mod test {
         assert!(result.is_err());
     }
 
-
     #[test]
     fn commandline_args_parse_missing_polycorder_authkey() {
         let args: Vec<OsString> = vec![
@@ -455,7 +468,6 @@ mod test {
         assert!(config.is_err());
     }
 
-
     #[test]
     fn commandline_args_parse_multiple_options() {
         let args: Vec<OsString> = vec![
@@ -467,7 +479,6 @@ mod test {
         let config = parse_args(Some(args));
         assert!(config.is_err());
     }
-
 
     #[test]
     fn toml_parse_all() {
@@ -489,20 +500,155 @@ mod test {
         nanos = 0
         "#;
 
-        let toml_file = format!("/tmp/config_{}.toml", rand::thread_rng().gen_range(0, 32000));
+        let toml_file = format!(
+            "/tmp/config_{}.toml",
+            rand::thread_rng().gen_range(0, 32000)
+        );
+        println!("Writing TOML string to file: {}", &toml_file);
+        fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
+
+        let maybe_config = parse_config_file(Some(&toml_file));
+        if let Err(e) = &maybe_config {
+            match &e.inner_error {
+                InnerError::ClapError(ce) => ce.exit(),
+                _ => assert!(
+                    false,
+                    "Unexpected error when parsing command-line config file flag."
+                ),
+            }
+        }
+        let config = maybe_config.unwrap();
+
+        assert_eq!(true, config.exception_trace.unwrap());
+        assert_eq!(true, config.fatal_signals.unwrap());
+        assert_eq!(true, config.console_config.is_some());
+        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(3, config.verbosity.unwrap());
+
+        let cc = config.console_config.unwrap();
+        assert_eq!(ConsoleOutputFormat::JSON, cc.format.unwrap());
+
+        let pc = config.polycorder_config.unwrap();
+        assert_eq!("AuthKeyFromAccountManager", pc.auth_key.unwrap());
+        assert_eq!("NodeDiscriminator", pc.node_id.unwrap());
+        assert_eq!(time::Duration::from_secs(10), pc.flush_timeout.unwrap());
+        assert_eq!(10, pc.flush_event_count.unwrap());
+    }
+
+    #[test]
+    fn toml_serialize_and_parse_random_values() {
+        let config_expected = PolytectParams {
+            exception_trace: rand::thread_rng().gen_bool(0.5),
+            fatal_signals: rand::thread_rng().gen_bool(0.5),
+            console_config: Some(ConsoleConfig {
+                format: match rand::thread_rng().gen_bool(0.5) {
+                    true => ConsoleOutputFormat::JSON,
+                    false => ConsoleOutputFormat::UserFriendlyText,
+                },
+            }),
+            polycorder_config: Some(PolycorderConfig {
+                auth_key: format!(
+                    "AuthKeyFromAccountManagerRandom{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                ),
+                node_id: format!(
+                    "NodeDiscriminatorRandom{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                ),
+                flush_timeout: time::Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
+                flush_event_count: rand::thread_rng().gen_range(0, 500),
+            }),
+            verbosity: rand::thread_rng().gen_range(0, 250),
+        };
+
+        let toml_file = format!(
+            "/tmp/config_{}.toml",
+            rand::thread_rng().gen_range(0, 32000)
+        );
+        let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
+        println!("Writing TOML string to file: {}", &toml_file);
+        fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
+
+        let maybe_config = parse_config_file(Some(&toml_file));
+        if let Err(e) = &maybe_config {
+            match &e.inner_error {
+                InnerError::ClapError(ce) => ce.exit(),
+                _ => assert!(
+                    false,
+                    "Unexpected error when parsing command-line config file flag."
+                ),
+            }
+        }
+        let config_options_obtained = maybe_config.unwrap();
+
+        let polycorder_options_config = config_options_obtained.polycorder_config.unwrap();
+        let polycorder_config = PolycorderConfig {
+            auth_key: polycorder_options_config.auth_key.unwrap(),
+            node_id: polycorder_options_config.node_id.unwrap(),
+            flush_timeout: polycorder_options_config.flush_timeout.unwrap(),
+            flush_event_count: polycorder_options_config.flush_event_count.unwrap(),
+        };
+
+        let console_config = ConsoleConfig {
+            format: config_options_obtained
+                .console_config
+                .unwrap()
+                .format
+                .unwrap(),
+        };
+
+        let config_obtained = PolytectParams {
+            verbosity: config_options_obtained.verbosity.unwrap(),
+            exception_trace: config_options_obtained.exception_trace.unwrap(),
+            fatal_signals: config_options_obtained.fatal_signals.unwrap(),
+            polycorder_config: Some(polycorder_config),
+            console_config: Some(console_config),
+        };
+
+        assert_eq!(config_expected, config_obtained);
+    }
+
+    #[test]
+    fn toml_parse_all_through_args() {
+        let tomlcontents = r#"
+        verbosity = 3
+        exception_trace = true
+        fatal_signals = true
+
+        [console_config]
+        format = 'JSON'
+
+        [polycorder_config]
+        auth_key = 'AuthKeyFromAccountManager'
+        node_id = 'NodeDiscriminator'
+        flush_event_count = 10
+
+        [polycorder_config.flush_timeout]
+        secs = 10
+        nanos = 0
+        "#;
+
+        let toml_file = format!(
+            "/tmp/config_{}.toml",
+            rand::thread_rng().gen_range(0, 32000)
+        );
         println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
             OsString::from("burner program name. Also test words aren't split"),
-            OsString::from(format!("--configfile {}", &toml_file)),
+            OsString::from("--configfile"),
+            OsString::from(&toml_file),
         ];
 
         let maybe_config = parse_args(Some(args));
         if let Err(e) = &maybe_config {
             match &e.inner_error {
                 InnerError::ClapError(ce) => ce.exit(),
-                _ => assert!(false, "Unexpected error when parsing command-line config file flag.")
+                _ => assert!(
+                    false,
+                    "Unexpected error when parsing command-line config file flag."
+                ),
             }
         }
         let config = maybe_config.unwrap();
@@ -524,45 +670,57 @@ mod test {
     }
 
     #[test]
-    fn toml_serialize_and_parse_random_values() {
-        let config_expected = PolytectParams{
+    fn toml_serialize_and_parse_random_values_through_args() {
+        let config_expected = PolytectParams {
             exception_trace: rand::thread_rng().gen_bool(0.5),
             fatal_signals: rand::thread_rng().gen_bool(0.5),
-            console_config: Some(ConsoleConfig{
+            console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
                     true => ConsoleOutputFormat::JSON,
                     false => ConsoleOutputFormat::UserFriendlyText,
                 },
             }),
-            polycorder_config: Some(PolycorderConfig{
-                auth_key: format!("AuthKeyFromAccountManagerRandom{}", rand::thread_rng().gen_range(0, 32000)),
-                node_id: format!("NodeDiscriminatorRandom{}", rand::thread_rng().gen_range(0, 32000)),
+            polycorder_config: Some(PolycorderConfig {
+                auth_key: format!(
+                    "AuthKeyFromAccountManagerRandom{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                ),
+                node_id: format!(
+                    "NodeDiscriminatorRandom{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                ),
                 flush_timeout: time::Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
                 flush_event_count: rand::thread_rng().gen_range(0, 500),
             }),
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
 
-        let toml_file = format!("/tmp/config_{}.toml", rand::thread_rng().gen_range(0, 32000));
+        let toml_file = format!(
+            "/tmp/config_{}.toml",
+            rand::thread_rng().gen_range(0, 32000)
+        );
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
         println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
             OsString::from("burner program name. Also test words aren't split"),
-            OsString::from(format!("--configfile {}", &toml_file)),
+            OsString::from("--configfile"),
+            OsString::from(&toml_file),
         ];
 
         let maybe_config = parse_args(Some(args));
         if let Err(e) = &maybe_config {
             match &e.inner_error {
                 InnerError::ClapError(ce) => ce.exit(),
-                _ => assert!(false, "Unexpected error when parsing command-line config file flag.")
+                _ => assert!(
+                    false,
+                    "Unexpected error when parsing command-line config file flag."
+                ),
             }
         }
         let config_obtained = maybe_config.unwrap();
 
         assert_eq!(config_expected, config_obtained);
     }
-
 }

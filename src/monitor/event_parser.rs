@@ -19,13 +19,21 @@ pub struct EventParserError(String);
 impl Error for EventParserError {}
 impl Display for EventParserError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "EventParserError:: {}", &self)
+        write!(f, "EventParserError:: {}", &self.0)
     }
 }
 impl From<system::SystemStartTimeReadError> for EventParserError {
     fn from(err: system::SystemStartTimeReadError) -> EventParserError {
         EventParserError(format!(
             "Unable to read system start time. Inner system::SystemStartTimeReadError :: {}",
+            err
+        ))
+    }
+}
+impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
+    fn from(err: timeout_iterator::TimeoutIteratorError) -> EventParserError {
+        EventParserError(format!(
+            "Inner timeout_iterator::TimeoutIteratorError :: {}",
             err
         ))
     }
@@ -42,7 +50,7 @@ impl EventParser {
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,
     ) -> Result<EventParser, EventParserError> {
-        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity);
+        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity)?;
 
         Ok(EventParser {
             timeout_kmsg_iter,
@@ -58,14 +66,14 @@ impl EventParser {
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,
         system_start_time: DateTime<Utc>,
-    ) -> EventParser {
-        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity);
+    ) -> Result<EventParser, EventParserError> {
+        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity)?;
 
-        EventParser {
+        Ok(EventParser {
             timeout_kmsg_iter,
             verbosity,
             system_start_time,
-        }
+        })
     }
 
     fn parse_next_event(&mut self) -> Result<events::Event, EventParserError> {
@@ -657,7 +665,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -868,7 +877,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -1032,7 +1042,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -1138,7 +1149,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
@@ -1270,7 +1282,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
@@ -1316,7 +1329,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
 
         thread::spawn(move || {
             let maybe_segfault = parser.next();
@@ -1375,7 +1389,8 @@ mod test {
             Box::new(kmsgs.into_iter()),
             0,
             system_start_time,
-        );
+        )
+        .unwrap();
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
         assert_eq!(

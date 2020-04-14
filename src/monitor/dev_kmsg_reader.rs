@@ -27,7 +27,15 @@ pub struct KMsgParserError(String);
 impl Error for KMsgParserError {}
 impl Display for KMsgParserError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "KMsgParserError:: {}", self)
+        write!(f, "KMsgParserError:: {}", self.0)
+    }
+}
+impl From<timeout_iterator::TimeoutIteratorError> for KMsgParserError {
+    fn from(err: timeout_iterator::TimeoutIteratorError) -> KMsgParserError {
+        KMsgParserError(format!(
+            "inner timeout_iterator::TimeoutIteratorError:: {}",
+            err
+        ))
     }
 }
 
@@ -87,7 +95,7 @@ impl DevKMsgReader {
         reader: LinesIterator,
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
-        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity);
+        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity)?;
 
         Ok(DevKMsgReader {
             verbosity,

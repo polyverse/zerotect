@@ -32,7 +32,7 @@ fn main() {
             _ => {
                 eprintln!("Error when parsing configuration parameters (whether from CLI or from config file): {}", e);
                 process::exit(1);
-            },
+            }
         },
     };
 
