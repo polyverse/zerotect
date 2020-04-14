@@ -33,3 +33,7 @@ default-features = false
 
 # Cherry-pick the features you'd like to use
 features = [ "suggestions", "color", "vec_map", "wrap_help" ]
+
+# Enable LTO for release (since it only builds in Travis and doesn't block day to day)
+[profile.release]
+lto = true
