@@ -19,7 +19,7 @@ pub struct MonitorError(String);
 impl Error for MonitorError {}
 impl Display for MonitorError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "MonitorError:: {}", self)
+        write!(f, "MonitorError:: {}", self.0)
     }
 }
 impl From<dev_kmsg_reader::KMsgParserError> for MonitorError {

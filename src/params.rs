@@ -97,7 +97,7 @@ pub struct ParsingError{
 impl Error for ParsingError {}
 impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "ParsingError:: {}", self)
+        write!(f, "ParsingError:: {}", self.message)
     }
 }
 impl From<io::Error> for ParsingError {

@@ -21,7 +21,7 @@ pub struct OperatingSystemValidationError(String);
 impl Error for OperatingSystemValidationError {}
 impl Display for OperatingSystemValidationError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "OperatingSystemValidationError:: {}", self)
+        write!(f, "OperatingSystemValidationError:: {}", self.0)
     }
 }
 impl From<sys_info::Error> for OperatingSystemValidationError {
