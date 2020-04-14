@@ -1,6 +1,6 @@
 use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME};
 use clap::{App, Arg};
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::ffi::OsString;
@@ -18,32 +18,34 @@ const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+const CONFIG_FILE_FLAG: &str = "configfile";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConsoleOutputFormat {
     UserFriendlyText,
     JSON,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConsoleConfig {
-    pub console_format: ConsoleOutputFormat,
+    pub format: ConsoleOutputFormat,
 }
 
 #[derive(Clone, Deserialize)]
 pub struct ConsoleConfigOptions {
-    pub console_format: Option<ConsoleOutputFormat>,
+    pub format: Option<ConsoleOutputFormat>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolycorderConfig {
     pub auth_key: String,
     pub node_id: String,
 
-    // Flush all events if none arrive for this interval
-    pub flush_timeout: Duration,
-
     // Flush after this number of items, even if more are arriving...
     pub flush_event_count: usize,
+
+    // Flush all events if none arrive for this interval
+    pub flush_timeout: Duration,
 }
 
 #[derive(Clone, Deserialize)]
@@ -58,39 +60,60 @@ pub struct PolycorderConfigOptions {
     pub flush_event_count: Option<usize>,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolytectParams {
+    pub verbosity: u8,
+
     pub exception_trace: bool,
     pub fatal_signals: bool,
 
     pub console_config: Option<ConsoleConfig>,
     pub polycorder_config: Option<PolycorderConfig>,
-
-    pub verbosity: u8,
 }
 
 #[derive(Clone, Deserialize)]
 pub struct PolytectParamOptions {
+    pub verbosity: Option<u8>,
+
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,
 
     pub console_config: Option<ConsoleConfigOptions>,
     pub polycorder_config: Option<PolycorderConfigOptions>,
-
-    pub verbosity: Option<u8>,
 }
 
 #[derive(Debug)]
-pub struct ConfigFileParsingError(String);
-impl Error for ConfigFileParsingError {}
-impl Display for ConfigFileParsingError {
+pub enum InnerError{
+    None,
+    IoError(io::Error),
+    ClapError(clap::Error),
+}
+
+#[derive(Debug)]
+pub struct ParsingError{
+    pub message: String,
+    pub inner_error: InnerError,
+}
+impl Error for ParsingError {}
+impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "ConfigFileParsingError:: {}", self)
+        write!(f, "ParsingError:: {}", self)
     }
 }
-impl From<io::Error> for ConfigFileParsingError {
-    fn from(err: io::Error) -> ConfigFileParsingError {
-        ConfigFileParsingError(format!("Inner io::Error :: {}", err))
+impl From<io::Error> for ParsingError {
+    fn from(err: io::Error) -> ParsingError {
+        ParsingError{
+            message: format!("Inner io::Error :: {}", err),
+            inner_error: InnerError::IoError(err),
+        }
+    }
+}
+impl From<clap::Error> for ParsingError {
+    fn from(err: clap::Error) -> ParsingError {
+        ParsingError{
+            message: format!("Inner clap::Error :: {}", err),
+            inner_error: InnerError::ClapError(err),
+        }
     }
 }
 
@@ -98,7 +121,7 @@ impl From<io::Error> for ConfigFileParsingError {
 /// https://github.com/clap-rs/clap/issues/748
 pub fn parse_config_file(
     maybe_file: Option<&str>,
-) -> Result<PolytectParamOptions, ConfigFileParsingError> {
+) -> Result<PolytectParamOptions, ParsingError> {
     match maybe_file {
         None => Ok(PolytectParamOptions {
             exception_trace: None,
@@ -124,7 +147,7 @@ pub fn parse_config_file(
 /// Parse command-line arguments
 /// maybe_args - allows unit-testing of arguments. Use None to parse
 ///     arguments from the operating system.
-pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> PolytectParams {
+pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, ParsingError> {
     let args: Vec<OsString> = match maybe_args {
         Some(args) => args,
         None => {
@@ -167,31 +190,22 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> PolytectParams {
                             .default_value_if(POLYCORDER_OUTPUT_FLAG, None, UNIDENTIFIED_NODE)
                             .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more...").as_str()))
                         .arg(Arg::with_name("configfile")
-                            .long("configfile")
+                            .long(CONFIG_FILE_FLAG)
                             .value_name("filepath")
+                            .takes_value(true)
                             .help(format!("Read configuration from a TOML-formatted file. Any command-line parameters also specified will take priority over the file-configured values.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
                             .multiple(true)
                             .help(format!("Increase debug verbosity of polytect.").as_str()))
-                        .get_matches_from(args);
+                        .get_matches_from_safe(args)?;
 
-    let file_configured_params = match parse_config_file(matches.value_of("configfile")) {
-        Ok(p) => p,
-        Err(e) => {
-            panic!(
-                "Unable to read configuration parameters from file due to error: {}",
-                e
-            );
-        }
-    };
+    let file_configured_params = parse_config_file(matches.value_of("CONFIG_FILE_FLAG"))?;
 
-    let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG)
-        .unwrap_or(file_configured_params.exception_trace.unwrap_or(false));
+    let exception_trace = bool_flag(&matches, ENABLE_EXCEPTION_TRACE_FLAG)? || file_configured_params.exception_trace.unwrap_or(false);
 
-    let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG)
-        .unwrap_or(file_configured_params.fatal_signals.unwrap_or(false));
+    let fatal_signals = bool_flag(&matches, ENABLE_FATAL_SIGNALS_FLAG)? || file_configured_params.fatal_signals.unwrap_or(false);
 
     let cmd_verbosity_result = u8::try_from(matches.occurrences_of("verbose"));
     let verbosity = match cmd_verbosity_result {
@@ -205,18 +219,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> PolytectParams {
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
         Some(v) => match v.trim().to_ascii_lowercase().as_str() {
             "text" => Some(ConsoleConfig {
-                console_format: ConsoleOutputFormat::UserFriendlyText,
+                format: ConsoleOutputFormat::UserFriendlyText,
             }),
             "json" => Some(ConsoleConfig {
-                console_format: ConsoleOutputFormat::JSON,
+                format: ConsoleOutputFormat::JSON,
             }),
             unrecognized_format => {
                 panic!("Console configuration value set to {}, which is unrecognized. Only supported values are 'text' and 'json'. Since this is a system-level agent, it does not default to something saner. Aborting program", unrecognized_format)
             },
         },
         None => match file_configured_params.console_config {
-            Some(c) => match c.console_format {
-                Some(cf) => Some(ConsoleConfig{ console_format: cf}),
+            Some(c) => match c.format {
+                Some(cf) => Some(ConsoleConfig{ format: cf}),
                 None => None,
             }
             None => None,
@@ -280,23 +294,23 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> PolytectParams {
         }
     };
 
-    PolytectParams {
+    Ok(PolytectParams {
         exception_trace,
         fatal_signals,
         console_config,
         polycorder_config,
         verbosity,
-    }
+    })
 }
 
-fn bool_flag(matches: &clap::ArgMatches, flag_name: &str) -> Option<bool> {
+fn bool_flag(matches: &clap::ArgMatches, flag_name: &str) -> Result<bool, ParsingError> {
     match matches.occurrences_of(flag_name) {
-        1 => Some(true),
-        0 => None,
-        _ => {
-            eprintln!("You specified {} flag {} number of times. Please specify it at most once. Aborting program.", flag_name, matches.occurrences_of(flag_name));
-            None
-        }
+        1 => Ok(true),
+        0 => Ok(false),
+        _ => Err(ParsingError{
+            message: format!("You specified {} flag {} number of times. Please specify it at most once. Aborting program.", flag_name, matches.occurrences_of(flag_name)),
+            inner_error: InnerError::None,
+        }),
     }
 }
 
@@ -306,6 +320,7 @@ mod test {
     use std::ffi::OsString;
     use std::panic;
     use std::time;
+    use rand::Rng;
 
     #[test]
     fn commandline_args_parse_all() {
@@ -322,7 +337,7 @@ mod test {
             OsString::from("-v"),
         ];
 
-        let config = parse_args(Some(args));
+        let config = parse_args(Some(args)).unwrap();
 
         assert_eq!(true, config.exception_trace);
         assert_eq!(true, config.fatal_signals);
@@ -331,7 +346,7 @@ mod test {
         assert_eq!(1, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("authkey", pc.auth_key);
@@ -354,7 +369,7 @@ mod test {
             OsString::from("-v"),
         ];
 
-        let config = parse_args(Some(args));
+        let config = parse_args(Some(args)).unwrap();
 
         assert_eq!(true, config.exception_trace);
         assert_eq!(true, config.fatal_signals);
@@ -363,7 +378,7 @@ mod test {
         assert_eq!(1, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("authkey", pc.auth_key);
@@ -384,7 +399,7 @@ mod test {
             OsString::from("-v"),
         ];
 
-        let config = parse_args(Some(args));
+        let config = parse_args(Some(args)).unwrap();
 
         assert_eq!(false, config.exception_trace);
         assert_eq!(false, config.fatal_signals);
@@ -393,7 +408,7 @@ mod test {
         assert_eq!(1, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.console_format);
+        assert_eq!(ConsoleOutputFormat::UserFriendlyText, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("authkey", pc.auth_key);
@@ -401,4 +416,153 @@ mod test {
         assert_eq!(time::Duration::from_secs(10), pc.flush_timeout);
         assert_eq!(10, pc.flush_event_count);
     }
+
+    #[test]
+    fn commandline_args_parse_invalid_console_format() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-c invalid"),
+        ];
+
+        let result = panic::catch_unwind(|| {
+            parse_args(Some(args)).unwrap();
+        });
+        assert!(result.is_err());
+    }
+
+
+    #[test]
+    fn commandline_args_parse_missing_polycorder_authkey() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-n"),
+            OsString::from("nodeid"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+        assert!(config.polycorder_config.is_none());
+    }
+
+    #[test]
+    fn commandline_args_parse_multiple_flags() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-e"),
+            OsString::from("-e"),
+        ];
+
+        let config = parse_args(Some(args));
+        assert!(config.is_err());
+    }
+
+
+    #[test]
+    fn commandline_args_parse_multiple_options() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("-c text"),
+            OsString::from("-c json"),
+        ];
+
+        let config = parse_args(Some(args));
+        assert!(config.is_err());
+    }
+
+
+    #[test]
+    fn toml_parse_all() {
+        let tomlcontents = r#"
+        verbosity = 3
+        exception_trace = true
+        fatal_signals = true
+
+        [console_config]
+        format = 'JSON'
+
+        [polycorder_config]
+        auth_key = 'AuthKeyFromAccountManager'
+        node_id = 'NodeDiscriminator'
+        flush_event_count = 10
+
+        [polycorder_config.flush_timeout]
+        secs = 10
+        nanos = 0
+        "#;
+
+        let toml_file = format!("/tmp/config_{}.toml", rand::thread_rng().gen_range(0, 32000));
+        println!("Writing TOML string to file: {}", &toml_file);
+        fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
+
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from(format!("--configfile {}", &toml_file)),
+        ];
+
+        let maybe_config = parse_args(Some(args));
+        if let Err(e) = &maybe_config {
+            match &e.inner_error {
+                InnerError::ClapError(ce) => ce.exit(),
+                _ => assert!(false, "Unexpected error when parsing command-line config file flag.")
+            }
+        }
+        let config = maybe_config.unwrap();
+
+        assert_eq!(true, config.exception_trace);
+        assert_eq!(true, config.fatal_signals);
+        assert_eq!(true, config.console_config.is_some());
+        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(3, config.verbosity);
+
+        let cc = config.console_config.unwrap();
+        assert_eq!(ConsoleOutputFormat::JSON, cc.format);
+
+        let pc = config.polycorder_config.unwrap();
+        assert_eq!("AuthKeyFromAccountManager", pc.auth_key);
+        assert_eq!("NodeDiscriminator", pc.node_id);
+        assert_eq!(time::Duration::from_secs(10), pc.flush_timeout);
+        assert_eq!(10, pc.flush_event_count);
+    }
+
+    #[test]
+    fn toml_serialize_and_parse_random_values() {
+        let config_expected = PolytectParams{
+            exception_trace: rand::thread_rng().gen_bool(0.5),
+            fatal_signals: rand::thread_rng().gen_bool(0.5),
+            console_config: Some(ConsoleConfig{
+                format: match rand::thread_rng().gen_bool(0.5) {
+                    true => ConsoleOutputFormat::JSON,
+                    false => ConsoleOutputFormat::UserFriendlyText,
+                },
+            }),
+            polycorder_config: Some(PolycorderConfig{
+                auth_key: format!("AuthKeyFromAccountManagerRandom{}", rand::thread_rng().gen_range(0, 32000)),
+                node_id: format!("NodeDiscriminatorRandom{}", rand::thread_rng().gen_range(0, 32000)),
+                flush_timeout: time::Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
+                flush_event_count: rand::thread_rng().gen_range(0, 500),
+            }),
+            verbosity: rand::thread_rng().gen_range(0, 250),
+        };
+
+        let toml_file = format!("/tmp/config_{}.toml", rand::thread_rng().gen_range(0, 32000));
+        let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
+        println!("Writing TOML string to file: {}", &toml_file);
+        fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
+
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from(format!("--configfile {}", &toml_file)),
+        ];
+
+        let maybe_config = parse_args(Some(args));
+        if let Err(e) = &maybe_config {
+            match &e.inner_error {
+                InnerError::ClapError(ce) => ce.exit(),
+                _ => assert!(false, "Unexpected error when parsing command-line config file flag.")
+            }
+        }
+        let config_obtained = maybe_config.unwrap();
+
+        assert_eq!(config_expected, config_obtained);
+    }
+
 }

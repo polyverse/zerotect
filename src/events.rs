@@ -607,7 +607,7 @@ mod test {
     use std::fs;
 
     #[test]
-    fn regenerate_json_schema_file() {
+    fn generate_json_schema_file() {
         let schema_file = format!("{}{}", env!("PWD"), "/schema.json");
         let schema = schema_for!(Event);
         let schema_json = serde_json::to_string_pretty(&schema).unwrap();

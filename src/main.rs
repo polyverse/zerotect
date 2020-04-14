@@ -25,7 +25,16 @@ fn main() {
         process::exit(1);
     }
 
-    let polytect_config = params::parse_args(None);
+    let polytect_config = match params::parse_args(None) {
+        Ok(pc) => pc,
+        Err(e) => match e.inner_error {
+            params::InnerError::ClapError(ce) => ce.exit(),
+            _ => {
+                eprintln!("Error when parsing configuration parameters (whether from CLI or from config file): {}", e);
+                process::exit(1);
+            },
+        },
+    };
 
     let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
