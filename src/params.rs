@@ -218,7 +218,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .value_name("node_identifier")
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
-                            .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more...").as_str()))
+                            .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")

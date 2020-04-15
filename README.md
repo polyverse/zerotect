@@ -39,7 +39,7 @@ Polytect is built as a single statically linked binary (only for Linux) at the m
 The most common mode to run Polytect is with two flags and one option:
 
 ```bash
-polytect -e -f -p <authkey>
+polytect --auto-configure debug.exception-trace --auto-configure kernel.print-fatal-signals -p <authkey>
 ```
 
 The authkey is obtainable in the Polyverse Account Manager hosted at [https://polyverse.com](https://polyverse.com).
@@ -49,7 +49,6 @@ It is unlikely you would manually run Polytect though, unless for testing or spe
 ### All usage options
 
 ```bash
-polytect --help
 Polytect 1.0
 Polyverse Corporation <support@polyverse.com>
 Detect attempted (and ultimately failed) attacks and exploits using known and unknown vulnerabilities by observing side effects (segfaults, crashes, etc.)
@@ -58,25 +57,25 @@ USAGE:
     polytect [FLAGS] [OPTIONS]
 
 FLAGS:
-    -e, --enable-exception-trace    Sets the debug.exception-trace value to enable segfaults to be logged to dmesg.
-    -f, --enable-fatal-signals      Sets the kernel.print-fatal-signals value to enable details of fatals to be logged to dmesg.
-    -h, --help                      Prints help information
-    -V, --version                   Prints version information
-    -v, --verbose                   Increase debug verbosity of polytect.
+    -v, --verbose    Increase debug verbosity of polytect.
+    -h, --help       Prints help information
+    -V, --version    Prints version information
 
 OPTIONS:
-    -c, --console <text|json>       Prints all monitored data to the console. Optionally takes a value of 'text' or 'json'
-    -n, --node <node_identifier>    All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more...
-    -p, --polycorder <authkey>      Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
+        --configfile <filepath>                 Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)
+        --auto-configure <auto-configure>...    Automatically configure the system on the user's behalf. [possible values: debug.exception-trace, kernel.print-fatal-signals]
+        --console <format>                      Prints all monitored data to the console in the specified format. [possible values: text, json]
+        --polycorder <authkey>                  Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
+        --node <node_identifier>                All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.
 ```
 
 #### Notable flags and options
 
-Two flags and one option are most notable in intended usage.
+Two options are most notable in intended usage.
 
-1. *-e, --enable-exception-trace*: Setting this flag commands Polytect to set a kernel flag that enables writing exception traces to `/dev/kmsg`  (the kernel message buffer.)
-
-2. *-f, --enable-fatal-signals*: Setting this flag commands Polytect to set a kernel flag that enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
+1. *--auto-configure: This option commands Polytect to set a kernel flags on your behalf. This can be very convenient to both configure the right traces, and ensure the traces stay enabled. You can specify this option multiple times with different values to auto-configure:
+    * *debug.exception-trace* enables writing exception traces to `/dev/kmsg`  (the kernel message buffer.)
+    * *kernel.print-fatal-signals* enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
 
 3. *-p, --polycorder \<authkey\>*: Setting this option commands polytect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the Polyverse Account Manager.
 
