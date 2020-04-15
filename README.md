@@ -83,6 +83,6 @@ Two flags and one option are most notable in intended usage.
 ## Polytect Log Format
 
 An up-to-date JSON Schema of Polytect's log format is always maintained here:
-[./schema.json](./schema.json).
+[schema.json](./reference/schema.json).
 
 The log format is important for processing data emitted by Polytect. This enables users of Polycorder to send it data from agents other than Polytect. It enables analytics tools to consume structured Polytect data and make sense of it.

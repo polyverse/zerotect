@@ -607,11 +607,11 @@ mod test {
     use std::fs;
 
     #[test]
-    fn generate_json_schema_file() {
-        let schema_file = format!("{}{}", env!("PWD"), "/schema.json");
+    fn generate_reference_json_schema_file() {
+        let schema_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/schema.json");
         let schema = schema_for!(Event);
         let schema_json = serde_json::to_string_pretty(&schema).unwrap();
-        println!("Writing latest event schema to file: {}", schema_file);
+        eprintln!("Writing latest event schema to file: {}", schema_file);
         fs::write(schema_file, schema_json).expect("Unable to re-generate the event schema file.");
     }
 }

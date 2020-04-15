@@ -106,25 +106,25 @@ pub fn ensure_linux() -> Result<(), OperatingSystemValidationError> {
 }
 
 pub fn modify_environment(
-    config: &params::PolytectParams,
+    auto_configure: &params::AutoConfigure,
 ) -> Result<Vec<events::Event>, SystemCtlError> {
     let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
-    if config.exception_trace {
+    if auto_configure.exception_trace {
         let maybe_event = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
-            bool_to_sysctl_string(config.exception_trace),
+            bool_to_sysctl_string(auto_configure.exception_trace),
         )?;
         if let Some(event) = maybe_event {
             env_events.push(event);
         }
     }
 
-    if config.fatal_signals {
+    if auto_configure.fatal_signals {
         let maybe_event = ensure_systemctl(
             PRINT_FATAL_SIGNALS_CTLNAME,
-            bool_to_sysctl_string(config.fatal_signals),
+            bool_to_sysctl_string(auto_configure.fatal_signals),
         )?;
         if let Some(event) = maybe_event {
             env_events.push(event);

@@ -44,7 +44,7 @@ fn main() {
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
     thread::spawn(move || {
         // initialize the system with config
-        if let Err(e) = system::modify_environment(&env_config_copy) {
+        if let Err(e) = system::modify_environment(&env_config_copy.auto_configure) {
             eprintln!(
                 "Error modifying the system settings to enable monitoring (as commanded): {}",
                 e
@@ -55,7 +55,7 @@ fn main() {
         // let the first time go from config-mismatch event reporting
         loop {
             // reinforce the system with config
-            match system::modify_environment(&env_config_copy) {
+            match system::modify_environment(&env_config_copy.auto_configure) {
                 Err(e) => {
                     eprintln!("Error modifying the system settings to enable monitoring (as commanded): {}", e);
                     process::exit(1);

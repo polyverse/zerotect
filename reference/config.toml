@@ -1,0 +1,17 @@
+verbosity = 0
+
+[auto_configure]
+exception_trace = true
+fatal_signals = true
+
+[console_config]
+format = 'Text'
+
+[polycorder_config]
+auth_key = 'AuthKeyFromPolyverseAccountManager'
+node_id = 'UsefulNodeIdentifierToGroupEvents'
+flush_event_count = 10
+
+[polycorder_config.flush_timeout]
+secs = 10
+nanos = 0
