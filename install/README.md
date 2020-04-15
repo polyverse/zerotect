@@ -1,41 +1,65 @@
 # Installing Polytect
 
+This describes how polytect can be obtained (securely) and configured so you can build your own recipes.
+
 ## Table of Contents
 
-* [systemd](#systemd)
-* [Installing Polytect the Hard Way](#installing-polytect-the-hard-way)
-  * [Compiling Polytect from source](#compiling-polytect-from-source)
-  * [Downloading the latest polytect binary](#downloading-the-latest-polytect-binary)
+* [systemd recipe](#systemd-recipe)
+* [Install Polytect the Hard Way](#install-polytect-the-hard-way)
+  * [Obtain the polytect binary](#obtain-the-polytect-binary)
+    * [Download](#download)
+    * [Compile from source](#compile-from-source)
   * [Configuring using the config file](#configuring-using-the-config-file)
   * [Recommendations for Running Polytect](#recommendations-for-running-polytect)
 
 ## SystemD
 
-If your host/VM/container/device uses systemd, you may use the [Distribution-Neutral SystemD installer](./distro-neutral-systemd).
+[systemd recipe](./distro-neutral-systemd) has a simple for installing on [systemd](https://systemd.io/) based systems.
 
 ## Installing Polytect the Hard Way
 
-This section deals with polytect installation primitives (including if necessary, compiling it from source yourself.) This is especially useful for security-conscious people and organizations to understand, as well as providing auditors with a complete trail of ownership.
+This section deals with polytect installation primitives (including if necessary, compiling it from source yourself.) This is especially important for security-conscious organizations for a complete auditable trail.
 
-### Compiling Polytect from source
+### Obtain the polytect binary
 
-Written in Rust, polytect is easy and simple to build. While the agent itself relies deeply on Linux as the underlying OS, it accesses the Linux kernel buffer through the virtual device `/dev/kmsg`. It means that polytect doesn't have any binary dependency on Linux.
+#### Download
 
-To compile, simply clone this repository, and run `cargo build`.
+Polytect executables are posted in [Github Releases](https://github.com/polyverse/polytect/releases).
 
-Everything is plain simple Rust with no additional custom build scripts or interrupts. It should be possible to know the entire program source closure.
+The latest polytect executable can be found here: [https://github.com/polyverse/polytect/releases/latest/download/polytect](https://github.com/polyverse/polytect/releases/latest/download/polytect)
 
-How to compile polytect to be completely statically linked is beyond the scope of this documentation. Please see the `.travis.yml` file at the root of this repository to see how we build it for release.
+For transparency, you can study [.travis.yml](../.travis.yml) and the [build logs](https://travis-ci.org/github/polyverse/polytect) to audit the pre-built binaries.
 
-### Downloading the latest polytect binary
+#### Compile from source
 
-Polytect is frequently recompiled at the push of a new tag, and a [Github Release](https://github.com/polyverse/polytect/releases) is created for this repository.
+For complete audit and assurance, you may compile polytect from scratch. Polytect is built in [Rust](https://www.rust-lang.org/).
 
-You may download the latest polytect executable here: [https://github.com/polyverse/polytect/releases/latest/download/polytect](https://github.com/polyverse/polytect/releases/latest/download/polytect)
+On a system with [Rust build tools](https://www.rust-lang.org/tools/install) available:
 
-We compile polytect 100% statically-linked, even with the MUSL C library linked in. This allows it to portably deploy inside containers, VMs, hypervisors and IoT devices. So long as there's a modern-ish Linux kernel underneath, polytect will run.
+```bash
+# clone this repository
+git clone https://github.com/polyverse/polytect.git
 
-### Configuring using the config file
+# Go to the repository root
+cd polytect
+
+# Build
+cargo build
+```
+
+All regular rust tools/options recipes work - from cross-compilation, static linking, build profiles and so forth. You may build it any way you wish.
+
+### Placing polytect in a durable location
+
+We recommend placing polytect in the `/usr/local/bin` directory. Specifically since polytect needs to run with higher privilege levels than a regular user, it is better to not have it under a user directory.
+
+### Hooking into an init system
+
+NOTE: for systemd, please refer to the [systemd recipe](./distro-neutral-systemd)
+
+For other init systems, you want to ensure you run polytect with the proper configuration. While polytect does take command-line parameters (documented in the main [README.md](../README.md)), it is recommended to run polytect with
+
+### Configuring with file
 
 For stable installations it us recommended to run polytect with a configuration file located at `/etc/polytect/polytect.toml`, by telling it to load config from file:
 
