@@ -197,6 +197,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .help(format!("Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)").as_str()))
                         .arg(Arg::with_name(AUTO_CONFIGURE)
                             .long(AUTO_CONFIGURE)
+                            .value_name("sysctl-flag-to-auto-configure")
                             .takes_value(true)
                             .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME])
                             .multiple(true)
@@ -1032,7 +1033,11 @@ mod test {
             verbosity: 0,
         };
 
-        let toml_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/polytect.toml");
+        let toml_file = format!(
+            "{}{}",
+            env!("CARGO_MANIFEST_DIR"),
+            "/reference/polytect.toml"
+        );
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
         println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");

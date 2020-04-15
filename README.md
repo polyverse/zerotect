@@ -62,22 +62,21 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --configfile <filepath>                 Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)
-        --auto-configure <auto-configure>...    Automatically configure the system on the user's behalf. [possible values: debug.exception-trace, kernel.print-fatal-signals]
-        --console <format>                      Prints all monitored data to the console in the specified format. [possible values: text, json]
-        --polycorder <authkey>                  Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
-        --node <node_identifier>                All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.
+        --configfile <filepath>                                Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)
+        --auto-configure <sysctl-flag-to-auto-configure>...    Automatically configure the system on the user's behalf. [possible values: debug.exception-trace, kernel.print-fatal-signals]
+        --console <format>                                     Prints all monitored data to the console in the specified format. [possible values: text, json]
+        --polycorder <authkey>                                 Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
+        --node <node_identifier>                               All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.
 ```
 
 #### Notable flags and options
 
 Two options are most notable in intended usage.
 
-1. *--auto-configure: This option commands Polytect to set a kernel flags on your behalf. This can be very convenient to both configure the right traces, and ensure the traces stay enabled. You can specify this option multiple times with different values to auto-configure:
-    * *debug.exception-trace* enables writing exception traces to `/dev/kmsg`  (the kernel message buffer.)
-    * *kernel.print-fatal-signals* enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
-
-3. *-p, --polycorder \<authkey\>*: Setting this option commands polytect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the Polyverse Account Manager.
+1. *--auto-configure*: This option commands Polytect to set a kernel flags on your behalf. This can be very convenient to both configure the right traces, and ensure the traces stay enabled. You can specify this option multiple times with different values to auto-configure:
+    * *debug.exception-trace*: enables writing exception traces to `/dev/kmsg`  (the kernel message buffer.)
+    * *kernel.print-fatal-signals*: enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
+2. *-p, --polycorder \<authkey\>*: Setting this option commands polytect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the Polyverse Account Manager.
 
 ## Polytect Log Format
 
