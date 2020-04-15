@@ -1032,7 +1032,7 @@ mod test {
             verbosity: 0,
         };
 
-        let toml_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/config.toml");
+        let toml_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/polytect.toml");
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
         println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");

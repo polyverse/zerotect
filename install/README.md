@@ -6,6 +6,7 @@
 * [Installing Polytect the Hard Way](#installing-polytect-the-hard-way)
   * [Compiling Polytect from source](#compiling-polytect-from-source)
   * [Downloading the latest polytect binary](#downloading-the-latest-polytect-binary)
+  * [Configuring using the config file](#configuring-using-the-config-file)
   * [Recommendations for Running Polytect](#recommendations-for-running-polytect)
 
 ## SystemD
@@ -33,6 +34,16 @@ Polytect is frequently recompiled at the push of a new tag, and a [Github Releas
 You may download the latest polytect executable here: [https://github.com/polyverse/polytect/releases/latest/download/polytect](https://github.com/polyverse/polytect/releases/latest/download/polytect)
 
 We compile polytect 100% statically-linked, even with the MUSL C library linked in. This allows it to portably deploy inside containers, VMs, hypervisors and IoT devices. So long as there's a modern-ish Linux kernel underneath, polytect will run.
+
+### Configuring using the config file
+
+For stable installations it us recommended to run polytect with a configuration file located at `/etc/polytect/polytect.toml`, by telling it to load config from file:
+
+```bash
+polytect --configfile /etc/polytect/polytect.toml
+```
+
+When using a configuration file, no other command-line options are supported. To see all options available in a configuration file, read the [Reference polytect.toml file](../reference/polytect.toml).
 
 ### Recommendations for Running Polytect
 
