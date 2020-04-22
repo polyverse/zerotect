@@ -10,7 +10,6 @@
   * [Recommended usage](#recommended-usage)
     * [Understanding the minimal configuration](#understanding-the-minimal-configuration)
   * [All CLI options](#all-cli-options)
-  * [Notable flags and options](#notable-flags-and-options)
 * [Polytect Log Format](#polytect-log-format)
 
 ## What is Polytect

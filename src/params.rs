@@ -15,10 +15,12 @@ use strum_macros::EnumString;
 const AUTO_CONFIGURE: &str = "auto-configure";
 
 const CONSOLE_OUTPUT_FLAG: &str = "console";
-const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 
+const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
+const FLUSH_TIMEOUT_SECONDS_FLAG: &str = "flush-timeout-secs";
+const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 
 const CONFIG_FILE_FLAG: &str = "configfile";
 
@@ -123,6 +125,7 @@ pub enum InnerError {
     Utf8Error(str::Utf8Error),
     TomlDeserializationError(toml::de::Error),
     StrumParseError(strum::ParseError),
+    ParseIntError(std::num::ParseIntError),
 }
 
 #[derive(Debug)]
@@ -165,6 +168,14 @@ impl From<toml::de::Error> for ParsingError {
         ParsingError {
             message: format!("Inner toml::de::Error :: {}", err),
             inner_error: InnerError::TomlDeserializationError(err),
+        }
+    }
+}
+impl From<std::num::ParseIntError> for ParsingError {
+    fn from(err: std::num::ParseIntError) -> ParsingError {
+        ParsingError {
+            message: format!("Inner std::num::ParseIntError :: {}", err),
+            inner_error: InnerError::ParseIntError(err),
         }
     }
 }
@@ -220,6 +231,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
                             .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.").as_str()))
+                        .arg(Arg::with_name(FLUSH_TIMEOUT_SECONDS_FLAG)
+                            .long(FLUSH_TIMEOUT_SECONDS_FLAG)
+                            .value_name("seconds")
+                            .empty_values(false)
+                            .requires(POLYCORDER_OUTPUT_FLAG)
+                            .help(format!("After how many seconds should events be flushed to Polycorder, if no new events occur. This avoids chatty communication with Polycorder.").as_str()))
+                        .arg(Arg::with_name(FLUSH_EVENT_COUNT_FLAG)
+                            .long(FLUSH_EVENT_COUNT_FLAG)
+                            .value_name("count")
+                            .empty_values(false)
+                            .requires(POLYCORDER_OUTPUT_FLAG)
+                            .help(format!("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
@@ -279,9 +302,15 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                 None => UNIDENTIFIED_NODE.to_owned(),
             };
 
-            let flush_timeout = DEFAULT_POLYCORDER_FLUSH_TIMEOUT;
+            let flush_timeout = match matches.value_of(FLUSH_TIMEOUT_SECONDS_FLAG) {
+                Some(nstr) => Duration::from_secs(nstr.parse::<u64>()?),
+                None => DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
+            };
 
-            let flush_event_count = DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT;
+            let flush_event_count = match matches.value_of(FLUSH_EVENT_COUNT_FLAG) {
+                Some(nstr) => nstr.parse::<usize>()?,
+                None => DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
+            };
 
             Some(PolycorderConfig {
                 auth_key,
@@ -392,7 +421,11 @@ mod test {
             OsString::from("--polycorder"),
             OsString::from("authkey"),
             OsString::from("--node"),
-            OsString::from("nodeid"),
+            OsString::from("nodeid34235"),
+            OsString::from("--flush-event-count"),
+            OsString::from("53"),
+            OsString::from("--flush-timeout-secs"),
+            OsString::from("89"),
             OsString::from("-v"),
         ];
 
@@ -409,9 +442,9 @@ mod test {
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("authkey", pc.auth_key);
-        assert_eq!("nodeid", pc.node_id);
-        assert_eq!(Duration::from_secs(10), pc.flush_timeout);
-        assert_eq!(10, pc.flush_event_count);
+        assert_eq!("nodeid34235", pc.node_id);
+        assert_eq!(Duration::from_secs(89), pc.flush_timeout);
+        assert_eq!(53, pc.flush_event_count);
     }
 
     #[test]
@@ -503,6 +536,10 @@ mod test {
             OsString::from("burner program name. Also test words aren't split"),
             OsString::from("--node"),
             OsString::from("nodeid"),
+            OsString::from("--flush-event-count"),
+            OsString::from("20"),
+            OsString::from("--flush-timeout-secs"),
+            OsString::from("15"),
         ];
 
         let maybe_parsed = parse_args(Some(args));

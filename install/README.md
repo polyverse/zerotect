@@ -4,19 +4,28 @@ This describes how polytect can be obtained (securely) and configured so you can
 
 ## Table of Contents
 
-* [systemd recipe](#systemd-recipe)
-* [Install Polytect the Hard Way](#install-polytect-the-hard-way)
+* ["Trust Me" Quickstarts](#trust-me-quickstarts)
+  * [systemd](#systemd)
+* [First-Principles Install](#first-principles-install)
   * [Obtain the polytect binary](#obtain-the-polytect-binary)
     * [Download](#download)
     * [Compile from source](#compile-from-source)
-  * [Configuring using the config file](#configuring-using-the-config-file)
-  * [Recommendations for Running Polytect](#recommendations-for-running-polytect)
+  * [Place polytect binary in a durable location](#place-polytect-binary-in-a-durable-location)
+  * [Hook into the init system (or not)](#hook-into-the-init-system-or-not)
+  * [Configure with a TOML file](#configure-with-a-toml-file)
+  * [Run one polytect per kernel](#run-one-polytect-per-kernel)
 
-## SystemD
+## "Trust Me" Quickstarts
 
-[systemd recipe](./distro-neutral-systemd) has a simple for installing on [systemd](https://systemd.io/) based systems.
+Everything described in this document is encapsulated in scripted recipes for various distributions and init-systems. These are a great way to quickly install polytect.
 
-## Installing Polytect the Hard Way
+As the scripts follow the curl pipe-to bash pattern, the rest of this document details how you can develop your own automation to deploy polytect, depending on your level of trust (which may be zero trust).
+
+### systemd
+
+All systems running [systemd](https://systemd.io/) can use the [systemd quickstart](./distro-neutral-systemd/README.md).
+
+## First-Principles Install
 
 This section deals with polytect installation primitives (including if necessary, compiling it from source yourself.) This is especially important for security-conscious organizations for a complete auditable trail.
 
@@ -49,30 +58,84 @@ cargo build
 
 All regular rust tools/options recipes work - from cross-compilation, static linking, build profiles and so forth. You may build it any way you wish.
 
-### Placing polytect in a durable location
+### Place polytect binary in a durable location
+
+`DURABLE_POLYTECT_LOCATION=/usr/local/bin`
 
 We recommend placing polytect in the `/usr/local/bin` directory. Specifically since polytect needs to run with higher privilege levels than a regular user, it is better to not have it under a user directory.
 
-### Hooking into an init system
+### Hook into the init system (or not)
 
-NOTE: for systemd, please refer to the [systemd recipe](./distro-neutral-systemd)
+Polytect needs to run once-per-kernel. Usually a kernel bootstraps and powers a rather complex system, and the system runs applications (and/or containers) on top of it.
 
-For other init systems, you want to ensure you run polytect with the proper configuration. While polytect does take command-line parameters (documented in the main [README.md](../README.md)), it is recommended to run polytect with
+In such cases, polytect should be installed as a manageable service directly on the system.
 
-### Configuring with file
+Example 1: Some applications running on a host
 
-For stable installations it us recommended to run polytect with a configuration file located at `/etc/polytect/polytect.toml`, by telling it to load config from file:
+```.text
+  application    application    application     polytect process directly
+  process 1      process 2      process 3       on kernel host/VM (not
+                                                containerized)
++--------------------------------------------------------------------------+
+|                                                                          |
+|                          Linux Kernel                                    |
+|                                                                          |
++--------------------------------------------------------------------------+
+
+```
+
+Example 2: Some containers running on a host
+
+```.text
+  +------------+ +------------+ +------------+
+  |            | |            | |            |  polytect process directly
+  | container1 | | container2 | | container3 |  on kernel host/VM (not
+  |            | |            | |            |  containerized)
+  +------------+ +------------+ +------------+
++--------------------------------------------------------------------------+
+|                                                                          |
+|                          Linux Kernel                                    |
+|                                                                          |
++--------------------------------------------------------------------------+
+```
+
+Example 3: Some applications/containers coexisting on a host
+
+```.text
+              +---------------+
+              |               |
+  application | container 5   | application     polytect process directly
+  process 1   |               | process 3       on kernel host/VM (not
+              +---------------+                 containerized)
++--------------------------------------------------------------------------+
+|                                                                          |
+|                          Linux Kernel                                    |
+|                                                                          |
++--------------------------------------------------------------------------+
+
+```
+
+#### Without init integration
+
+
+For other init systems, you want to ensure you run polytect with the proper configuration.
+
+
+### Configure with a TOML file
+
+While polytect does take command-line parameters (documented in the main [README.md](../README.md)), it is not recommended to embed CLI-based configuration options in your init configuration.
+
+Instead, we recommend running it with a configuration file located at `/etc/polytect/`:
 
 ```bash
-polytect --configfile /etc/polytect/polytect.toml
+$DURABLE_POLYTECT_LOCATION/polytect --configfile /etc/polytect/polytect.toml
 ```
 
 When using a configuration file, no other command-line options are supported. To see all options available in a configuration file, read the [Reference polytect.toml file](../reference/polytect.toml).
 
-### Recommendations for Running Polytect
-
-For hosts/VMs, we recommend running polytect through the default init system. This may require creating the right configuration files.
+### Run one polytect per kernel
 
 Since Polytect detects side-effects from the kernel, it is sufficient to run a single instance of polytect for every Kernel. What this means is, traditional Linux "containers" (using cgroups and namespaces) do not need polytect whtin them so long as either the host is running it, or there's a single container running it.
 
 However, "VM" containers such as Kata Containers, Firecracker VMs, and so forth will warrant a polytect instance per container, since they would not share the same kernel.
+
