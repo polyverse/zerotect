@@ -11,9 +11,11 @@ This describes how polytect can be obtained (securely) and configured so you can
     * [Download](#download)
     * [Compile from source](#compile-from-source)
   * [Place polytect binary in a durable location](#place-polytect-binary-in-a-durable-location)
-  * [Hook into the init system (or not)](#hook-into-the-init-system-or-not)
+  * [polytect lifecycle](#polytect-lifecycle)
+    * [Run one polytect per kernel](#run-one-polytect-per-kernel)
+    * [Automate polytect lifecycle with your init system](#automate-polytect-lifecycle-with-your-init-system)
+    * [One-off direct execution](#one-off-direct-execution)
   * [Configure with a TOML file](#configure-with-a-toml-file)
-  * [Run one polytect per kernel](#run-one-polytect-per-kernel)
 
 ## "Trust Me" Quickstarts
 
@@ -64,7 +66,17 @@ All regular rust tools/options recipes work - from cross-compilation, static lin
 
 We recommend placing polytect in the `/usr/local/bin` directory. Specifically since polytect needs to run with higher privilege levels than a regular user, it is better to not have it under a user directory.
 
-### Hook into the init system (or not)
+### polytect lifecycle
+
+To ensure polytect is running when you want it to run, and not running when you don't, you need to plan for some sort of lifecycle management. We present two main recommendations for running polytect.
+
+#### Run one polytect per kernel
+
+Since Polytect detects side-effects from the kernel, it is sufficient to run a single instance of polytect for every Kernel. What this means is, traditional Linux "containers" (using cgroups and namespaces) do not need polytect whtin them so long as either the host is running it, or there's a single container running it.
+
+However, "VM" containers such as Kata Containers, Firecracker VMs, and so forth will warrant a polytect instance per container, since they would not share the same kernel.
+
+#### Automate polytect lifecycle with your init system
 
 Polytect needs to run once-per-kernel. Usually a kernel bootstraps and powers a rather complex system, and the system runs applications (and/or containers) on top of it.
 
@@ -81,7 +93,6 @@ Example 1: Some applications running on a host
 |                          Linux Kernel                                    |
 |                                                                          |
 +--------------------------------------------------------------------------+
-
 ```
 
 Example 2: Some containers running on a host
@@ -112,14 +123,54 @@ Example 3: Some applications/containers coexisting on a host
 |                          Linux Kernel                                    |
 |                                                                          |
 +--------------------------------------------------------------------------+
-
 ```
 
-#### Without init integration
+In all these cases, it helps to run polytect using the init system ([systemd](https://systemd.io/), [sysvinit](https://en.wikipedia.org/wiki/Init#SYSV), [upstart](http://upstart.ubuntu.com/), etc.)
 
+Now it is possible (and may even be desirable in some cases, such as running a [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/) on a [Kubernetes](https://kubernetes.io/) cluster) to run polytect as a privileged container like the model below.
 
-For other init systems, you want to ensure you run polytect with the proper configuration.
+The container itself is now a first-class serivce per host that must be managed through preferred container-management tooling.
 
+Example 4: polytect as a privileged container
+
+```.text
+ +-----------------------------------------+
+ |                                         |
+ |   polytect in privileged container      |
+ |   OR sufficient access to read          |
+ |   /dev/kmsg                             |
+ |     |                                   |
+ +-----+-----------------------------------+
+       |
+       |
++--------------------------------------------------------------------------+
+|      |                                                                   |
+|      |                                                                   |
+|      v                        Linux Kernel                               |
+|   /dev/kmsg                                                              |
+|                                                                          |
++--------------------------------------------------------------------------+
+```
+
+This leaves one question open: How is Polytect run within the container itself?
+
+#### One-off direct execution
+
+This method is the recommended way to run polytect in a container at entrypoint, with its maximum life being that of the container.
+
+There are two primary reasons to run polytect in a container. The first, as described above, is when you want to distribute/run all your agents as containers, like in the [Kubernetes/DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/) scenario. You may also do it using any configuration management or deployment system such as Ansible, Chef, Puppet, etc.
+
+The second reason is when containers do not share a kernel.  There are a number of isolation projects that really run VMs and make them look/feel like containers. These include (but are not limited to) [KataContainers](https://katacontainers.io/) and [Firecracker](https://firecracker-microvm.github.io/).
+
+In all these cases, we recommend running polytect as a regular background process. Quite simply, somewhere in your container's entrypoint, you should run:
+
+```.bash
+$DURABLE_POLYTECT_LOCATION/polytect <configuration> &
+```
+
+If polytect is not the main executable for the container, it should be pushed to the background before the main blocking processes are launched.
+
+When multiple containers in a "[Pod](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/)" or "[Task](https://docs.aws.amazon.com/eks/latest/userguide/fargate-pod-configuration.html)", share the same kernel, it may be possible to run polytect as the main executable for the container, and making the container a sidecar to monitor the kernel hosting the Pod/Task.
 
 ### Configure with a TOML file
 
@@ -132,10 +183,3 @@ $DURABLE_POLYTECT_LOCATION/polytect --configfile /etc/polytect/polytect.toml
 ```
 
 When using a configuration file, no other command-line options are supported. To see all options available in a configuration file, read the [Reference polytect.toml file](../reference/polytect.toml).
-
-### Run one polytect per kernel
-
-Since Polytect detects side-effects from the kernel, it is sufficient to run a single instance of polytect for every Kernel. What this means is, traditional Linux "containers" (using cgroups and namespaces) do not need polytect whtin them so long as either the host is running it, or there's a single container running it.
-
-However, "VM" containers such as Kata Containers, Firecracker VMs, and so forth will warrant a polytect instance per container, since they would not share the same kernel.
-
