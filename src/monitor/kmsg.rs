@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 use crate::events;
 use chrono::Duration as ChronoDuration;
 

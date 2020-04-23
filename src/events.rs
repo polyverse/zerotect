@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 use chrono::{DateTime, Utc};
 use num_derive::FromPrimitive;
 use schemars::JsonSchema;

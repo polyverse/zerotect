@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 use crate::emitter;
 use crate::events;
 use crate::params;

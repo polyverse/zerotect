@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 use reqwest;
 use serde::Serialize;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};

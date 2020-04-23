@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 #[macro_use]
 extern crate enum_display_derive;
 #[macro_use]

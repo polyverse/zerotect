@@ -1,3 +1,5 @@
+// Copyright (c) 2019 Polyverse Corporation
+
 pub mod dev_kmsg_reader;
 mod event_parser;
 mod kmsg;

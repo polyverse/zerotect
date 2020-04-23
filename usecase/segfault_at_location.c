@@ -1,4 +1,6 @@
 
+// Copyright (c) 2019 Polyverse Corporation
+
 void function1() {
    int collector = 5, i = 0;
    if (10) {

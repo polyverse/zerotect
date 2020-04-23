@@ -25,7 +25,7 @@ As the scripts follow the curl pipe-to bash pattern, the rest of this document d
 
 ### systemd
 
-All systems running [systemd](https://systemd.io/) can use the [systemd quickstart](./distro-neutral-systemd/README.md).
+All systems running [systemd](https://systemd.io/) can use the [systemd quickstart](./systemd/README.md).
 
 ## First-Principles Install
 
