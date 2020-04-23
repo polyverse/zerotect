@@ -6,7 +6,7 @@ services:
 before_install:
   - docker pull clux/muslrust
 script:
-  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust cargo test
+  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust cargo test --release
   - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust cargo build --release
 deploy:
   provider: releases
