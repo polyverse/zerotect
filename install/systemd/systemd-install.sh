@@ -85,7 +85,11 @@ create_polytect_conf() {
     fi
 
     echo "Sending events to polycorder with authkey: $authkey"
-    tomlcontents="[polycorder_config]"
+    tomlcontents="$tomlcontents\n[auto_configure]"
+    tomlcontents="$tomlcontents\nexception_trace = true"
+    tomlcontents="$tomlcontents\nfatal_signals = true"
+    tomlcontents="$tomlcontents\n"
+    tomlcontents="$tomlcontents\n[polycorder_config]"
     tomlcontents="$tomlcontents\nauth_key = '$authkey'"
 
     if [ "$nodeid" != "" ]; then
@@ -94,6 +98,7 @@ create_polytect_conf() {
     echo
         echo "Not assigning events to any nodeid."
     fi
+    tomlcontents="$tomlcontents\n"
 
     echo "Final configuration file contents are:\n$tomlcontents"
     echo $tomlcontents > $tomldir/$tomlfile
