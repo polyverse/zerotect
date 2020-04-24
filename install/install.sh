@@ -74,7 +74,7 @@ call_script() {
         type curl 2>&1 1>/dev/null
         if [ "$?" = "0" ]; then
             echo "Using curl to download $script_name (and execute it)..."
-            curl -L "$remote_location" | sh -s "$@"
+            curl -s -L "$remote_location" | sh -s "$@"
             return $?
         else
             echo "Neither curl nor wget found on the system. Unable to pull remote script: $remote_location"

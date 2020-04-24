@@ -60,12 +60,12 @@ download_latest_polytect() {
     type wget 2>&1 1>/dev/null
     if [ "$?" = "0" ]; then
         echo "Using wget to download polytect..."
-        wget -O "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+        wget -q -O "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
     else
         type curl 2>&1 1>/dev/null
         if [ "$?" = "0" ]; then
             echo "Using curl to download polytect..."
-            curl -L -o "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+            curl -s -L -o "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
         else
             echo "Neither curl nor wget found on the system. Unable to download polytect binary."
             exit 1

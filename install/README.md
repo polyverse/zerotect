@@ -29,13 +29,13 @@ A triaging install script located at the root, can find the specific init system
 To install polytect:
 
 ```.bash
-curl -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s <polycorder auth key> [optional nodeid]
+curl -s -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s <polycorder auth key> [optional nodeid]
 ```
 
 To uninstall polytect:
 
 ```.bash
-curl -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s uninstall
+curl -s -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s uninstall
 ```
 
 ### systemd

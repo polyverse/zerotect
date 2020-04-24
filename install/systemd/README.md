@@ -5,11 +5,11 @@ NOTE: If you don't like curl-pipe-bash, please read the detailed [installation d
 To install polytect on systemd, run:
 
 ```.bash
-curl -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s <polycorder auth key> [optional nodeid]
+curl -s -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s <polycorder auth key> [optional nodeid]
 ```
 
 To uninstall polytect:
 
 ```.bash
-curl -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s uninstall
+curl -s -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s uninstall
 ```
