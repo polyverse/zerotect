@@ -47,6 +47,18 @@ call_script() {
     echo "Delegating to script $script_name based on detected init system."
     echo "Looking for $script_name in current directory (if you downloaded the entire Github release)"
     if [ -f "./$script_name" ]; then
+        if [ ! -x "./$script_name" ]; then
+            echo ""
+            echo "The script $script_name exists locally, but is not marked executable."
+            echo "You may either run it yourself, or must mark it executable if you wish"
+            echo "this triage script to call it for you."
+            echo ""
+            echo "You can do this by running:"
+            echo "sudo chmod a+x $script_name"
+            echo ""
+            return 1
+        fi
+
         ./$script_name "$@"
         return $?
     fi
