@@ -1,6 +1,9 @@
 #!/bin/sh
 # Copyright (c) 2019 Polyverse Corporation
 
+# Make sure \n's expand into newlines (Looking at you Fedora!)
+shopt -s xpg_echo
+
 remote_scripts_location="https://github.com/polyverse/polytect/releases/latest/download"
 
 print_usage() {

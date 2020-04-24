@@ -1,6 +1,9 @@
 #!/bin/sh
 # Copyright (c) 2019 Polyverse Corporation
 
+# Make sure \n's expand into newlines (Looking at you Fedora!)
+shopt -s xpg_echo
+
 polytect_binary="polytect"
 polytect_remote_location="https://github.com/polyverse/polytect/releases/latest/download"
 polytect_local_location="/usr/local/bin"
