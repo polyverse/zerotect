@@ -6,6 +6,7 @@ This describes how polytect can be obtained (securely) and configured so you can
 
 * ["Trust Me" Quickstarts](#trust-me-quickstarts)
   * [systemd](#systemd)
+  * [OpenRC]($openrc)
 * [First-Principles Install](#first-principles-install)
   * [Obtain the polytect binary](#obtain-the-polytect-binary)
     * [Download](#download)
@@ -23,9 +24,27 @@ Everything described in this document is encapsulated in scripted recipes for va
 
 As the scripts follow the curl pipe-to bash pattern, the rest of this document details how you can develop your own automation to deploy polytect, depending on your level of trust (which may be zero trust).
 
+A triaging install script located at the root, can find the specific init system and call the specific script for you. This is particularly useful when you need a uniform command to run across a variety of host types.
+
+To install polytect:
+
+```.bash
+curl -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s <polycorder auth key> [optional nodeid]
+```
+
+To uninstall polytect:
+
+```.bash
+curl -L https://github.com/polyverse/polytect/releases/latest/download/install.sh | sh -s uninstall
+```
+
 ### systemd
 
 All systems running [systemd](https://systemd.io/) can use the [systemd quickstart](./systemd/README.md).
+
+### OpenRC
+
+Coming soon (for Alpine)
 
 ## First-Principles Install
 

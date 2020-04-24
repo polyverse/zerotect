@@ -8,7 +8,7 @@ To install polytect on systemd, run:
 curl -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s <polycorder auth key> [optional nodeid]
 ```
 
-To uninstall polutect:
+To uninstall polytect:
 
 ```.bash
 curl -L https://github.com/polyverse/polytect/releases/latest/download/systemd-install.sh | sh -s uninstall
