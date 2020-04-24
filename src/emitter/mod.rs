@@ -45,7 +45,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), Em
         emitters.push(Box::new(console::new(cc)));
     }
     if let Some(tc) = ec.polycorder_config {
-        eprintln!("Emitter: Initialized Tricorder emitter. Expect messages to be phoned home to the Polyverse tricorder service.");
+        eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
         emitters.push(Box::new(polycorder::new(tc)?));
     }
 
