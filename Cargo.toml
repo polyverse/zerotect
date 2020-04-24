@@ -19,10 +19,9 @@ num-derive = "0.3.0"
 timeout-iterator = "0.3.0"
 serde = { version = "1.0.106", features = ["derive"] }
 serde_json = { version = "1.0.51", features = ["arbitrary_precision"]}
-reqwest = { version = "0.10.4", features = ["json"] }
+reqwest = { version = "0.10.4", features = ["json", "blocking"] }
 chrono = { version = "0.4", features = ["serde"] }
 schemars = { version = "0.7.1", features = ["chrono"]}
-futures = "0.3.4"
 pretty_assertions = "0.6.1"
 toml = "0.5.6"
 rand = "0.7.3"

@@ -12,11 +12,6 @@ use crate::emitter;
 use crate::events;
 use crate::params;
 
-// `block_on` blocks the current thread until the provided future has run to
-// completion. Other executors provide more complex behavior, like scheduling
-// multiple futures onto the same thread.
-use futures::executor::block_on;
-
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 
 pub struct Polycorder {
@@ -58,7 +53,7 @@ pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderErr
 
     thread::Builder::new().name("Emit to Polycorder Thread".to_owned()).spawn(move || {
         eprintln!("Emitter to Polycorder initialized.");
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
 
         // This live-tests the built-in URL early.
         if let Err(e) = reqwest::Url::parse(POLYCORDER_PUBLISH_ENDPOINT) {
@@ -93,27 +88,33 @@ pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderErr
                     events: &events,
                 };
 
-                let res = block_on(
-                    client
-                        .post(POLYCORDER_PUBLISH_ENDPOINT)
-                        .bearer_auth(&config.auth_key)
-                        .json(&report)
-                        .send(),
-                );
-
-                match res {
-                    Ok(r) => eprintln!(
-                        "Published {} events. Response from Polycorder: {:?}",
-                        events.len(),
-                        r
-                    ),
+                let response_result = client
+                    .post(POLYCORDER_PUBLISH_ENDPOINT)
+                    .bearer_auth(&config.auth_key)
+                    .json(&report)
+                    .send();
+                match response_result {
+                    Ok(response) => match response.status().is_success() {
+                        true => {
+                            eprintln!(
+                                "Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
+                                events.len(),
+                                response
+                            );
+                            events.clear();
+                        },
+                        false => {
+                            eprintln!(
+                                "Unable to publish events. Keeping them in the buffer for next attempt. Response from Polycorder: {:?}",
+                                response
+                            );
+                        }
+                    },
                     Err(e) => eprintln!(
-                        "Polycorder: error publishing event to service {}: {}",
+                        "Polycorder: error making POST request to Polycorder service {}: {}",
                         POLYCORDER_PUBLISH_ENDPOINT, e
                     ),
                 }
-
-                events.clear();
             }
         }
     })?;
