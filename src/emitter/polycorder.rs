@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use http::StatusCode;
 use reqwest;
 use serde::Serialize;
 use std::convert::From;
@@ -94,18 +95,37 @@ pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderErr
                     .json(&report)
                     .send();
                 match response_result {
-                    Ok(response) => match response.status().is_success() {
-                        true => {
+                    Ok(response) => {
+                        let status = response.status();
+                        // explain common statuses a bit more...
+                        if status.is_success() {
+                            if status == StatusCode::OK {
+                                eprintln!(
+                                    "Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
+                                    events.len(),
+                                    response
+                                );
+                            } else {
+                                eprintln!("The HTTP request was successful, but returned a non-OK status: {}", status)
+                            }
+                            events.clear();
+                        } else if status.is_server_error() {
                             eprintln!(
-                                "Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
+                                "Unable to publish {} events due to a server-side error. Response from Polycorder: {:?}",
                                 events.len(),
                                 response
                             );
-                            events.clear();
-                        },
-                        false => {
+                        } else if status == StatusCode::UNAUTHORIZED {
                             eprintln!(
-                                "Unable to publish events. Keeping them in the buffer for next attempt. Response from Polycorder: {:?}",
+                                "Unable to publish {} events due to a failure to authenticate using the polycorder authkey {}. Response from Polycorder: {:?}",
+                                events.len(),
+                                &config.auth_key,
+                                response
+                            );
+                        } else {
+                            eprintln!(
+                                "Failed to publish {} events to Polycorder due to an unexpected error. Response from Polycorder: {:?}",
+                                events.len(),
                                 response
                             );
                         }
