@@ -1,6 +1,5 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-
 use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME};
 use clap::{App, AppSettings, Arg};
 use serde::{Deserialize, Serialize};

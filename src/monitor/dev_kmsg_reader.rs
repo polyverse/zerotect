@@ -559,6 +559,7 @@ mod test {
             3,
         )
         .unwrap();
+
         thread::spawn(move || {
             let maybe_entry = iter.next();
             assert!(maybe_entry.is_some());
@@ -570,6 +571,7 @@ mod test {
                 message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
             });
         });
+
         assert!(
             true,
             "If this compiles, DevKMsgReader is Send'able across threads."

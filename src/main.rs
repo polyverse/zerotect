@@ -44,7 +44,7 @@ fn main() {
     let env_config_copy = polytect_config.clone();
     let config_event_sink = monitor_sink.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    thread::spawn(move || {
+    let env_thread_result = thread::Builder::new().name("Environment Configuration Thread".to_owned()).spawn(move || {
         // initialize the system with config
         if let Err(e) = system::modify_environment(&env_config_copy.auto_configure) {
             eprintln!(
@@ -81,28 +81,57 @@ fn main() {
         }
     });
 
+    if let Err(e) = env_thread_result {
+        eprintln!("An error occurred spawning the thread to continually ensure configuration settings/flags: {}", e);
+        process::exit(1);
+    }
+
     let mverbosity = polytect_config.verbosity;
-    let monitor_handle = thread::spawn(move || {
-        let mc = monitor::MonitorConfig {
-            verbosity: mverbosity,
-        };
-        if let Err(e) = monitor::monitor(mc, monitor_sink) {
-            eprintln!("{}", e);
+    let monitor_thread_result = thread::Builder::new()
+        .name("Event Monitoring Thread".to_owned())
+        .spawn(move || {
+            let mc = monitor::MonitorConfig {
+                verbosity: mverbosity,
+            };
+            if let Err(e) = monitor::monitor(mc, monitor_sink) {
+                eprintln!("Error launching Monitor: {}", e);
+                process::exit(1);
+            }
+        });
+
+    let monitor_handle = match monitor_thread_result {
+        Ok(mh) => mh,
+        Err(e) => {
+            eprintln!("An error occurred spawning the monitoring thread: {}", e);
             process::exit(1);
         }
-    });
+    };
 
     let everbosity = polytect_config.verbosity;
     let console_config = polytect_config.console_config;
     let polycorder_config = polytect_config.polycorder_config;
-    let emitter_handle = thread::spawn(move || {
-        let ec = emitter::EmitterConfig {
-            verbosity: everbosity,
-            console_config,
-            polycorder_config,
-        };
-        emitter::emit(ec, emitter_source);
-    });
+
+    let emitter_thread_result = thread::Builder::new()
+        .name("Event Emitter Thread".to_owned())
+        .spawn(move || {
+            let ec = emitter::EmitterConfig {
+                verbosity: everbosity,
+                console_config,
+                polycorder_config,
+            };
+            if let Err(e) = emitter::emit(ec, emitter_source) {
+                eprintln!("Error launching Emitter: {}", e);
+                process::exit(1);
+            }
+        });
+
+    let emitter_handle = match emitter_thread_result {
+        Ok(eh) => eh,
+        Err(e) => {
+            eprintln!("An error occurred spawning the emitter thread: {}", e);
+            process::exit(1);
+        }
+    };
 
     eprintln!("Waiting indefinitely until monitor and emitter exit....");
     monitor_handle

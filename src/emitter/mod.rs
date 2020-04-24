@@ -2,9 +2,14 @@
 
 use crate::events;
 use crate::params;
+
+use std::convert::From;
+use std::error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
-pub mod console;
-pub mod polycorder;
+
+mod console;
+mod polycorder;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
@@ -17,7 +22,21 @@ pub struct EmitterConfig {
     pub polycorder_config: Option<params::PolycorderConfig>,
 }
 
-pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
+#[derive(Debug)]
+pub struct EmitterError(String);
+impl error::Error for EmitterError {}
+impl Display for EmitterError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "EmitterError: {}", self.0)
+    }
+}
+impl From<polycorder::PolycorderError> for EmitterError {
+    fn from(err: polycorder::PolycorderError) -> EmitterError {
+        EmitterError(format!("polycorder::PolycorderError: {}", err))
+    }
+}
+
+pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];
@@ -27,7 +46,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
     }
     if let Some(tc) = ec.polycorder_config {
         eprintln!("Emitter: Initialized Tricorder emitter. Expect messages to be phoned home to the Polyverse tricorder service.");
-        emitters.push(Box::new(polycorder::new(tc)));
+        emitters.push(Box::new(polycorder::new(tc)?));
     }
 
     loop {
@@ -38,8 +57,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) {
                 }
             }
             Err(e) => {
-                eprintln!("Emitter: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e);
-                return;
+                return Err(EmitterError(format!("Emitter: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e)));
             }
         }
     }

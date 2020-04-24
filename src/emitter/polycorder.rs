@@ -2,6 +2,9 @@
 
 use reqwest;
 use serde::Serialize;
+use std::convert::From;
+use std::error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 
@@ -36,10 +39,24 @@ impl emitter::Emitter for Polycorder {
     }
 }
 
-pub fn new(config: params::PolycorderConfig) -> Polycorder {
+#[derive(Debug)]
+pub struct PolycorderError(String);
+impl error::Error for PolycorderError {}
+impl Display for PolycorderError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "PolycorderError:: {}", &self.0)
+    }
+}
+impl From<std::io::Error> for PolycorderError {
+    fn from(err: std::io::Error) -> PolycorderError {
+        PolycorderError(format!("Inner std::io::Error: {}", err))
+    }
+}
+
+pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderError> {
     let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
 
-    thread::spawn(move || {
+    thread::Builder::new().name("Emit to Polycorder Thread".to_owned()).spawn(move || {
         eprintln!("Emitter to Polycorder initialized.");
         let client = reqwest::Client::new();
 
@@ -99,7 +116,7 @@ pub fn new(config: params::PolycorderConfig) -> Polycorder {
                 events.clear();
             }
         }
-    });
+    })?;
 
-    Polycorder { sender }
+    Ok(Polycorder { sender })
 }
