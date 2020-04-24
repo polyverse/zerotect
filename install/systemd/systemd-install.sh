@@ -12,6 +12,7 @@ systemd_unit_dir="/etc/systemd/system"
 systemd_unit_file="polytect.service"
 
 print_usage() {
+    echo ""
     echo "Usage:"
     echo "  $0 <polycorder auth key> [node id] | uninstall"
     echo ""
@@ -150,6 +151,19 @@ uninstall() {
 
 echo "Polytect installer for systemd"
 
+# Ensuring we are root
+if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
+   echo "This script must be run as root because it needs to reliably detect the init system,"
+   echo "and be able to install the polytect service if systemd is found."
+   exit 1
+fi
+
+is_systemd
+if [ "$?" != "0" ]; then
+    echo "This script only works on systems inited by systemd (https://systemd.io)."
+    exit 1
+fi
+
 #Validating parameters
 if [ "$#" -lt 1 ]; then
     echo "Please specify at least one argument (the polycorder auth key)"
@@ -176,18 +190,6 @@ fi
 authkey="$1"
 nodeid="$2"
 
-# Ensuring we are root
-if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
-   echo "This script must be run as root because it needs to reliably detect the init system,"
-   echo "and be able to install the polytect service if systemd is found."
-   exit 1
-fi
-
-is_systemd
-if [ "$?" != "0" ]; then
-    echo "This script only works on systems inited by systemd (https://systemd.io)."
-    exit 1
-fi
 
 download_latest_polytect
 
