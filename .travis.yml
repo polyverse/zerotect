@@ -11,12 +11,16 @@ script:
 deploy:
 # Be sure to add a GITHUB_TOKEN environment variable in this job's config
 # which the "Public Repos" permission, to enable pushing releases.
-  provider: releases
-  file:
-    - "target/x86_64-unknown-linux-musl/release/polytect"
-    - "install/systemd/systemd-install.sh"
-    - "install/install.sh"
-  skip_cleanup: true
-  on:
-    tags: true
-  edge: true
+  - provider: releases
+    file:
+      - "target/x86_64-unknown-linux-musl/release/polytect"
+      - "install/systemd/systemd-install.sh"
+      - "install/install.sh"
+    skip_cleanup: true
+    on:
+      tags: true
+    edge: true
+  - provider: script
+    script: bash scripts/docker-deploy.sh $TRAVIS_TAG
+    on:
+      tags: true
