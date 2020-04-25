@@ -73,8 +73,7 @@ As part of the polytect build process, container images are also build and publi
 
 These are particularly useful for running as Sidecars (in Pods/Tasks) or DaemonSets (once-per-host).
 
-More information on this usage is found in the [In the Cloud-Native World, use DaemonSets and Sidecars
-](#in-the-cloud-native-world-use-daemonsets-and-sidecars) section.
+More information on this usage is found [In the Cloud-Native World](#in-the-cloud-native-world) section.
 
 #### Compile from source
 
