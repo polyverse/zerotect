@@ -8,8 +8,8 @@ polytect_local_location="/usr/local/bin"
 tomldir="/etc/polytect"
 tomlfile="polytect.toml"
 
-systemd_unit_dir="/etc/systemd/system"
-systemd_unit_file="polytect.service"
+openrc_init_dir="/etc/init.d"
+openrc_init_file="polytect"
 
 print_usage() {
     printf "\n"
@@ -23,26 +23,25 @@ print_usage() {
     printf "uninstall             : When used as the single argument, removes polytect from this system.\n"
 }
 
-is_systemd() {
-    printf "Checking whether this host was inited by systemd...\n"
-    printf "Checking if /proc/1/comm is systemd (a reliable way)\n"
-    proc1=$(cat /proc/1/comm)
-    if [ "$proc1" = "systemd" ]; then
-        printf "It is systemd\n"
+is_openrc() {
+    printf "Checking whether this host was inited by OpenRC...\n"
+    printf "Checking if /run/openrc/softlevel is exists and is readable (a reliable way)...\n"
+    if [ -r /run/openrc/softlevel ]; then
+        printf "It is OpenRC\n"
     else
-        printf "It is $proc1 (not systemd)\n"
+        printf "Not inited by OpenRC (file /run/openrc/softlevel doesn't exist or is not readable)\n"
         printf "No other methods for detection currently supported.\n"
         printf "\n"
-        printf "If you believe you are running systemd, but this script is mistaken, please\n"
+        printf "If you believe you are running OpenRC, but this script is mistaken, please\n"
         printf "contact us at support@polyverse.com to bring it to our notice.\n"
         printf "\n"
         return 1
     fi
 
-    printf "Ensuring systemd unit file directory ($systemd_unit_dir) exists...\n"
-    if [ ! -d "$systemd_unit_dir" ]; then
-        printf "The directory $systemd_unit_dir is required to configure the polytect service.\n"
-        printf "This script does not support any non-standard configurations and behaviors of systemd.\n"
+    printf "Ensuring OpenRC init file directory ($openrc_init_dir) exists...\n"
+    if [ ! -d "$openrc_init_dir" ]; then
+        printf "The directory $openrc_init_dir is required to configure the polytect service.\n"
+        printf "This script does not support any non-standard configurations and behaviors of OpenRC.\n"
         return 1
     fi
 
@@ -107,39 +106,47 @@ create_polytect_conf() {
     chmod 644 $tomldir/$tomlfile
 }
 
-create_systemd_unit_file() {
+create_openrc_init_file() {
+    ## See: https://github.com/OpenRC/openrc/blob/master/service-script-guide.md
     ## Trailing newlines are removed: https://unix.stackexchange.com/questions/446992/when-printing-a-variable-that-contains-newlines-why-is-the-last-newline-strippe
-    systemd_unit=$(printf "[Unit]")
-    systemd_unit=$(printf "${systemd_unit}\nDescription=The polyverse monitoring agent for monitoring zero-day attack attempts")
-    systemd_unit=$(printf "${systemd_unit}\nRequires=network-online.target")
-    systemd_unit=$(printf "${systemd_unit}\nAfter=network-online.target")
-    systemd_unit=$(printf "${systemd_unit}\n ")
-    systemd_unit=$(printf "${systemd_unit}\n[Service]")
-    systemd_unit=$(printf "${systemd_unit}\nExecStart=$polytect_local_location/$polytect_binary --configfile $tomldir/$tomlfile")
-    systemd_unit=$(printf "${systemd_unit}\n ")
-    systemd_unit=$(printf "${systemd_unit}\n[Install]")
-    systemd_unit=$(printf "${systemd_unit}\nWantedBy=multi-user.target")
-    systemd_unit=$(printf "${systemd_unit}\nWantedBy=graphical.target")
-    systemd_unit=$(printf "${systemd_unit}\n ")
+    openrc_init=$(printf "#!/sbin/openrc-run")
+    openrc_init=$(printf "${openrc_init}\n ")
+    openrc_init=$(printf "${openrc_init}\ncommand=\"$polytect_local_location/$polytect_binary\"")
+    openrc_init=$(printf "${openrc_init}\ncommand_args=\"--configfile=$tomldir/$tomlfile\"")
+    # But what if the daemon isn't so well behaved? What if it doesn't know how to background
+    # itself or create a pidfile? If it can do neither, then use,
+    openrc_init=$(printf "${openrc_init}\ncommand_background=true")
+    openrc_init=$(printf "${openrc_init}\npidfile=\"/run/$polytect_binary.pid\"")
+    openrc_init=$(printf "${openrc_init}\n ")
+    # Depend on network being up
+    openrc_init=$(printf "${openrc_init}\n ")
+    openrc_init=$(printf "${openrc_init}\ndepend() {")
+    openrc_init=$(printf "${openrc_init}\n    need net")
+    openrc_init=$(printf "${openrc_init}\n}")
+    openrc_init=$(printf "${openrc_init}\n ")
 
-    printf "Writing $systemd_unit_dir/$systemd_unit_file file with contents:\n"
-    printf "$systemd_unit\n"
+    printf "Writing $openrc_init_dir/$openrc_init_file file with contents:\n"
+    printf "$openrc_init\n"
 
-    printf "$systemd_unit" > $systemd_unit_dir/$systemd_unit_file
+    printf "$openrc_init" > $openrc_init_dir/$openrc_init_file
+
+    printf "Making polytect init file executable\n"
+    chmod a+x $openrc_init_dir/$openrc_init_file
 
     printf "Enable polytect monitor starting at bootup\n"
-    systemctl enable polytect
+    # Add to 'default' runlevel
+    rc-update add polytect default
 
     printf "Starting polytect now\n"
-    systemctl start polytect
+    rc-service polytect start
 }
 
 uninstall() {
-    if [ -f "$systemd_unit_dir/$systemd_unit_file" ]; then
-        printf "Found polytect service unit: $systemd_unit_dir/$systemd_unit_file. Removing it (after stopping service).\n"
-        systemctl stop polytect
-        systemctl disable polytect
-        rm $systemd_unit_dir/$systemd_unit_file
+    if [ -f "$openrc_init_dir/$openrc_init_file" ]; then
+        printf "Found polytect init file: $openrc_init_dir/$openrc_init_file. Removing it (after stopping service).\n"
+        rc-service polytect stop
+        rc-update del polytect default
+        rm $openrc_init_dir/$openrc_init_file
     fi
 
     if [ -f "$polytect_local_location/$polytect_binary" ]; then
@@ -155,18 +162,18 @@ uninstall() {
     fi
 }
 
-printf "Polytect installer for systemd\n"
+printf "Polytect installer for OpenRC\n"
 
 # Ensuring we are root
 if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
    printf "This script must be run as root because it needs to reliably detect the init system,\n"
-   printf "and be able to install the polytect service if systemd is found.\n"
+   printf "and be able to install the polytect service if OpenRC is found.\n"
    exit 1
 fi
 
-is_systemd
+is_openrc
 if [ "$?" != "0" ]; then
-    printf "This script only works on systems inited by systemd (https://systemd.io).\n"
+    printf "This script only works on systems inited by OpenRC (https://wiki.gentoo.org/wiki/Project:OpenRC).\n"
     exit 1
 fi
 
@@ -196,11 +203,10 @@ fi
 authkey="$1"
 nodeid="$2"
 
-
 download_latest_polytect
 
 create_polytect_conf "$authkey" "$nodeid"
 
-create_systemd_unit_file
+create_openrc_init_file
 
 printf "Polytect successfully installed and running in the background.\n"
