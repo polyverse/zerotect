@@ -18,14 +18,6 @@ print_usage() {
 }
 
 is_systemd() {
-    systemd_unit_dir="/etc/systemd/system"
-    echo "Checking if systemd unit file directory exists..."
-    if [ ! -d "$systemd_unit_dir" ]; then
-        echo "The directory $systemd_unit_dir is required to configure the polytect service."
-        echo "This script does not support any non-standard configurations and behaviors of systemd."
-        exit 1
-    fi
-
     echo "Checking whether this host was inited by systemd..."
     echo "Checking if /proc/1/comm is systemd (a reliable way)"
     proc1=$(cat /proc/1/comm)

@@ -17,7 +17,7 @@ fi
 echo "$GITHUB_TOKEN" | docker login docker.pkg.github.com -u $GITHUB_USER --password-stdin
 
 # Build the image
-docker build -t docker.pkg.github.com/polyverse/polytect/polytect:$1
+docker build -t docker.pkg.github.com/polyverse/polytect/polytect:$1 .
 
 # Also alias it to :latest
 docker tag docker.pkg.github.com/polyverse/polytect/polytect:$1 docker.pkg.github.com/polyverse/polytect/polytect:latest
