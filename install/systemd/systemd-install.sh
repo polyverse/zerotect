@@ -118,6 +118,10 @@ create_systemd_unit_file() {
     systemd_unit="$systemd_unit\n[Service]"
     systemd_unit="$systemd_unit\nExecStart=/usr/local/bin/polytect --configfile $tomldir/$tomlfile"
     systemd_unit="$systemd_unit\n"
+    systemd_unit="$systemd_unit\n[Install]"
+    systemd_unit="$systemd_unit\nWantedBy=multi-user.target"
+    systemd_unit="$systemd_unit\nWantedBy=graphical.target"
+    systemd_unit="$systemd_unit\n"
 
     echo "Writing $systemd_unit_dir/$systemd_unit_file file with contents:"
     echo "$systemd_unit"
