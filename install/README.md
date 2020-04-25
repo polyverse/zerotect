@@ -20,7 +20,7 @@ This describes how polytect can be obtained (securely) and configured so you can
       * [As a background process](#as-a-background-process)
     * [In the Cloud-Native World](#in-the-cloud-native-world)
       * [1. DaemonSets](#1-daemonsets)
-      * [2. Sidecars](#2-sidecar)
+      * [2. Sidecars](#2-sidecars)
   * [Configure with a TOML file](#configure-with-a-toml-file)
 
 ## "Trust Me" Quickstarts
