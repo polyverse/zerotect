@@ -46,7 +46,15 @@ impl From<timeout_iterator::TimeoutIteratorError> for KMsgParserError {
 impl From<system::SystemStartTimeReadError> for KMsgParserError {
     fn from(err: system::SystemStartTimeReadError) -> KMsgParserError {
         KMsgParserError(format!(
-            "inner tsystem::SystemStartTimeReadError:: {}",
+            "inner system::SystemStartTimeReadError:: {}",
+            err
+        ))
+    }
+}
+impl From<std::io::Error> for KMsgParserError {
+    fn from(err: std::io::Error) -> KMsgParserError {
+        KMsgParserError(format!(
+            "inner std::io::Error:: {}",
             err
         ))
     }
@@ -98,6 +106,8 @@ impl DevKMsgReader {
                 )))
             }
         };
+
+        eprintln!("Metadata for file {}: {:?}", DEV_KMSG_LOCATION, dev_kmsg_file.metadata()?);
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
         let kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead + Send>).lines();
