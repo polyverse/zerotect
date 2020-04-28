@@ -136,11 +136,11 @@ create_upstart_job_file() {
 }
 
 uninstall() {
-    if [ -f "$systemd_unit_dir/$systemd_unit_file" ]; then
-        printf "Found polytect service unit: $systemd_unit_dir/$systemd_unit_file. Removing it (after stopping service).\n"
-        systemctl stop polytect
-        systemctl disable polytect
-        rm $systemd_unit_dir/$systemd_unit_file
+    if [ -f "$upstart_job_dir/$upstart_job_file" ]; then
+        printf "Found polytect job file: $upstart_job_dir/$upstart_job_file. Removing it (after stopping service).\n"
+        initctl stop polytect
+        rm $upstart_job_dir/$upstart_job_file
+        initctl reload-configuration
     fi
 
     if [ -f "$polytect_local_location/$polytect_binary" ]; then
