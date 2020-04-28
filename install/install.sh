@@ -44,12 +44,16 @@ is_openrc() {
 is_upstart() {
     printf "Checking whether this host was inited by upstart...\n"
     printf "Checking if /sbin/init version tells us it's upstart...\n"
-    if [ `/sbin/init --version` =~ upstart ]; then
-        printf "It is upstart\n"
-    else
-        printf "Not inited by Upstart (file '/sbin/init --version' didn't report upstart)\n"
-        return 1
-    fi
+    initver=$(/sbin/init --version 2>&1)
+    case "$initver" in
+        *upstart*)
+            printf "It is upstart\n"
+        ;;
+        *)
+            printf "Not inited by Upstart (file '/sbin/init --version' didn't report upstart)\n"
+            return 1
+        ;;
+    esac
 
     return 0
 }
