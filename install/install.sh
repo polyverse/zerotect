@@ -22,11 +22,6 @@ is_systemd() {
         printf "It is systemd\n"
     else
         printf "It is $proc1 (not systemd)\n"
-        printf "No other methods for detection currently supported.\n"
-        printf "\n"
-        printf "If you believe you are running systemd, but this script is mistaken, please\n"
-        printf "contact us at support@polyverse.com to bring it to our notice.\n"
-        printf "\n"
         return 1
     fi
 
@@ -40,16 +35,25 @@ is_openrc() {
         printf "It is OpenRC\n"
     else
         printf "Not inited by OpenRC (file /run/openrc/softlevel doesn't exist or is not readable)\n"
-        printf "No other methods for detection currently supported.\n"
-        printf "\n"
-        printf "If you believe you are running OpenRC, but this script is mistaken, please\n"
-        printf "contact us at support@polyverse.com to bring it to our notice.\n"
-        printf "\n"
         return 1
     fi
 
     return 0
 }
+
+is_upstart() {
+    printf "Checking whether this host was inited by upstart...\n"
+    printf "Checking if /sbin/init version tells us it's upstart...\n"
+    if [ `/sbin/init --version` =~ upstart ]; then
+        printf "It is upstart\n"
+    else
+        printf "Not inited by Upstart (file '/sbin/init --version' didn't report upstart)\n"
+        return 1
+    fi
+
+    return 0
+}
+
 
 call_script() {
     script_name="$1"
@@ -123,6 +127,14 @@ if [ "$?" = "0" ]; then
     printf "Detect init system: OpenRC (https://wiki.gentoo.org/wiki/Project:OpenRC).\n"
     printf "Sending this to the OpenRC script...\n"
     call_script "openrc-install.sh" "$@"
+    exit $?
+fi
+
+is_upstart
+if [ "$?" = "0" ]; then
+    printf "Detect init system: upstart (http://upstart.ubuntu.com/).\n"
+    printf "Sending this to the upstart script...\n"
+    call_script "upstart-install.sh" "$@"
     exit $?
 fi
 

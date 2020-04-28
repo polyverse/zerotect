@@ -2,15 +2,12 @@
 
 use crate::events;
 use crate::monitor::kmsg;
-use crate::system;
 
-use chrono::{DateTime, Utc};
 use num::FromPrimitive;
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -22,14 +19,6 @@ impl Error for EventParserError {}
 impl Display for EventParserError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "EventParserError:: {}", &self.0)
-    }
-}
-impl From<system::SystemStartTimeReadError> for EventParserError {
-    fn from(err: system::SystemStartTimeReadError) -> EventParserError {
-        EventParserError(format!(
-            "Unable to read system start time. Inner system::SystemStartTimeReadError :: {}",
-            err
-        ))
     }
 }
 impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
@@ -44,7 +33,6 @@ impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
 pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
     verbosity: u8,
-    system_start_time: DateTime<Utc>,
 }
 
 impl EventParser {
@@ -57,24 +45,6 @@ impl EventParser {
         Ok(EventParser {
             timeout_kmsg_iter,
             verbosity,
-            system_start_time: system::system_start_time()?,
-        })
-    }
-
-    // Ignore deadcode warnings. This is used by test, and #[test] cannot be applied
-    // to associated functions.
-    #[allow(dead_code)]
-    pub fn from_kmsg_iterator_and_system_start_time(
-        kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
-        verbosity: u8,
-        system_start_time: DateTime<Utc>,
-    ) -> Result<EventParser, EventParserError> {
-        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity)?;
-
-        Ok(EventParser {
-            timeout_kmsg_iter,
-            verbosity,
-            system_start_time,
         })
     }
 
@@ -98,7 +68,7 @@ impl EventParser {
         }
 
         Err(EventParserError(
-            "Exited dmesg iterator unexpectedly.".to_owned(),
+            "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
         ))
     }
 
@@ -197,7 +167,7 @@ impl EventParser {
                 }
                 return Some(events::Event {
                     version: events::Version::V1,
-                    timestamp: self.system_start_time.add(km.duration_from_system_start),
+                    timestamp: km.timestamp,
                     platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
@@ -262,7 +232,7 @@ impl EventParser {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Event {
                         version: events::Version::V1,
-                        timestamp: self.system_start_time.add(km.duration_from_system_start),
+                        timestamp: km.timestamp,
                         platform: events::Platform::Linux(events::LinuxPlatform {
                             facility: km.facility.clone(),
                             level: km.level.clone(),
@@ -468,7 +438,7 @@ impl EventParser {
 
                 return Some(events::Event {
                     version: events::Version::V1,
-                    timestamp: self.system_start_time.add(km.duration_from_system_start),
+                    timestamp: km.timestamp,
                     platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
@@ -538,11 +508,11 @@ impl Iterator for EventParser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::offset::TimeZone;
-    use chrono::Duration as ChronoDuration;
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
     use std::thread;
+    use chrono::{Utc, TimeZone};
+
 
     macro_rules! map(
     { $($key:expr => $value:expr),+ } => {
@@ -559,32 +529,31 @@ mod test {
     #[test]
     fn can_parse_kernel_trap_segfault() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(5233635);
-
+        let timestamp = Utc.timestamp_millis(378084605);
         let kmsgs = vec![
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372850970000),
+                timestamp,
                 message: String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372856970000),
+                timestamp,
                 message: String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372852970000),
+                timestamp,
                 message: String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
             },
         ];
 
         let event1 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -611,7 +580,7 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372856970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -638,7 +607,7 @@ mod test {
 
         let event3 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372852970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -663,10 +632,9 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
 
@@ -728,7 +696,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "timestamp": "1970-01-05T09:01:30.605Z",
+            "timestamp": "1970-01-05T09:01:24.605Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
@@ -766,7 +734,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "timestamp": "1970-01-05T09:01:26.605Z",
+            "timestamp": "1970-01-05T09:01:24.605Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
@@ -804,26 +772,26 @@ mod test {
     #[test]
     fn can_parse_kernel_trap_invalid_opcode() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(5233345875);
+        let timestamp = Utc.timestamp_millis(5606197845);
 
         let kmsgs = vec![
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372851970000),
+                timestamp,
                 message: String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372855970000),
+                timestamp,
                 message: String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
             },
         ];
 
         let event1 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -850,7 +818,7 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -875,10 +843,9 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
 
@@ -933,7 +900,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "timestamp": "1970-03-06T21:16:41.845Z",
+            "timestamp": "1970-03-06T21:16:37.845Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
@@ -969,26 +936,26 @@ mod test {
     #[test]
     fn can_parse_kernel_trap_generic() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(98952353);
+        let timestamp = Utc.timestamp_millis(471804323);
 
         let kmsgs = vec![
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372851970000),
+                timestamp,
                 message: String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372855970000),
+                timestamp,
                 message: String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
             },
         ];
 
         let event1 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372851970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -1015,7 +982,7 @@ mod test {
 
         let event2 = events::Event {
             version: events::Version::V1,
-            timestamp: system_start_time.add(ChronoDuration::microseconds(372855970000)),
+            timestamp,
             platform: events::Platform::Linux(events::LinuxPlatform {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -1040,10 +1007,9 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
 
@@ -1100,7 +1066,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
             "version": "V1",
-            "timestamp": "1970-01-06T11:03:28.323Z",
+            "timestamp": "1970-01-06T11:03:24.323Z",
             "platform": {
                 "Linux": {
                     "facility": "Kern",
@@ -1138,19 +1104,18 @@ mod test {
     #[test]
     fn can_parse_fatal_signal_optional_dump() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(3236754);
+        let timestamp = Utc.timestamp_millis(376087724);
 
         let kmsgs = vec![kmsg::KMsg {
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
-            duration_from_system_start: ChronoDuration::microseconds(372850970000),
+            timestamp,
             message: String::from("potentially unexpected fatal signal 11."),
         }];
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
         let sig11 = parser.next();
@@ -1159,7 +1124,7 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
+                timestamp,
                 platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
@@ -1175,19 +1140,18 @@ mod test {
     #[test]
     fn can_parse_fatal_signal_11() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(6433742);
 
         let kmsgs = vec![
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372858970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 message: String::from("potentially unexpected fatal signal 11."),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372852970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372852970),
                 message: String::from(
                     "CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1",
                 ),
@@ -1195,31 +1159,31 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372855970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372855970),
                 message: String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372850970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372850970),
                 message: String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372858970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 message: String::from("RIP: 0033:0x561bc8d8f12e"),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372851970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372851970),
                 message: String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372856970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372856970),
                 message: String::from(
                     "RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718",
                 ),
@@ -1227,7 +1191,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372857970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372857970),
                 message: String::from(
                     "RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001",
                 ),
@@ -1235,7 +1199,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372855970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372855970),
                 message: String::from(
                     "RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80",
                 ),
@@ -1243,7 +1207,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372852970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372852970),
                 message: String::from(
                     "R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040",
                 ),
@@ -1251,7 +1215,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372850970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372850970),
                 message: String::from(
                     "R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000",
                 ),
@@ -1259,7 +1223,7 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372856970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372856970),
                 message: String::from(
                     "FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
                 ),
@@ -1267,23 +1231,22 @@ mod test {
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372853970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372853970),
                 message: String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
             },
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372854970000),
+                timestamp: Utc.timestamp_millis(6433742 + 372854970),
                 message: String::from(
                     "CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0",
                 ),
             },
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
         let sig11 = parser.next();
@@ -1292,7 +1255,7 @@ mod test {
             sig11.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                timestamp: system_start_time.add(ChronoDuration::microseconds(372858970000)),
+                timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
@@ -1315,22 +1278,19 @@ mod test {
 
     #[test]
     fn is_sendable() {
-        //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(57533475);
-
+        let timestamp = Utc.timestamp_millis(57533475 + 372850970);
         let kmsgs = vec![
             kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                duration_from_system_start: ChronoDuration::microseconds(372850970000),
+                timestamp,
                 message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
             },
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
 
@@ -1342,7 +1302,7 @@ mod test {
                 segfault,
                 events::Event {
                     version: events::Version::V1,
-                    timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
+                    timestamp,
                     platform: events::Platform::Linux(events::LinuxPlatform {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
@@ -1378,19 +1338,18 @@ mod test {
     #[test]
     fn can_parse_suppressed_callback() {
         //initialize a random system start time
-        let system_start_time = Utc.timestamp_millis(803835);
+        let timestamp = Utc.timestamp_millis(803835 + 372850970);
 
         let kmsgs = vec![kmsg::KMsg {
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
-            duration_from_system_start: ChronoDuration::microseconds(372850970000),
+            timestamp,
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
         }];
 
-        let mut parser = EventParser::from_kmsg_iterator_and_system_start_time(
+        let mut parser = EventParser::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             0,
-            system_start_time,
         )
         .unwrap();
         let suppressed_callback = parser.next();
@@ -1399,7 +1358,7 @@ mod test {
             suppressed_callback.unwrap(),
             events::Event {
                 version: events::Version::V1,
-                timestamp: system_start_time.add(ChronoDuration::microseconds(372850970000)),
+                timestamp,
                 platform: events::Platform::Linux(events::LinuxPlatform {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,

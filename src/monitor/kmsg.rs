@@ -1,11 +1,11 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use crate::events;
-use chrono::Duration as ChronoDuration;
+use chrono::{DateTime, Utc};
 
 #[derive(PartialEq, Debug)]
 pub struct KMsg {
-    pub duration_from_system_start: ChronoDuration,
+    pub timestamp: DateTime<Utc>,
     pub facility: events::LogFacility,
     pub level: events::LogLevel,
     pub message: String,

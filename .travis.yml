@@ -17,6 +17,7 @@ deploy:
       - "install/install.sh"
       - "install/systemd/systemd-install.sh"
       - "install/openrc/openrc-install.sh"
+      - "install/upstart/upstart-install.sh"
     skip_cleanup: true
     on:
       tags: true
