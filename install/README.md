@@ -6,7 +6,8 @@ This describes how polytect can be obtained (securely) and configured so you can
 
 * ["Trust Me" Quickstarts](#trust-me-quickstarts)
   * [systemd](#systemd)
-  * [OpenRC]($openrc)
+  * [OpenRC](#openrc)
+  * [upstart](#upstart)
 * [First-Principles Install](#first-principles-install)
   * [Obtain the polytect binary](#obtain-the-polytect-binary)
     * [Download](#download)
@@ -49,7 +50,11 @@ All systems running [systemd](https://systemd.io/) can use the [systemd quicksta
 
 ### OpenRC
 
-Coming soon (for Alpine)
+All systems, especially Alpine, running [OpenRC](https://wiki.gentoo.org/wiki/Project:OpenRC) can use the [OpenRC quickstart](./openrc/README.md).
+
+### upstart
+
+All systems, especially CentOS 6, running [upstart](http://upstart.ubuntu.com) can use the [upstart quickstart](./upstart/README.md).
 
 ## First-Principles Install
 
