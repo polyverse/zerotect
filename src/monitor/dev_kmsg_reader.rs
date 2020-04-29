@@ -5,7 +5,7 @@ use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
 use crate::system;
 use timeout_iterator::TimeoutIterator;
 
-use chrono::{DateTime, Duration as ChronoDuration, TimeZone, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use num::FromPrimitive;
 use std::fs::File;
 use std::io::prelude::*;
@@ -295,6 +295,7 @@ impl Iterator for DevKMsgReader {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::TimeZone;
     use pretty_assertions::assert_eq;
     use std::thread;
 
