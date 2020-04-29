@@ -40,7 +40,7 @@ impl EventParser {
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
         verbosity: u8,
     ) -> Result<EventParser, EventParserError> {
-        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter, verbosity)?;
+        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
 
         Ok(EventParser {
             timeout_kmsg_iter,
