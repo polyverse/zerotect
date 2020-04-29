@@ -4,12 +4,15 @@ pub mod dev_kmsg_reader;
 mod event_parser;
 mod kmsg;
 
+use crate::events;
+use crate::monitor::dev_kmsg_reader::{DevKMsgReader, DevKMsgReaderConfig};
+use crate::monitor::event_parser::{EventParser, EventParserError};
+use crate::monitor::kmsg::{KMsg, KMsgParserError};
+
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
-
-use crate::events;
 
 #[derive(Clone)]
 pub struct MonitorConfig {
@@ -24,13 +27,13 @@ impl Display for MonitorError {
         write!(f, "MonitorError:: {}", self.0)
     }
 }
-impl From<dev_kmsg_reader::KMsgParserError> for MonitorError {
-    fn from(err: dev_kmsg_reader::KMsgParserError) -> MonitorError {
+impl From<KMsgParserError> for MonitorError {
+    fn from(err: KMsgParserError) -> MonitorError {
         MonitorError(format!("Inner KMsgParserError :: {}", err))
     }
 }
-impl From<event_parser::EventParserError> for MonitorError {
-    fn from(err: event_parser::EventParserError) -> MonitorError {
+impl From<EventParserError> for MonitorError {
+    fn from(err: EventParserError) -> MonitorError {
         MonitorError(format!("Inner EventParserError :: {}", err))
     }
 }
@@ -40,17 +43,15 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
         eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
     }
 
-    let monitor_config = dev_kmsg_reader::KMsgReaderConfig {
+    let monitor_config = DevKMsgReaderConfig {
         from_sequence_number: 0,
         flush_timeout: Duration::from_secs(1),
     };
 
-    let kmsg_iterator: Box<dyn Iterator<Item = kmsg::KMsg> + Send> = Box::new(
-        dev_kmsg_reader::DevKMsgReader::with_file(monitor_config, mc.verbosity)?,
-    );
+    let kmsg_iterator: Box<dyn Iterator<Item = KMsg> + Send> =
+        Box::new(DevKMsgReader::with_file(monitor_config, mc.verbosity)?);
 
-    let event_iterator =
-        event_parser::EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity)?;
+    let event_iterator = EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity)?;
 
     // infinite iterator
     for event in event_iterator {

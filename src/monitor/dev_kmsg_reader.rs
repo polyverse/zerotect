@@ -1,92 +1,32 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use crate::events;
-use crate::monitor::kmsg;
+use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
 use crate::system;
 use timeout_iterator::TimeoutIterator;
 
-use chrono::{Duration as ChronoDuration, DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, TimeZone, Utc};
 use num::FromPrimitive;
-use std::error::Error;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
-use std::ops::Add;
-
 
 type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
 #[derive(Clone)]
-pub struct KMsgReaderConfig {
+pub struct DevKMsgReaderConfig {
     pub from_sequence_number: u64,
     pub flush_timeout: Duration,
 }
 
-#[derive(Debug)]
-pub struct KMsgParserError(String);
-impl Error for KMsgParserError {}
-impl Display for KMsgParserError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "KMsgParserError:: {}", self.0)
-    }
-}
-impl From<timeout_iterator::TimeoutIteratorError> for KMsgParserError {
-    fn from(err: timeout_iterator::TimeoutIteratorError) -> KMsgParserError {
-        KMsgParserError(format!(
-            "inner timeout_iterator::TimeoutIteratorError:: {}",
-            err
-        ))
-    }
-}
-impl From<system::SystemStartTimeReadError> for KMsgParserError {
-    fn from(err: system::SystemStartTimeReadError) -> KMsgParserError {
-        KMsgParserError(format!(
-            "inner system::SystemStartTimeReadError:: {}",
-            err
-        ))
-    }
-}
-impl From<std::io::Error> for KMsgParserError {
-    fn from(err: std::io::Error) -> KMsgParserError {
-        KMsgParserError(format!(
-            "inner std::io::Error:: {}",
-            err
-        ))
-    }
-}
-
-#[derive(Debug)]
-enum KMsgParsingError {
-    Completed,
-    SequenceNumTooOld,
-    EmptyLine,
-    Generic(String),
-}
-impl Error for KMsgParsingError {}
-impl Display for KMsgParsingError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "KMsgParsingError:: {}",
-            match self {
-                KMsgParsingError::Completed => "Completed Parsing",
-                KMsgParsingError::SequenceNumTooOld =>
-                    "sequence number too old (we've parsed newer messages than these)",
-                KMsgParsingError::EmptyLine => "Empty line",
-                KMsgParsingError::Generic(s) => s,
-            }
-        )
-    }
-}
-
 pub struct DevKMsgReader {
     verbosity: u8,
-    kmsg_line_reader: TimeoutIterator<String>,
+    kmsg_line_reader: TimeoutIterator<std::result::Result<std::string::String, std::io::Error>>,
     from_sequence_number: u64,
     flush_timeout: Duration,
     system_start_time: DateTime<Utc>,
@@ -94,46 +34,56 @@ pub struct DevKMsgReader {
 
 impl DevKMsgReader {
     pub fn with_file(
-        config: KMsgReaderConfig,
+        config: DevKMsgReaderConfig,
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
         let dev_kmsg_file = match File::open(DEV_KMSG_LOCATION) {
             Ok(f) => f,
             Err(e) => {
-                return Err(KMsgParserError(format!(
+                return Err(KMsgParserError::BadSource(format!(
                     "Unable to open file {}: {}",
                     DEV_KMSG_LOCATION, e
                 )))
             }
         };
 
-        eprintln!("Metadata for file {}: {:?}", DEV_KMSG_LOCATION, dev_kmsg_file.metadata()?);
+        eprintln!(
+            "Metadata for file {}: {:?}",
+            DEV_KMSG_LOCATION,
+            dev_kmsg_file.metadata()?
+        );
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
         let kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead + Send>).lines();
-        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter, verbosity)
+        DevKMsgReader::with_lines_iterator(
+            config,
+            kmsg_lines_iter,
+            system::system_start_time()?,
+            verbosity,
+        )
     }
 
     fn with_lines_iterator(
-        config: KMsgReaderConfig,
+        config: DevKMsgReaderConfig,
         reader: LinesIterator,
+        system_start_time: DateTime<Utc>,
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
-        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader)?;
+        let kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
 
         Ok(DevKMsgReader {
             verbosity,
             kmsg_line_reader,
             from_sequence_number: config.from_sequence_number,
             flush_timeout: config.flush_timeout,
-            system_start_time: system::system_start_time()?,
+            system_start_time,
         })
     }
 
     // Message spec: https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/dev-kmsg
     // Parses a kernel log line that looks like this:
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
-    fn parse_kmsg(&mut self) -> Result<kmsg::KMsg, KMsgParsingError> {
+    fn parse_kmsg(&mut self) -> Result<KMsg, KMsgParsingError> {
         let line_str: String = self.next_kmsg_record()?;
 
         if line_str.trim() == "" {
@@ -243,7 +193,7 @@ impl DevKMsgReader {
             }
         }
 
-        Ok(kmsg::KMsg {
+        Ok(KMsg {
             facility,
             level,
             timestamp: self.system_start_time.add(duration_from_system_start),
@@ -255,25 +205,36 @@ impl DevKMsgReader {
         // read next line
         let mut line_str = String::new();
         match self.kmsg_line_reader.next() {
-            Some(line) => {
-                line_str.push_str(line.as_str());
+            Some(maybe_line) => match maybe_line {
+                Ok(line) => {
+                    line_str.push_str(line.as_str());
 
-                // look for any supplemental lines and append them
-                loop {
-                    match self.kmsg_line_reader.peek_timeout(self.flush_timeout) {
-                        Ok(l) => {
-                            if l.starts_with(' ') {
-                                line_str.push('\n'); //Preserve newlines
-                                line_str.push_str(l);
-                                self.kmsg_line_reader.next(); //consume the next one
-                            } else {
-                                break;
-                            }
+                    // look for any supplemental lines and append them
+                    loop {
+                        match self.kmsg_line_reader.peek_timeout(self.flush_timeout) {
+                            Ok(maybe_supplemental_line) => match maybe_supplemental_line {
+                                Ok(supplemental_line) => {
+                                    if supplemental_line.starts_with(' ') {
+                                        line_str.push('\n'); //Preserve newlines
+                                        line_str.push_str(supplemental_line);
+                                        self.kmsg_line_reader.next(); //consume the next one
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
+                            },
+                            Err(_) => break,
                         }
-                        Err(_) => break,
                     }
                 }
-            }
+                Err(e) => {
+                    return Err(KMsgParsingError::Generic(format!(
+                        "Error from underlying iterator: {:?}",
+                        e
+                    )))
+                }
+            },
             None => return Err(KMsgParsingError::Completed),
         }
         Ok(line_str)
@@ -295,7 +256,7 @@ impl DevKMsgReader {
 
 impl Iterator for DevKMsgReader {
     // we will be counting with usize
-    type Item = kmsg::KMsg;
+    type Item = KMsg;
 
     // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
@@ -348,11 +309,12 @@ mod test {
         let peekable_line_iter =
             (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
         let mut iter = DevKMsgReader::with_lines_iterator(
-            KMsgReaderConfig {
+            DevKMsgReaderConfig {
                 from_sequence_number: 0,
                 flush_timeout: Duration::from_secs(1),
             },
             peekable_line_iter,
+            Utc.timestamp_millis(4624626262),
             3,
         )
         .unwrap();
@@ -360,7 +322,7 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
+        assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time,
@@ -370,7 +332,7 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
+        assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time,
@@ -382,7 +344,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -397,7 +359,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -417,11 +379,12 @@ mod test {
         let peekable_line_iter =
             (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
         let mut iter = DevKMsgReader::with_lines_iterator(
-            KMsgReaderConfig {
+            DevKMsgReaderConfig {
                 from_sequence_number: 3,
                 flush_timeout: Duration::from_secs(1),
             },
             peekable_line_iter,
+            Utc.timestamp_millis(4624626262),
             3,
         )
         .unwrap();
@@ -431,7 +394,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -451,11 +414,12 @@ mod test {
         let peekable_line_iter =
             (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
         let mut iter = DevKMsgReader::with_lines_iterator(
-            KMsgReaderConfig {
+            DevKMsgReaderConfig {
                 from_sequence_number: 0,
                 flush_timeout: Duration::from_secs(1),
             },
             peekable_line_iter,
+            Utc.timestamp_millis(4624626262),
             3,
         )
         .unwrap();
@@ -463,7 +427,7 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
+        assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time,
@@ -475,7 +439,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -497,11 +461,12 @@ mod test {
         let peekable_line_iter =
             (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
         let mut iter = DevKMsgReader::with_lines_iterator(
-            KMsgReaderConfig {
+            DevKMsgReaderConfig {
                 from_sequence_number: 0,
                 flush_timeout: Duration::from_secs(1),
             },
             peekable_line_iter,
+            Utc.timestamp_millis(4624626262),
             3,
         )
         .unwrap();
@@ -509,7 +474,7 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, kmsg::KMsg{
+        assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time,
@@ -521,7 +486,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -538,7 +503,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -553,7 +518,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            kmsg::KMsg {
+            KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,
@@ -573,11 +538,12 @@ mod test {
         let peekable_line_iter =
             (Box::new(realistic_message.as_bytes()) as Box<dyn BufRead + Send>).lines();
         let mut iter = DevKMsgReader::with_lines_iterator(
-            KMsgReaderConfig {
+            DevKMsgReaderConfig {
                 from_sequence_number: 0,
                 flush_timeout: Duration::from_secs(1),
             },
             peekable_line_iter,
+            Utc.timestamp_millis(4624626262),
             3,
         )
         .unwrap();
@@ -586,7 +552,7 @@ mod test {
             let maybe_entry = iter.next();
             assert!(maybe_entry.is_some());
             let entry = maybe_entry.unwrap();
-            assert_eq!(entry, kmsg::KMsg{
+            assert_eq!(entry, KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time,

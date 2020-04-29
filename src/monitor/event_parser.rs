@@ -508,11 +508,10 @@ impl Iterator for EventParser {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::{TimeZone, Utc};
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
     use std::thread;
-    use chrono::{Utc, TimeZone};
-
 
     macro_rules! map(
     { $($key:expr => $value:expr),+ } => {
@@ -528,7 +527,6 @@ mod test {
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
-        //initialize a random system start time
         let timestamp = Utc.timestamp_millis(378084605);
         let kmsgs = vec![
             kmsg::KMsg{
@@ -632,11 +630,7 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -771,7 +765,6 @@ mod test {
 
     #[test]
     fn can_parse_kernel_trap_invalid_opcode() {
-        //initialize a random system start time
         let timestamp = Utc.timestamp_millis(5606197845);
 
         let kmsgs = vec![
@@ -843,11 +836,7 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -935,7 +924,6 @@ mod test {
 
     #[test]
     fn can_parse_kernel_trap_generic() {
-        //initialize a random system start time
         let timestamp = Utc.timestamp_millis(471804323);
 
         let kmsgs = vec![
@@ -1007,11 +995,7 @@ mod test {
             }),
         };
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -1103,7 +1087,6 @@ mod test {
 
     #[test]
     fn can_parse_fatal_signal_optional_dump() {
-        //initialize a random system start time
         let timestamp = Utc.timestamp_millis(376087724);
 
         let kmsgs = vec![kmsg::KMsg {
@@ -1113,11 +1096,7 @@ mod test {
             message: String::from("potentially unexpected fatal signal 11."),
         }];
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
@@ -1139,8 +1118,6 @@ mod test {
 
     #[test]
     fn can_parse_fatal_signal_11() {
-        //initialize a random system start time
-
         let kmsgs = vec![
             kmsg::KMsg {
                 facility: events::LogFacility::Kern,
@@ -1244,11 +1221,7 @@ mod test {
             },
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
@@ -1288,11 +1261,7 @@ mod test {
             },
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
         thread::spawn(move || {
             let maybe_segfault = parser.next();
@@ -1337,7 +1306,6 @@ mod test {
 
     #[test]
     fn can_parse_suppressed_callback() {
-        //initialize a random system start time
         let timestamp = Utc.timestamp_millis(803835 + 372850970);
 
         let kmsgs = vec![kmsg::KMsg {
@@ -1347,11 +1315,7 @@ mod test {
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
         }];
 
-        let mut parser = EventParser::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            0,
-        )
-        .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
         assert_eq!(
