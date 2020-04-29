@@ -111,7 +111,7 @@ impl DevKMsgReader {
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
         let kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead + Send>).lines();
-        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter, verbosity)
+        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter)
     }
 
     fn with_lines_iterator(
@@ -119,7 +119,7 @@ impl DevKMsgReader {
         reader: LinesIterator,
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
-        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader, verbosity)?;
+        let kmsg_line_reader = TimeoutIterator::from_result_iterator(reader)?;
 
         Ok(DevKMsgReader {
             verbosity,
