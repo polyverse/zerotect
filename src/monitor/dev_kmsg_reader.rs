@@ -69,12 +69,17 @@ impl DevKMsgReader {
         system_start_time: DateTime<Utc>,
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
-        let kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
+        let mut kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
         if let None = kmsg_line_reader.peek() {
-            return Err(KMsgParserError::BadSource(format!("Couldn't peek a single line from source due to error: {:?}", e)))
+            return Err(KMsgParserError::BadSource(format!(
+                "Couldn't peek a single line from source. Source seems to be closed."
+            )));
         }
         if let Err(e) = kmsg_line_reader.peek().unwrap() {
-            return Err(KMsgParserError::BadSource(format!("Couldn't peek a single line from source due to error: {:?}", e)))
+            return Err(KMsgParserError::BadSource(format!(
+                "Couldn't peek a single line from source due to error: {:?}",
+                e
+            )));
         }
 
         Ok(DevKMsgReader {
