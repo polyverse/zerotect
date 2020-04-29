@@ -111,7 +111,7 @@ impl DevKMsgReader {
 
         let kmsg_file_reader = BufReader::new(dev_kmsg_file);
         let kmsg_lines_iter = (Box::new(kmsg_file_reader) as Box<dyn BufRead + Send>).lines();
-        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter)
+        DevKMsgReader::with_lines_iterator(config, kmsg_lines_iter, verbosity)
     }
 
     fn with_lines_iterator(
