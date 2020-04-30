@@ -8,7 +8,7 @@ use timeout_iterator::TimeoutIterator;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use num::FromPrimitive;
 use regex::Regex;
-use rmesg::RMesgLinesIterator;
+use rmesg::{kernel_log_timestamps_enabled, RMesgLinesIterator};
 use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
@@ -32,6 +32,15 @@ impl RMesgReader {
         config: RMesgReaderConfig,
         verbosity: u8,
     ) -> Result<RMesgReader, KMsgParserError> {
+        // ensure timestamps in logs
+        if !kernel_log_timestamps_enabled()? {
+            eprintln!("WARNING: Timestamps are disabled but tailing/following logs (as for detection) requires them.");
+            eprintln!("Events may be ignored or missed until they are enabled.");
+            eprintln!("You can enable timestamps by running the following: ");
+            eprintln!("  echo Y > /sys/module/printk/parameters/time");
+            eprintln!("Or you may tell polytect to auto-configure the flag on the command-line or config file.");
+        }
+
         let rmesg_reader = Box::new(RMesgLinesIterator::with_options(
             false,
             config.poll_interval,
