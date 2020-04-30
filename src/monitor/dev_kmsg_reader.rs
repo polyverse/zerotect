@@ -49,12 +49,6 @@ impl DevKMsgReader {
             }
         };
 
-        eprintln!(
-            "Metadata for file {}: {:?}",
-            DEV_KMSG_LOCATION,
-            dev_kmsg_file.metadata()?
-        );
-
         let kmsg_lines_iter: LinesIterator = Box::new(BufReader::new(dev_kmsg_file).lines());
         DevKMsgReader::with_lines_iterator(
             config,
@@ -71,16 +65,17 @@ impl DevKMsgReader {
         verbosity: u8,
     ) -> Result<DevKMsgReader, KMsgParserError> {
         let mut kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
-        if let None = kmsg_line_reader.peek() {
-            return Err(KMsgParserError::BadSource(format!(
+        match kmsg_line_reader.peek() {
+            None => return Err(KMsgParserError::BadSource(format!(
                 "Couldn't peek a single line from source. Source seems to be closed."
-            )));
-        }
-        if let Err(e) = kmsg_line_reader.peek().unwrap() {
-            return Err(KMsgParserError::BadSource(format!(
-                "Couldn't peek a single line from source due to error: {:?}",
-                e
-            )));
+            ))),
+            Some(l) => match l {
+                Ok(_) => {},
+                Err(e) => return Err(KMsgParserError::BadSource(format!(
+                    "Couldn't peek a single line from source due to error: {:?}",
+                    e
+                ))),
+            },
         }
 
         Ok(DevKMsgReader {
