@@ -83,7 +83,7 @@ impl RMesgReader {
             static ref RE_RMESG_WITH_TIMESTAMP: Regex = Regex::new(
                 r"(?x)^
                 [[:space:]]*<(?P<faclevstr>[[:xdigit:]]*)>
-                [[:space:]]*[\[](?P<timestampstr>[[:xdigit:]]*\.[[:xdigit:]]*)[\]]
+                [[:space:]]*[\[][[:space:]]*(?P<timestampstr>[[:xdigit:]]*\.[[:xdigit:]]*)[\]]
                 (?P<message>.*)$"
             )
             .unwrap();
@@ -302,7 +302,7 @@ mod test {
 <never closea.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]
 <6>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]
 never open>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]
-<6>[111310.986286] Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74
+<6>[  1310.986286] Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74
 <4>a.out/26692: potentially unexpected fatal signal 11.";
 
         let peekable_line_iter = LinesIterMock::from_message(realistic_message);
@@ -321,7 +321,7 @@ never open>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 
             KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
-                timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.986286)).unwrap()),
+                timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(1310.986286)).unwrap()),
                 message: String::from(" Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74"),
             }
         );
