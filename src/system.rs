@@ -16,6 +16,7 @@ use sysctl::Sysctl;
 
 pub const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
 pub const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
+pub const PRINTK_INCLUDE_TIMESTAMP_CTLNAME: &str = "/sys/module/printk/parameters/time";
 pub const PROC_UPTIME: &str = "/proc/uptime";
 
 #[derive(Debug)]

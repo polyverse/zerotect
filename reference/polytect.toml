@@ -3,6 +3,7 @@ verbosity = 0
 [auto_configure]
 exception_trace = true
 fatal_signals = true
+printk_include_timestamp = true
 
 [console_config]
 format = 'Text'
