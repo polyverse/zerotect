@@ -58,7 +58,6 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
                 eprintln!("Attempting to read directly from kernel using syscall 'klogctl' (through the rmesg crate)");
 
                 let rmesg_reader_config = RMesgReaderConfig {
-                    flush_timeout: Duration::from_secs(1),
                     poll_interval: Duration::from_secs(10),
                 };
                 Box::new(RMesgReader::with_config(rmesg_reader_config, mc.verbosity)?)
