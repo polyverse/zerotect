@@ -8,7 +8,7 @@ polytect_local_location="/usr/local/bin"
 tomldir="/etc/polytect"
 tomlfile="polytect.toml"
 
-upstart_job_dir="/etc/init/"
+upstart_job_dir="/etc/init"
 upstart_job_file="polytect.conf"
 
 print_usage() {
