@@ -163,7 +163,8 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr)?;
-    let prev_value_str = ctl.value_string()?;
+    let prev_value_raw = ctl.value_string()?;
+    let prev_value_str = prev_value_raw.trim(); // may have \n newlines
 
     if prev_value_str == valuestr {
         eprintln!("====> Already enabled, not reenabling: {}", ctlstr);
