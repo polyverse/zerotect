@@ -3,9 +3,9 @@
 use crate::events;
 use crate::system;
 use chrono::{DateTime, Utc};
+use rmesg;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use rmesg;
 
 #[derive(PartialEq, Debug)]
 pub struct KMsg {

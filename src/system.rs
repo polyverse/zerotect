@@ -16,7 +16,7 @@ use sysctl::Sysctl;
 
 pub const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
 pub const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
-pub const PRINTK_INCLUDE_TIMESTAMP_CTLNAME: &str = "/sys/module/printk/parameters/time";
+pub const KLOG_INCLUDE_TIMESTAMP: &str = "klog.include-timestamp";
 pub const PROC_UPTIME: &str = "/proc/uptime";
 
 #[derive(Debug)]
@@ -81,10 +81,14 @@ impl Display for SystemCtlError {
 }
 impl From<sysctl::SysctlError> for SystemCtlError {
     fn from(err: sysctl::SysctlError) -> SystemCtlError {
-        SystemCtlError(format!("Inner ysctl::ctl_error::SysctlError :: {}", err))
+        SystemCtlError(format!("Inner sysctl::SysctlError :: {}", err))
     }
 }
-
+impl From<rmesg::error::RMesgError> for SystemCtlError {
+    fn from(err: rmesg::error::RMesgError) -> SystemCtlError {
+        SystemCtlError(format!("Inner rmesg::error::RMesgError :: {}", err))
+    }
+}
 pub fn system_start_time() -> Result<DateTime<Utc>, SystemStartTimeReadError> {
     let system_uptime_nanos: i64 = (system_uptime_secs()? * 1000000000.0) as i64;
     Ok(Utc::now().sub(ChronoDuration::nanoseconds(system_uptime_nanos)))
@@ -134,14 +138,22 @@ pub fn modify_environment(
         }
     }
 
-    if auto_configure.printk_include_timestamp {
-        let maybe_event = ensure_systemctl(
-            PRINTK_INCLUDE_TIMESTAMP_CTLNAME,
-            bool_to_n_y_string(auto_configure.fatal_signals),
-        )?;
-        if let Some(event) = maybe_event {
-            env_events.push(event);
-        }
+    if auto_configure.klog_include_timestamp && !rmesg::kernel_log_timestamps_enabled()? {
+        rmesg::kernel_log_timestamps_enable(true)?;
+
+        env_events.push(events::Event {
+            version: events::Version::V1,
+            timestamp: Utc::now(),
+            platform: events::Platform::Linux(events::LinuxPlatform {
+                facility: events::LogFacility::Polytect,
+                level: events::LogLevel::Error,
+                event: events::LinuxEvent::ConfigMismatch(events::ConfigMisMatchInfo {
+                    key: rmesg::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
+                    expected_value: "Y".to_owned(),
+                    observed_value: "N".to_owned(),
+                }),
+            }),
+        });
     }
 
     Ok(env_events)
@@ -176,14 +188,7 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
 
 fn bool_to_0_1_string(b: bool) -> &'static str {
     match b {
-        false => "0",
-        true => "1",
-    }
-}
-
-fn bool_to_n_y_string(b: bool) -> &'static str {
-    match b {
-        false => "n",
-        true => "y",
+        false => "0\n",
+        true => "1\n",
     }
 }

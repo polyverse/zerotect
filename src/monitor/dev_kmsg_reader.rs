@@ -3,9 +3,9 @@
 use crate::events;
 use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
 use crate::system;
-use timeout_iterator::TimeoutIterator;
-use std::io::{BufRead};
 use std::boxed::Box;
+use std::io::BufRead;
+use timeout_iterator::TimeoutIterator;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use num::FromPrimitive;
@@ -319,7 +319,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter: LinesIterator = Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
+        let peekable_line_iter: LinesIterator =
+            Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
         let mut iter = DevKMsgReader::with_lines_iterator(
             DevKMsgReaderConfig {
                 from_sequence_number: 0,
@@ -388,7 +389,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter: LinesIterator = Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
+        let peekable_line_iter: LinesIterator =
+            Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
         let mut iter = DevKMsgReader::with_lines_iterator(
             DevKMsgReaderConfig {
                 from_sequence_number: 3,
@@ -422,7 +424,8 @@ mod test {
 6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter: LinesIterator = Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
+        let peekable_line_iter: LinesIterator =
+            Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
         let mut iter = DevKMsgReader::with_lines_iterator(
             DevKMsgReaderConfig {
                 from_sequence_number: 0,
@@ -468,7 +471,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter: LinesIterator = Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
+        let peekable_line_iter: LinesIterator =
+            Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
         let mut iter = DevKMsgReader::with_lines_iterator(
             DevKMsgReaderConfig {
                 from_sequence_number: 0,
@@ -544,7 +548,8 @@ mod test {
 6,2,0,-;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
 6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
-        let peekable_line_iter: LinesIterator = Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
+        let peekable_line_iter: LinesIterator =
+            Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
         let mut iter = DevKMsgReader::with_lines_iterator(
             DevKMsgReaderConfig {
                 from_sequence_number: 0,

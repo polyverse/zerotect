@@ -1,6 +1,6 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use crate::system::{EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, PRINTK_INCLUDE_TIMESTAMP_CTLNAME};
+use crate::system::{EXCEPTION_TRACE_CTLNAME, KLOG_INCLUDE_TIMESTAMP, PRINT_FATAL_SIGNALS_CTLNAME};
 use clap::{App, AppSettings, Arg};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -58,7 +58,7 @@ pub struct PolycorderConfig {
 pub struct AutoConfigure {
     pub exception_trace: bool,
     pub fatal_signals: bool,
-    pub printk_include_timestamp: bool,
+    pub klog_include_timestamp: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,7 +93,7 @@ pub struct PolytectParamOptions {
 pub struct AutoConfigureOptions {
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,
-    pub printk_include_timestamp: Option<bool>,
+    pub klog_include_timestamp: Option<bool>,
 }
 
 // A proxy-structure to deserialize into
@@ -214,7 +214,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .long(AUTO_CONFIGURE)
                             .value_name("sysctl-flag-to-auto-configure")
                             .takes_value(true)
-                            .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, PRINTK_INCLUDE_TIMESTAMP_CTLNAME])
+                            .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, KLOG_INCLUDE_TIMESTAMP])
                             .multiple(true)
                             .help(format!("Automatically configure the system on the user's behalf.").as_str()))
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
@@ -270,15 +270,15 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                 auto_conf_values.clone(),
                 PRINT_FATAL_SIGNALS_CTLNAME,
             )?,
-            printk_include_timestamp: auto_configure_flag(
+            klog_include_timestamp: auto_configure_flag(
                 auto_conf_values.clone(),
-                PRINTK_INCLUDE_TIMESTAMP_CTLNAME,
+                KLOG_INCLUDE_TIMESTAMP,
             )?,
         },
         None => AutoConfigure {
             exception_trace: false,
             fatal_signals: false,
-            printk_include_timestamp: false,
+            klog_include_timestamp: false,
         },
     };
 
@@ -351,12 +351,12 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
                 Some(ac) => AutoConfigure {
                     exception_trace: ac.exception_trace.unwrap_or(false),
                     fatal_signals: ac.fatal_signals.unwrap_or(false),
-                    printk_include_timestamp: ac.printk_include_timestamp.unwrap_or(false),
+                    klog_include_timestamp: ac.klog_include_timestamp.unwrap_or(false),
                 },
                 None => AutoConfigure{
                     exception_trace: false,
                     fatal_signals: false,
-                    printk_include_timestamp: false,
+                    klog_include_timestamp: false,
                 },
             },
             console_config: match polytect_param_options.console_config {
@@ -464,7 +464,7 @@ mod test {
             OsString::from("burner program name. Also test words aren't split"),
             OsString::from(format!("--auto-configure {}", EXCEPTION_TRACE_CTLNAME)),
             OsString::from(format!("--auto-configure {}", PRINT_FATAL_SIGNALS_CTLNAME)),
-            OsString::from(format!("--auto-configure {}", PRINTK_INCLUDE_TIMESTAMP_CTLNAME)),
+            OsString::from(format!("--auto-configure {}", KLOG_INCLUDE_TIMESTAMP)),
             OsString::from("--console text"),
             OsString::from("--polycorder authkey231241"),
         ];
@@ -602,7 +602,7 @@ mod test {
             OsString::from("--auto-configure"),
             OsString::from(PRINT_FATAL_SIGNALS_CTLNAME),
             OsString::from("--auto-configure"),
-            OsString::from(PRINTK_INCLUDE_TIMESTAMP_CTLNAME),
+            OsString::from(KLOG_INCLUDE_TIMESTAMP),
             OsString::from(EXCEPTION_TRACE_CTLNAME),
         ];
 
@@ -660,7 +660,7 @@ mod test {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
-                printk_include_timestamp: rand::thread_rng().gen_bool(0.5),
+                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
@@ -794,7 +794,7 @@ mod test {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
-                printk_include_timestamp: rand::thread_rng().gen_bool(0.5),
+                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
@@ -843,7 +843,7 @@ mod test {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
-                printk_include_timestamp: rand::thread_rng().gen_bool(0.5),
+                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
             console_config: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(ConsoleConfig {
@@ -1073,7 +1073,7 @@ mod test {
             auto_configure: AutoConfigure {
                 exception_trace: true,
                 fatal_signals: true,
-                printk_include_timestamp: true,
+                klog_include_timestamp: true,
             },
             console_config: Some(ConsoleConfig {
                 format: ConsoleOutputFormat::Text,

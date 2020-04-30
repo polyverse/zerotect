@@ -7,11 +7,11 @@ use timeout_iterator::TimeoutIterator;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use num::FromPrimitive;
+use regex::Regex;
+use rmesg::RMesgLinesIterator;
 use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
-use rmesg::{rmesg_lines_iter};
-use regex::Regex;
 
 type RMesgResult = std::result::Result<std::string::String, rmesg::error::RMesgError>;
 type LinesIterator = Box<dyn Iterator<Item = RMesgResult> + Send>;
@@ -32,13 +32,11 @@ impl RMesgReader {
         config: RMesgReaderConfig,
         verbosity: u8,
     ) -> Result<RMesgReader, KMsgParserError> {
-
-        let rmesg_reader = Box::new(rmesg_lines_iter(false, config.poll_interval)?);
-        RMesgReader::with_lines_iterator(
-            rmesg_reader,
-            system::system_start_time()?,
-            verbosity,
-        )
+        let rmesg_reader = Box::new(RMesgLinesIterator::with_options(
+            false,
+            config.poll_interval,
+        )?);
+        RMesgReader::with_lines_iterator(rmesg_reader, system::system_start_time()?, verbosity)
     }
 
     fn with_lines_iterator(
@@ -71,13 +69,15 @@ impl RMesgReader {
     // <5>a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     // OR
     // <5>[   233434.343533] a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
-    fn parse_next_rmesg(&mut self)  -> Result<KMsg, KMsgParsingError> {
+    fn parse_next_rmesg(&mut self) -> Result<KMsg, KMsgParsingError> {
         lazy_static! {
-            static ref RE_RMESG_WITH_TIMESTAMP: Regex = Regex::new(r"(?x)^
+            static ref RE_RMESG_WITH_TIMESTAMP: Regex = Regex::new(
+                r"(?x)^
                 [[:space:]]*<(?P<faclevstr>[[:xdigit:]]*)>
                 [[:space:]]*[\[](?P<timestampstr>[[:xdigit:]]*\.[[:xdigit:]]*)[\]]
-                (?P<message>.*)$").unwrap();
-
+                (?P<message>.*)$"
+            )
+            .unwrap();
         }
 
         let line_str = self.next_rmesg_record()?;
@@ -99,14 +99,25 @@ impl RMesgReader {
             };
 
             let timestamp = match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"]) {
-                    Some(timesecs) => {
-                        let duration_from_system_start = match ChronoDuration::from_std(Duration::from_secs_f64(timesecs)) {
+                Some(timesecs) => {
+                    let duration_from_system_start =
+                        match ChronoDuration::from_std(Duration::from_secs_f64(timesecs)) {
                             Ok(d) => d,
-                            Err(e) => return Err(KMsgParsingError::Generic(format!("Unable to parse {} into a time duration: {:?}", timesecs, e))),
+                            Err(e) => {
+                                return Err(KMsgParsingError::Generic(format!(
+                                    "Unable to parse {} into a time duration: {:?}",
+                                    timesecs, e
+                                )))
+                            }
                         };
-                        self.system_start_time.add(duration_from_system_start)
-                    },
-                    None => return Err(KMsgParsingError::Generic(format!("Unable to parse {} into a floating point number.", &rmesgparts["timestampstr"]))),
+                    self.system_start_time.add(duration_from_system_start)
+                }
+                None => {
+                    return Err(KMsgParsingError::Generic(format!(
+                        "Unable to parse {} into a floating point number.",
+                        &rmesgparts["timestampstr"]
+                    )))
+                }
             };
 
             let message = rmesgparts["message"].to_owned();
@@ -118,7 +129,10 @@ impl RMesgReader {
                 message,
             })
         } else {
-            Err(KMsgParsingError::Generic(format!("Invalid line: {}", &line_str)))
+            Err(KMsgParsingError::Generic(format!(
+                "Invalid line: {}",
+                &line_str
+            )))
         }
     }
 
@@ -197,7 +211,7 @@ mod test {
     use pretty_assertions::assert_eq;
 
     struct LinesIterMock {
-        lines_iter: Vec<String>
+        lines_iter: Vec<String>,
     }
     impl LinesIterMock {
         fn from_message(message: &str) -> LinesIterMock {
@@ -251,7 +265,6 @@ mod test {
         )
         .unwrap();
 
-
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
@@ -304,5 +317,4 @@ never open>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 
             }
         );
     }
-
 }
