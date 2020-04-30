@@ -171,12 +171,9 @@ impl RMesgReader {
 
     fn next_rmesg_record(&mut self) -> Result<String, KMsgParsingError> {
         // read next line
-        let mut line_str = String::new();
         match self.rmesg_line_reader.next() {
             Some(maybe_line) => match maybe_line {
-                Ok(line) => {
-                    line_str.push_str(line.as_str());
-                }
+                Ok(line) => Ok(line.to_owned()),
                 Err(e) => {
                     return Err(KMsgParsingError::Generic(format!(
                         "Error from underlying iterator: {:?}",
@@ -186,7 +183,6 @@ impl RMesgReader {
             },
             None => return Err(KMsgParsingError::Completed),
         }
-        Ok(line_str)
     }
 
     fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
