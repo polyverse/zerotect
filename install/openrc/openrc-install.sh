@@ -210,4 +210,9 @@ create_polytect_conf "$authkey" "$nodeid"
 
 create_openrc_init_file
 
-printf "Polytect successfully installed and running in the background.\n"
+pid=$(pgrep polytect)
+if [ -z "$pid" ]; then
+    printf "Polytect is not running in the background. Something went wrong.\n"
+else
+    printf "Polytect successfully installed and running in the background.\n"
+fi
