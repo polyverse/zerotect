@@ -273,7 +273,7 @@ mod test {
     fn can_parse_centos_6_entries() {
         let realistic_message = r"
 <4>Call Trace:
-<6>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]
+<25>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]
 <4>a.out/26692: potentially unexpected fatal signal 11.";
 
         let peekable_line_iter = LinesIterMock::from_message(realistic_message);
@@ -299,8 +299,8 @@ mod test {
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, KMsg{
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
+            facility: events::LogFacility::Daemon,
+            level: events::LogLevel::Error,
             timestamp: Utc.timestamp_millis(33525252554),
             message: String::from("a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 error 6 in a.out[400000+1000]"),
         });
