@@ -5,6 +5,7 @@ use crate::system;
 use chrono::{DateTime, Utc};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use rmesg;
 
 #[derive(PartialEq, Debug)]
 pub struct KMsg {
@@ -51,6 +52,11 @@ impl From<system::SystemStartTimeReadError> for KMsgParserError {
 impl From<std::io::Error> for KMsgParserError {
     fn from(err: std::io::Error) -> KMsgParserError {
         KMsgParserError::Generic(format!("inner std::io::Error:: {}", err))
+    }
+}
+impl From<rmesg::error::RMesgError> for KMsgParserError {
+    fn from(err: rmesg::error::RMesgError) -> KMsgParserError {
+        KMsgParserError::Generic(format!("inner rmesg::error::RMesgError:: {}", err))
     }
 }
 

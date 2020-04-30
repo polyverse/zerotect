@@ -4,17 +4,18 @@ use crate::events;
 use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
 use crate::system;
 use timeout_iterator::TimeoutIterator;
+use std::io::{Lines, BufRead};
+use std::boxed::Box;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use num::FromPrimitive;
 use std::fs::File;
-use std::io::prelude::*;
 use std::io::BufReader;
 use std::ops::Add;
 use std::str::FromStr;
 use std::time::Duration;
 
-type LinesIterator = std::io::Lines<std::boxed::Box<dyn BufRead + Send>>;
+pub type LinesIterator = Lines<Box<dyn BufRead + Send>>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 

@@ -1,10 +1,12 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 pub mod dev_kmsg_reader;
+pub mod rmesg_reader;
 mod event_parser;
 mod kmsg;
 
 use crate::events;
+use crate::monitor::rmesg_reader::{RMesgReader, RMesgReaderConfig};
 use crate::monitor::dev_kmsg_reader::{DevKMsgReader, DevKMsgReaderConfig};
 use crate::monitor::event_parser::{EventParser, EventParserError};
 use crate::monitor::kmsg::{KMsg, KMsgParserError};
@@ -43,13 +45,25 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
         eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
     }
 
-    let monitor_config = DevKMsgReaderConfig {
+    let dev_msg_reader_config = DevKMsgReaderConfig {
         from_sequence_number: 0,
         flush_timeout: Duration::from_secs(1),
     };
 
     let kmsg_iterator: Box<dyn Iterator<Item = KMsg> + Send> =
-        Box::new(DevKMsgReader::with_file(monitor_config, mc.verbosity)?);
+        match DevKMsgReader::with_file(dev_msg_reader_config, mc.verbosity) {
+            Ok(dmesgreader) => Box::new(dmesgreader),
+            Err(e) => {
+                eprintln!("Reading /dev/kmsg was a bad idea on this distribution: {:?}", e);
+                eprintln!("Attempting to read directly from kernel using syscall 'klogctl' (through the rmesg crate)");
+
+                let rmesg_reader_config = RMesgReaderConfig {
+                    flush_timeout: Duration::from_secs(1),
+                    poll_interval: Duration::from_secs(10),
+                };
+                Box::new(RMesgReader::with_config(rmesg_reader_config, mc.verbosity)?)
+            }
+        };
 
     let event_iterator = EventParser::from_kmsg_iterator(kmsg_iterator, mc.verbosity)?;
 
