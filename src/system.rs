@@ -117,7 +117,7 @@ pub fn modify_environment(
     if auto_configure.exception_trace {
         let maybe_event = ensure_systemctl(
             EXCEPTION_TRACE_CTLNAME,
-            bool_to_sysctl_string(auto_configure.exception_trace),
+            bool_to_0_1_string(auto_configure.exception_trace),
         )?;
         if let Some(event) = maybe_event {
             env_events.push(event);
@@ -127,7 +127,17 @@ pub fn modify_environment(
     if auto_configure.fatal_signals {
         let maybe_event = ensure_systemctl(
             PRINT_FATAL_SIGNALS_CTLNAME,
-            bool_to_sysctl_string(auto_configure.fatal_signals),
+            bool_to_0_1_string(auto_configure.fatal_signals),
+        )?;
+        if let Some(event) = maybe_event {
+            env_events.push(event);
+        }
+    }
+
+    if auto_configure.printk_include_timestamp {
+        let maybe_event = ensure_systemctl(
+            PRINTK_INCLUDE_TIMESTAMP_CTLNAME,
+            bool_to_n_y_string(auto_configure.fatal_signals),
         )?;
         if let Some(event) = maybe_event {
             env_events.push(event);
@@ -164,9 +174,16 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
     }
 }
 
-fn bool_to_sysctl_string(b: bool) -> &'static str {
+fn bool_to_0_1_string(b: bool) -> &'static str {
     match b {
         false => "0",
         true => "1",
+    }
+}
+
+fn bool_to_n_y_string(b: bool) -> &'static str {
+    match b {
+        false => "n",
+        true => "y",
     }
 }
