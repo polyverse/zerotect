@@ -22,7 +22,7 @@ pub struct RMesgReaderConfig {
 }
 
 pub struct RMesgReader {
-    verbosity: u8,
+    _verbosity: u8,
     rmesg_line_reader: TimeoutIterator<RMesgResult>,
     system_start_time: DateTime<Utc>,
 }
@@ -67,7 +67,7 @@ impl RMesgReader {
         }
 
         Ok(RMesgReader {
-            verbosity,
+            _verbosity: verbosity,
             rmesg_line_reader,
             system_start_time,
         })
