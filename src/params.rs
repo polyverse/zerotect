@@ -205,7 +205,6 @@ impl From<std::num::TryFromIntError> for ParsingError {
     }
 }
 
-
 /// Parse command-line arguments
 /// maybe_args - allows unit-testing of arguments. Use None to parse
 ///     arguments from the operating system.
@@ -310,8 +309,12 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
     let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
 
     let monitor_config = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
-        0 => MonitorConfig{gobble_old_events: false},
-        _ => MonitorConfig{gobble_old_events: true},
+        0 => MonitorConfig {
+            gobble_old_events: false,
+        },
+        _ => MonitorConfig {
+            gobble_old_events: true,
+        },
     };
 
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
@@ -694,7 +697,7 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
-            monitor_config: MonitorConfig{
+            monitor_config: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
             },
             console_config: Some(ConsoleConfig {
@@ -832,7 +835,7 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
-            monitor_config: MonitorConfig{
+            monitor_config: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
             },
             console_config: Some(ConsoleConfig {
@@ -884,7 +887,7 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
-            monitor_config: MonitorConfig{
+            monitor_config: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
             },
             console_config: match rand::thread_rng().gen_bool(0.5) {
@@ -1117,7 +1120,7 @@ mod test {
                 fatal_signals: true,
                 klog_include_timestamp: true,
             },
-            monitor_config: MonitorConfig{
+            monitor_config: MonitorConfig {
                 gobble_old_events: false,
             },
             console_config: Some(ConsoleConfig {

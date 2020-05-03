@@ -623,7 +623,8 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
@@ -650,11 +651,14 @@ mod test {
                     "vmasize": 4096,
                     "vmastart": 94677333766144
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
@@ -681,11 +685,14 @@ mod test {
                     "vmastart": 94677333766144,
                     "vmasize": 4096
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
         assert_eq!(
             to_value(&event3).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
@@ -712,7 +719,9 @@ mod test {
                     "vmasize": null,
                     "vmastart": null
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
     }
 
@@ -797,7 +806,8 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-03-06T21:16:37.845Z",
                 "event": {
@@ -823,11 +833,14 @@ mod test {
                     "vmastart": 94677333766144,
                     "vmasize": 4096
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-03-06T21:16:37.845Z",
                 "event": {
@@ -853,7 +866,9 @@ mod test {
                     "vmastart": null,
                     "vmasize": null
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
     }
 
@@ -942,7 +957,8 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-01-06T11:03:24.323Z",
                 "event": {
@@ -969,11 +985,14 @@ mod test {
                         "file": "a.out",
                         "vmasize": 4096
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(r#"{
+            from_str::<serde_json::Value>(
+                r#"{
                 "version": "V1",
                 "timestamp": "1970-01-06T11:03:24.323Z",
                 "event": {
@@ -1000,7 +1019,9 @@ mod test {
                     "vmasize": null,
                     "file": null
                 }
-            }"#).unwrap()
+            }"#
+            )
+            .unwrap()
         );
     }
 

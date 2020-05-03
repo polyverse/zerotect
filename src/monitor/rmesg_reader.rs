@@ -45,10 +45,9 @@ impl RMesgReader {
             eprintln!("Or you may tell polytect to auto-configure the flag on the command-line or config file.");
         }
 
-
         let system_start_time = system::system_start_time()?;
 
-        let event_stream_start_time = match config.gobble_old_events{
+        let event_stream_start_time = match config.gobble_old_events {
             true => system_start_time,
             false => Utc::now(),
         };
@@ -57,7 +56,12 @@ impl RMesgReader {
             false,
             config.poll_interval,
         )?);
-        RMesgReader::with_lines_iterator(rmesg_reader, system_start_time, event_stream_start_time, verbosity)
+        RMesgReader::with_lines_iterator(
+            rmesg_reader,
+            system_start_time,
+            event_stream_start_time,
+            verbosity,
+        )
     }
 
     fn with_lines_iterator(
@@ -122,19 +126,16 @@ impl RMesgReader {
             };
 
             let timestamp = match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"]) {
-                Some(timesecs) => {
-                    let duration_from_system_start =
-                        match ChronoDuration::from_std(Duration::from_secs_f64(timesecs)) {
-                            Ok(d) => d,
-                            Err(e) => {
-                                return Err(KMsgParsingError::Generic(format!(
-                                    "Unable to parse {} into a time duration: {:?}",
-                                    timesecs, e
-                                )))
-                            }
-                        };
-                    self.system_start_time.add(duration_from_system_start)
-                }
+                Some(timesecs) => match ChronoDuration::from_std(Duration::from_secs_f64(timesecs))
+                {
+                    Ok(d) => self.system_start_time.add(d),
+                    Err(e) => {
+                        return Err(KMsgParsingError::Generic(format!(
+                            "Unable to parse {} into a time duration: {:?}",
+                            timesecs, e
+                        )))
+                    }
+                },
                 None => {
                     return Err(KMsgParsingError::Generic(format!(
                         "Unable to parse {} into a floating point number.",
@@ -143,7 +144,7 @@ impl RMesgReader {
                 }
             };
 
-            // exit if sequence number is less than where desired
+            // exit if timestamp is less than event stream start time
             if timestamp < self.event_stream_start_time {
                 return Err(KMsgParsingError::EventTooOld);
             }
@@ -304,6 +305,32 @@ mod test {
             timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.984259)).unwrap()),
             message: String::from(" a.out[14685]: segfault at 5556f7707004 ip 00005556f7707004 sp 00007ffec6c34d78 error 15 in a.out[5556f7707000+1000]"),
         });
+
+        let maybe_entry = iter.next();
+        assert!(maybe_entry.is_some());
+        let entry = maybe_entry.unwrap();
+        assert_eq!(entry, KMsg{
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Emergency,
+            timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.986286)).unwrap()),
+            message: String::from(" Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74"),
+        });
+    }
+
+    #[test]
+    fn can_parse_entries_from_timestamp() {
+        let realistic_message = r"
+<2>[111310.984259] a.out[14685]: segfault at 5556f7707004 ip 00005556f7707004 sp 00007ffec6c34d78 error 15 in a.out[5556f7707000+1000]
+<1>[111310.986286] Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74";
+
+        let peekable_line_iter = LinesIterMock::from_message(realistic_message);
+        let mut iter = RMesgReader::with_lines_iterator(
+            Box::new(peekable_line_iter),
+            Utc.timestamp_nanos(4624626262000000),
+            Utc.timestamp_nanos(4624626262000000 + 111310986286000),
+            3,
+        )
+        .unwrap();
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());

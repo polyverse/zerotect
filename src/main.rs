@@ -94,7 +94,6 @@ fn main() {
             let mc = monitor::MonitorConfig {
                 verbosity: mverbosity,
                 gobble_old_events: mc.gobble_old_events,
-
             };
             if let Err(e) = monitor::monitor(mc, monitor_sink) {
                 eprintln!("Error launching Monitor: {}", e);

@@ -54,7 +54,7 @@ impl DevKMsgReader {
 
         let system_start_time = system::system_start_time()?;
 
-        let event_stream_start_time = match config.gobble_old_events{
+        let event_stream_start_time = match config.gobble_old_events {
             true => system_start_time,
             false => Utc::now(),
         };
@@ -394,10 +394,13 @@ mod test {
         )
         .unwrap();
 
-        let maybe_event_duration_from_system_start = ChronoDuration::from_std(Duration::from_millis(4));
+        let maybe_event_duration_from_system_start =
+            ChronoDuration::from_std(Duration::from_millis(4));
         assert!(maybe_event_duration_from_system_start.is_ok());
 
-        let event_timestamp = iter.system_start_time.add(maybe_event_duration_from_system_start.unwrap());
+        let event_timestamp = iter
+            .system_start_time
+            .add(maybe_event_duration_from_system_start.unwrap());
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
