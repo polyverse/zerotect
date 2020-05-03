@@ -66,15 +66,19 @@ impl DevKMsgReader {
     ) -> Result<DevKMsgReader, KMsgParserError> {
         let mut kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
         match kmsg_line_reader.peek() {
-            None => return Err(KMsgParserError::BadSource(format!(
-                "Couldn't peek a single line from source. Source seems to be closed."
-            ))),
+            None => {
+                return Err(KMsgParserError::BadSource(format!(
+                    "Couldn't peek a single line from source. Source seems to be closed."
+                )))
+            }
             Some(l) => match l {
-                Ok(_) => {},
-                Err(e) => return Err(KMsgParserError::BadSource(format!(
-                    "Couldn't peek a single line from source due to error: {:?}",
-                    e
-                ))),
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(KMsgParserError::BadSource(format!(
+                        "Couldn't peek a single line from source due to error: {:?}",
+                        e
+                    )))
+                }
             },
         }
 

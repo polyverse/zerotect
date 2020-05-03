@@ -16,18 +16,18 @@ use crate::params;
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 
 pub struct Polycorder {
-    sender: Sender<events::Event>,
+    sender: Sender<events::Version>,
 }
 
 // The structure to send data to Polycorder in...
 #[derive(Serialize)]
 struct Report<'l> {
     node_id: &'l str,
-    events: &'l Vec<events::Event>,
+    events: &'l Vec<events::Version>,
 }
 
 impl emitter::Emitter for Polycorder {
-    fn emit(&self, event: &events::Event) {
+    fn emit(&self, event: &events::Version) {
         let movable_copy = (*event).clone();
         if let Err(e) = self.sender.send(movable_copy) {
             eprintln!("Error queing event to Polycorder: {}", e);
@@ -50,7 +50,7 @@ impl From<std::io::Error> for PolycorderError {
 }
 
 pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderError> {
-    let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
+    let (sender, receiver): (Sender<events::Version>, Receiver<events::Version>) = channel();
 
     thread::Builder::new().name("Emit to Polycorder Thread".to_owned()).spawn(move || {
         eprintln!("Emitter to Polycorder initialized.");
@@ -62,7 +62,7 @@ pub fn new(config: params::PolycorderConfig) -> Result<Polycorder, PolycorderErr
             return;
         };
 
-        let mut events: Vec<events::Event> = vec![];
+        let mut events: Vec<events::Version> = vec![];
 
         loop {
             let flush = match receiver.recv_timeout(config.flush_timeout) {

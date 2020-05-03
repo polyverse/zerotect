@@ -25,71 +25,210 @@ use typename::TypeName;
 /// contain the version field, is considered invalid.
 ///
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct Event {
+#[serde(tag = "version")]
+pub enum Version {
     /// Version is guaranteed to exist. All other fields may change or not exist,
     /// and it is recommended to use a different version when making breaking changes
     /// to all other fields. It allows parsers to test on version and determine if they
     /// know what to do with the rest.
-    pub version: Version,
+    V1 {
+        /// This is universal and important for all events. They occur at a time.
+        timestamp: DateTime<Utc>,
 
-    /// This is universal and important for all events. They occur at a time.
-    pub timestamp: DateTime<Utc>,
-
-    /// Platform records fields specific to a specific mechanism/platform.
-    pub platform: Platform,
+        /// Platform records fields specific to a specific mechanism/platform.
+        event: EventType,
+    },
 }
 
-impl Display for Event {
+impl Display for Version {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "Event<{},{}>::{}",
-            self.version, self.timestamp, self.platform
-        )
+        match self {
+            Version::V1 { timestamp, event } => write!(f, "Event<V1,{}>::{}", timestamp, event),
+        }
     }
 }
 
-/// The Version of this event structure
-#[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
-pub enum Version {
-    /// Version V1
-    V1,
-}
-
 /// The Platform this event originated on.
-#[derive(Debug, PartialEq, Display, Clone, Serialize, JsonSchema)]
-pub enum Platform {
-    /// The Linux platform and event details in the Linux context
-    Linux(LinuxPlatform),
-}
-
-/// Details on a Linux event
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct LinuxPlatform {
-    /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+#[serde(tag = "type")]
+pub enum EventType {
+    /// The Linux platform and event details in the Linux context
+    /// A Kernel Trap event - the kernel stops process execution for attempting something stupid
+    LinuxKernelTrap {
+        /// The type of kernel trap triggered
+        /// A Log-level for this event - was it critical?
+        level: LogLevel,
 
-    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+        facility: LogFacility,
 
-    /// The type records details of the event based on the type of event that occurred.
-    pub event: LinuxEvent,
+        trap: KernelTrapType,
+
+        /// Name of the process in which the trap occurred
+        procname: String,
+
+        /// Process ID
+        pid: usize,
+
+        /// Instruction Pointer (what memory address was executing)
+        ip: usize,
+
+        /// Stack Pointer
+        sp: usize,
+
+        /// The error code for the trap
+        errcode: SegfaultErrorCode,
+
+        /// (Optional) File in which the trap occurred (could be the main executable or library).
+        file: Option<String>,
+
+        /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
+        vmastart: Option<usize>,
+
+        /// (Optional) The Virtual Memory Size of this file's mapping.
+        vmasize: Option<usize>,
+    },
+
+    /// A Fatal Signal from the process because the process did something stupid
+    LinuxFatalSignal {
+        /// A Log-level for this event - was it critical?
+        level: LogLevel,
+
+        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+        facility: LogFacility,
+
+        /// The type of Fatal triggered
+        signal: FatalSignalType,
+
+        /// An Optional Stack Dump if one was found and parsable.
+        stack_dump: Option<StackDump>,
+    },
+
+    /// Information about a suppressed callback i.e. when a particular
+    /// type of error happens so much it is suppressed 'n' times.
+    ///
+    /// This captures what the log was, and how many times it was suppressed.
+    ///
+    /// This is a crucial data point because under Blind ROP attacks an error
+    /// might happen thousands of times but may only be logged once, with all the
+    /// remaining attempts being suppressed.
+    LinuxSuppressedCallback {
+        /// A Log-level for this event - was it critical?
+        level: LogLevel,
+
+        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+        facility: LogFacility,
+
+        /// Name of the function being suppressed/folded.
+        function_name: String,
+
+        /// Number of times it was suppressed.
+        count: usize,
+    },
+
+    /// This is a Polytect-internal event. Polytect can be commanded to set and ensure certain
+    /// configuration settings to capture events, such as enabling kernel fatal-signals, or
+    /// core dumps.
+    ///
+    /// This event is triggered when, after Polytect has configured a machine as commanded, the
+    /// configuration later mismatched. It means someone attempted to undo those changes.
+    ///
+    /// This event usually tells an observer they may not be seeing other events because they may be
+    /// disabled.
+    ConfigMismatch {
+        /// The key in question whose values mismatched.
+        key: String,
+
+        /// The value polytect configured and thus expected.
+        expected_value: String,
+
+        /// The value polytect observed.
+        observed_value: String,
+    },
 }
 
-impl Display for LinuxPlatform {
+impl Display for EventType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "<log_level: {}, log_facility: {}, Event: {}>",
-            self.level,
-            self.facility,
-            match &self.event {
-                LinuxEvent::KernelTrap(k) => format!("{}", k),
-                LinuxEvent::FatalSignal(f) => format!("{}", f),
-                LinuxEvent::SuppressedCallback(s) => format!("{}", s),
-                LinuxEvent::ConfigMismatch(c) => format!("{}", c),
+        match self {
+            EventType::LinuxKernelTrap {
+                level,
+                facility,
+                trap,
+                procname,
+                pid,
+                ip,
+                sp,
+                errcode,
+                file,
+                vmasize,
+                vmastart,
+            } => {
+                let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
+                    (file.as_ref(), vmastart, vmasize)
+                {
+                    Some(format!(
+                        "in file {} (VMM region {} of size {})",
+                        file, vmastart, vmasize
+                    ))
+                } else {
+                    None
+                };
+
+                write!(
+                    f,
+                    "<log_level: {}, log_facility: {}>{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.",
+                    level,
+                    facility,
+                    trap,
+                    errcode,
+                    procname,
+                    pid,
+                    ip,
+                    sp,
+                    location.unwrap_or_default()
+                )
             }
-        )
+            EventType::LinuxFatalSignal {
+                level,
+                facility,
+                signal,
+                stack_dump,
+            } => {
+                let retval = write!(
+                    f,
+                    "<log_level: {}, log_facility: {}>Fatal Signal: {}({})",
+                    level,
+                    facility,
+                    &signal,
+                    signal.clone() as u8
+                );
+
+                if let Some(sd) = &stack_dump {
+                    write!(f, ":: StackDump: {}", sd)
+                } else {
+                    retval
+                }
+            }
+            EventType::LinuxSuppressedCallback {
+                level,
+                facility,
+                function_name,
+                count,
+            } => write!(
+                f,
+                "<log_level: {}, log_facility: {}>Suppressed {} callbacks to {}",
+                level, facility, count, &function_name,
+            ),
+            EventType::ConfigMismatch {
+                key,
+                expected_value,
+                observed_value,
+            } => write!(
+                f,
+                "Configuration key {} should have been {}, but found to be {}",
+                &key, &expected_value, &observed_value
+            ),
+        }
     }
 }
 
@@ -133,9 +272,6 @@ pub enum LogFacility {
 
     #[strum(serialize = "ftp")]
     FTP,
-
-    #[strum(serialize = "polytect")]
-    Polytect,
 }
 
 /// Linux kmesg (kernel message buffer) Log Level.
@@ -168,100 +304,16 @@ pub enum LogLevel {
     Debug,
 }
 
-/// Enumerates the types of events polytect can capture
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub enum LinuxEvent {
-    /// A Kernel Trap event - the kernel stops process execution for attempting something stupid
-    KernelTrap(KernelTrapInfo),
-
-    /// A Fatal Signal from the process because the process did something stupid
-    FatalSignal(FatalSignalInfo),
-
-    /// When too many other events are generated in series, repeat events are suppressed.
-    /// This event captures how many events were suppressed.
-    /// This is important for analyzing a Blind ROP attack where the attacker may generate thousands
-    /// of Segfaults which can easily get suppressed.
-    SuppressedCallback(SuppressedCallbackInfo),
-
-    /// This is a Polytect-internal event. Polytect can be commanded to set and ensure certain
-    /// configuration settings to capture events, such as enabling kernel fatal-signals, or
-    /// core dumps.
-    ///
-    /// This event is triggered when, after Polytect has configured a machine as commanded, the
-    /// configuration later mismatched. It means someone attempted to undo those changes.
-    ///
-    /// This event usually tells an observer they may not be seeing other events because they may be
-    /// disabled.
-    ConfigMismatch(ConfigMisMatchInfo),
-}
-
-/// Details on a Kernel Trap event.
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct KernelTrapInfo {
-    /// The type of kernel trap triggered
-    pub trap: KernelTrapType,
-
-    /// Name of the process in which the trap occurred
-    pub procname: String,
-
-    /// Process ID
-    pub pid: usize,
-
-    /// Instruction Pointer (what memory address was executing)
-    pub ip: usize,
-
-    /// Stack Pointer
-    pub sp: usize,
-
-    /// The error code for the trap
-    pub errcode: SegfaultErrorCode,
-
-    /// (Optional) File in which the trap occurred (could be the main executable or library).
-    pub file: Option<String>,
-
-    /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
-    pub vmastart: Option<usize>,
-
-    /// (Optional) The Virtual Memory Size of this file's mapping.
-    pub vmasize: Option<usize>,
-}
-
-impl Display for KernelTrapInfo {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
-            (self.file.as_ref(), self.vmasize, self.vmasize)
-        {
-            Some(format!(
-                "in file {} (VMM region {} of size {})",
-                file, vmastart, vmasize
-            ))
-        } else {
-            None
-        };
-
-        write!(
-            f,
-            "{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.",
-            self.trap,
-            self.errcode,
-            self.procname,
-            self.pid,
-            self.ip,
-            self.sp,
-            location.unwrap_or_default()
-        )
-    }
-}
-
 /// The types of kernel traps understood
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type Polytect doesn't know how to parse. So it captures and stores the string description.
-    Generic(String),
+    Generic { description: String },
 
     /// Segfault occurs when an invalid memory access is performed (writing to read-only memory,
     /// executing non-executable memory, etc.)
-    Segfault(usize),
+    Segfault { location: usize },
 
     /// Invalid Opcode occurs when the processor doesn't understand an opcode. This usually occurs
     /// when execution jumps to an otherwise data segment, or in the wrong byte within an instruction.
@@ -271,10 +323,10 @@ pub enum KernelTrapType {
 impl Display for KernelTrapType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            KernelTrapType::Segfault(location) => write!(f, "Segfault at location {}", location),
+            KernelTrapType::Segfault { location } => write!(f, "Segfault at location {}", location),
             KernelTrapType::InvalidOpcode => write!(f, "Invalid Opcode"),
-            KernelTrapType::Generic(message) => {
-                write!(f, "Please parse this kernel trap: {}", message)
+            KernelTrapType::Generic { description } => {
+                write!(f, "Please parse this kernel trap: {}", description)
             }
         }
     }
@@ -378,33 +430,6 @@ impl Display for SegfaultErrorCode {
                 "{} triggered by a {}-mode {} {}",
                 self.reason, self.access_mode, data_or_instruction, self.access_type
             )
-        }
-    }
-}
-
-/// Information when a process throws a Fatal
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct FatalSignalInfo {
-    /// The type of Fatal triggered
-    pub signal: FatalSignalType,
-
-    /// An Optional Stack Dump if one was found and parsable.
-    pub stack_dump: Option<StackDump>,
-}
-
-impl Display for FatalSignalInfo {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        let retval = write!(
-            f,
-            "Fatal Signal: {}({})",
-            &self.signal,
-            self.signal.clone() as u8
-        );
-
-        if let Some(sd) = &self.stack_dump {
-            write!(f, ":: StackDump: {}", sd)
-        } else {
-            retval
         }
     }
 }
@@ -544,60 +569,6 @@ impl Display for StackDump {
     }
 }
 
-/// Information about a suppressed callback i.e. when a particular
-/// type of error happens so much it is suppressed 'n' times.
-///
-/// This captures what the log was, and how many times it was suppressed.
-///
-/// This is a crucial data point because under Blind ROP attacks an error
-/// might happen thousands of times but may only be logged once, with all the
-/// remaining attempts being suppressed.
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct SuppressedCallbackInfo {
-    /// Name of the function being suppressed/folded.
-    pub function_name: String,
-
-    /// Number of times it was suppressed.
-    pub count: usize,
-}
-
-impl Display for SuppressedCallbackInfo {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "Suppressed {} callbacks to {}",
-            self.count, &self.function_name
-        )
-    }
-}
-
-/// Information about a configuration mismatch between what Polytect was
-/// commanded to configure and what was actually found.
-///
-/// This may indicate a user-override or a malicious process trying to blind
-/// polytect from detecting attacks.
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
-pub struct ConfigMisMatchInfo {
-    /// The key in question whose values mismatched.
-    pub key: String,
-
-    /// The value polytect configured and thus expected.
-    pub expected_value: String,
-
-    /// The value polytect observed.
-    pub observed_value: String,
-}
-
-impl Display for ConfigMisMatchInfo {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "Configuration key {} should have been {}, but found to be {}",
-            &self.key, &self.expected_value, &self.observed_value
-        )
-    }
-}
-
 /**********************************************************************************/
 // Tests! Tests! Tests!
 
@@ -611,7 +582,7 @@ mod test {
     #[test]
     fn generate_reference_json_schema_file() {
         let schema_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/schema.json");
-        let schema = schema_for!(Event);
+        let schema = schema_for!(Version);
         let schema_json = serde_json::to_string_pretty(&schema).unwrap();
         eprintln!("Writing latest event schema to file: {}", schema_file);
         fs::write(schema_file, schema_json).expect("Unable to re-generate the event schema file.");

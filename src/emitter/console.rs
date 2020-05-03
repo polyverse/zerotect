@@ -10,7 +10,7 @@ pub struct Console {
 }
 
 impl emitter::Emitter for Console {
-    fn emit(&self, event: &events::Event) {
+    fn emit(&self, event: &events::Version) {
         match self.config.format {
             params::ConsoleOutputFormat::Text => println!("{}", event),
             params::ConsoleOutputFormat::JSON => match serde_json::to_string(&event) {

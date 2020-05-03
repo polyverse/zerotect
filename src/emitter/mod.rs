@@ -13,7 +13,7 @@ mod polycorder;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
-    fn emit(&self, event: &events::Event);
+    fn emit(&self, event: &events::Version);
 }
 
 pub struct EmitterConfig {
@@ -36,7 +36,7 @@ impl From<polycorder::PolycorderError> for EmitterError {
     }
 }
 
-pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), EmitterError> {
+pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];

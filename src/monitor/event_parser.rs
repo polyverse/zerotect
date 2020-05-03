@@ -48,7 +48,7 @@ impl EventParser {
         })
     }
 
-    fn parse_next_event(&mut self) -> Result<events::Event, EventParserError> {
+    fn parse_next_event(&mut self) -> Result<events::Version, EventParserError> {
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
@@ -77,7 +77,7 @@ impl EventParser {
     // ====>> a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
+    fn parse_kernel_trap(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # the procname (may have whitespace around it),
@@ -147,32 +147,21 @@ impl EventParser {
                     (None, None, None)
                 };
 
-                let trapinfo = events::KernelTrapInfo {
-                    trap,
-                    procname: procname.to_owned(),
-                    pid,
-                    ip: ip,
-                    sp: sp,
-                    errcode: events::SegfaultErrorCode::from_error_code(errcode),
-                    file,
-                    vmastart,
-                    vmasize,
-                };
-
-                if self.verbosity > 2 {
-                    eprintln!(
-                        "Monitor:: parse_kernel_trap:: Successfully parsed kernel trap: {:?}",
-                        trapinfo
-                    );
-                }
-                return Some(events::Event {
-                    version: events::Version::V1,
+                return Some(events::Version::V1 {
                     timestamp: km.timestamp,
-                    platform: events::Platform::Linux(events::LinuxPlatform {
+                    event: events::EventType::LinuxKernelTrap {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
-                        event: events::LinuxEvent::KernelTrap(trapinfo),
-                    }),
+                        trap,
+                        procname: procname.to_owned(),
+                        pid,
+                        ip: ip,
+                        sp: sp,
+                        errcode: events::SegfaultErrorCode::from_error_code(errcode),
+                        file,
+                        vmastart,
+                        vmasize,
+                    },
                 });
             }
         };
@@ -200,19 +189,19 @@ impl EventParser {
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
             if let Some(location) = EventParser::parse_hex::<usize>(&segfault_parts["location"]) {
-                Some(events::KernelTrapType::Segfault(location))
+                Some(events::KernelTrapType::Segfault { location })
             } else {
                 eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);
-                Some(events::KernelTrapType::Generic(
-                    trap_string.trim().to_owned(),
-                ))
+                Some(events::KernelTrapType::Generic {
+                    description: trap_string.trim().to_owned(),
+                })
             }
         } else if RE_INVALID_OPCODE.is_match(trap_string) {
             Some(events::KernelTrapType::InvalidOpcode)
         } else {
-            Some(events::KernelTrapType::Generic(
-                trap_string.trim().to_owned(),
-            ))
+            Some(events::KernelTrapType::Generic {
+                description: trap_string.trim().to_owned(),
+            })
         }
     }
 
@@ -221,7 +210,7 @@ impl EventParser {
     // Signal Printed here: https://github.com/torvalds/linux/blob/master/kernel/signal.c#L1239
     // ---------------------------------------------------------------
     // potentially unexpected fatal signal 11.
-    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
+    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
@@ -230,17 +219,14 @@ impl EventParser {
                 EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
             {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
-                    return Some(events::Event {
-                        version: events::Version::V1,
+                    return Some(events::Version::V1 {
                         timestamp: km.timestamp,
-                        platform: events::Platform::Linux(events::LinuxPlatform {
+                        event: events::EventType::LinuxFatalSignal {
                             facility: km.facility.clone(),
                             level: km.level.clone(),
-                            event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
-                                signal,
-                                stack_dump: self.parse_stack_dump(),
-                            }),
-                        }),
+                            signal,
+                            stack_dump: self.parse_stack_dump(),
+                        },
                     });
                 } else {
                     eprintln!(
@@ -404,7 +390,7 @@ impl EventParser {
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
-    fn parse_callbacks_suppressed(&mut self, km: &kmsg::KMsg) -> Option<events::Event> {
+    fn parse_callbacks_suppressed(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
                 r"(?x)^
@@ -431,19 +417,14 @@ impl EventParser {
                     eprintln!("Monitor:: parse_callbacks_suppressed:: Successfully suppressed callbacks: {:?}", dmesg_parts);
                 }
 
-                let suppressed_callback_info = events::SuppressedCallbackInfo {
-                    function_name: function_name.to_owned(),
-                    count,
-                };
-
-                return Some(events::Event {
-                    version: events::Version::V1,
+                return Some(events::Version::V1 {
                     timestamp: km.timestamp,
-                    platform: events::Platform::Linux(events::LinuxPlatform {
+                    event: events::EventType::LinuxSuppressedCallback {
                         facility: km.facility.clone(),
                         level: km.level.clone(),
-                        event: events::LinuxEvent::SuppressedCallback(suppressed_callback_info),
-                    }),
+                        function_name: function_name.to_owned(),
+                        count,
+                    },
                 });
             }
         };
@@ -485,7 +466,7 @@ impl EventParser {
 
 impl Iterator for EventParser {
     // we will be counting with usize
-    type Item = events::Event;
+    type Item = events::Version;
 
     // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
@@ -549,85 +530,78 @@ mod test {
             },
         ];
 
-        let event1 = events::Event {
-            version: events::Version::V1,
+        let event1 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::Segfault(0),
-                    procname: String::from("a.out"),
-                    pid: 36175,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: Some(String::from("a.out")),
-                    vmastart: Some(0x561bc8d8f000),
-                    vmasize: Some(0x1000),
-                }),
-            }),
+                trap: events::KernelTrapType::Segfault { location: 0 },
+                procname: String::from("a.out"),
+                pid: 36175,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
+            },
         };
 
-        let event2 = events::Event {
-            version: events::Version::V1,
+        let event2 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::Segfault(0),
-                    procname: String::from("a.out"),
-                    pid: 36275,
-                    ip: 0x0,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: Some(String::from("a.out")),
-                    vmastart: Some(0x561bc8d8f000),
-                    vmasize: Some(0x1000),
-                }),
-            }),
+                trap: events::KernelTrapType::Segfault { location: 0 },
+                procname: String::from("a.out"),
+                pid: 36275,
+                ip: 0x0,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
+            },
         };
 
-        let event3 = events::Event {
-            version: events::Version::V1,
+        let event3 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::Segfault(0x7fff4b8ba8b8),
-                    procname: String::from("a.out"),
-                    pid: 37659,
-                    ip: 0x7fff4b8ba8b8,
-                    sp: 0x00007fff4b8ba7b8,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::ProtectionFault,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: true,
-                        protection_keys_block_access: false,
-                    },
-                    file: None,
-                    vmastart: None,
-                    vmasize: None,
-                }),
-            }),
+                trap: events::KernelTrapType::Segfault {
+                    location: 0x7fff4b8ba8b8,
+                },
+                procname: String::from("a.out"),
+                pid: 37659,
+                ip: 0x7fff4b8ba8b8,
+                sp: 0x00007fff4b8ba7b8,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::ProtectionFault,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: true,
+                    protection_keys_block_access: false,
+                },
+                file: None,
+                vmastart: None,
+                vmasize: None,
+            },
         };
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -782,58 +756,52 @@ mod test {
             },
         ];
 
-        let event1 = events::Event {
-            version: events::Version::V1,
+        let event1 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::InvalidOpcode,
-                    procname: String::from("a.out"),
-                    pid: 38175,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: Some(String::from("a.out")),
-                    vmastart: Some(0x561bc8d8f000),
-                    vmasize: Some(0x1000),
-                }),
-            }),
+                trap: events::KernelTrapType::InvalidOpcode,
+                procname: String::from("a.out"),
+                pid: 38175,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
+            },
         };
 
-        let event2 = events::Event {
-            version: events::Version::V1,
+        let event2 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::InvalidOpcode,
-                    procname: String::from("a.out"),
-                    pid: 38275,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: None,
-                    vmastart: None,
-                    vmasize: None,
-                }),
-            }),
+                trap: events::KernelTrapType::InvalidOpcode,
+                procname: String::from("a.out"),
+                pid: 38275,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: None,
+                vmastart: None,
+                vmasize: None,
+            },
         };
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -941,58 +909,56 @@ mod test {
             },
         ];
 
-        let event1 = events::Event {
-            version: events::Version::V1,
+        let event1 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::Generic("foo".to_owned()),
-                    procname: String::from("a.out"),
-                    pid: 39175,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: Some(String::from("a.out")),
-                    vmastart: Some(0x561bc8d8f000),
-                    vmasize: Some(0x1000),
-                }),
-            }),
+                trap: events::KernelTrapType::Generic {
+                    description: "foo".to_owned(),
+                },
+                procname: String::from("a.out"),
+                pid: 39175,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: Some(String::from("a.out")),
+                vmastart: Some(0x561bc8d8f000),
+                vmasize: Some(0x1000),
+            },
         };
 
-        let event2 = events::Event {
-            version: events::Version::V1,
+        let event2 = events::Version::V1 {
             timestamp,
-            platform: events::Platform::Linux(events::LinuxPlatform {
+            event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
-                event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                    trap: events::KernelTrapType::Generic("bar".to_owned()),
-                    procname: String::from("a.out"),
-                    pid: 39275,
-                    ip: 0x0000561bc8d8f12e,
-                    sp: 0x00007ffd5833d0c0,
-                    errcode: events::SegfaultErrorCode {
-                        reason: events::SegfaultReason::NoPageFound,
-                        access_type: events::SegfaultAccessType::Read,
-                        access_mode: events::SegfaultAccessMode::User,
-                        use_of_reserved_bit: false,
-                        instruction_fetch: false,
-                        protection_keys_block_access: false,
-                    },
-                    file: None,
-                    vmastart: None,
-                    vmasize: None,
-                }),
-            }),
+                trap: events::KernelTrapType::Generic {
+                    description: "bar".to_owned(),
+                },
+                procname: String::from("a.out"),
+                pid: 39275,
+                ip: 0x0000561bc8d8f12e,
+                sp: 0x00007ffd5833d0c0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::User,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: None,
+                vmastart: None,
+                vmasize: None,
+            },
         };
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -1101,17 +1067,14 @@ mod test {
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
-            events::Event {
-                version: events::Version::V1,
+            events::Version::V1 {
                 timestamp,
-                platform: events::Platform::Linux(events::LinuxPlatform {
+                event: events::EventType::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
-                        signal: events::FatalSignalType::SIGSEGV,
-                        stack_dump: None,
-                    })
-                })
+                    signal: events::FatalSignalType::SIGSEGV,
+                    stack_dump: None,
+                }
             }
         )
     }
@@ -1226,25 +1189,22 @@ mod test {
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
-            events::Event {
-                version: events::Version::V1,
+            events::Version::V1 {
                 timestamp: Utc.timestamp_millis(6433742 + 372858970),
-                platform: events::Platform::Linux(events::LinuxPlatform {
+                event: events::EventType::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    event: events::LinuxEvent::FatalSignal(events::FatalSignalInfo {
-                        signal: events::FatalSignalType::SIGSEGV,
-                        stack_dump: Some(events::StackDump {
-                            cpu: 1,
-                            pid: 36075,
-                            command: "a.out".to_owned(),
-                            kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
-                            hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
-                            taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                            registers: HashMap::new(),
-                        })
+                    signal: events::FatalSignalType::SIGSEGV,
+                    stack_dump: Some(events::StackDump {
+                        cpu: 1,
+                        pid: 36075,
+                        command: "a.out".to_owned(),
+                        kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
+                        hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
+                        taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
+                        registers: HashMap::new(),
                     })
-                })
+                }
             }
         )
     }
@@ -1269,31 +1229,28 @@ mod test {
             let segfault = maybe_segfault.unwrap();
             assert_eq!(
                 segfault,
-                events::Event {
-                    version: events::Version::V1,
+                events::Version::V1 {
                     timestamp,
-                    platform: events::Platform::Linux(events::LinuxPlatform {
+                    event: events::EventType::LinuxKernelTrap {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
-                        event: events::LinuxEvent::KernelTrap(events::KernelTrapInfo {
-                            trap: events::KernelTrapType::Segfault(0),
-                            procname: String::from("a.out"),
-                            pid: 36075,
-                            ip: 0x0000561bc8d8f12e,
-                            sp: 0x00007ffd5833d0c0,
-                            errcode: events::SegfaultErrorCode {
-                                reason: events::SegfaultReason::NoPageFound,
-                                access_type: events::SegfaultAccessType::Read,
-                                access_mode: events::SegfaultAccessMode::User,
-                                use_of_reserved_bit: false,
-                                instruction_fetch: false,
-                                protection_keys_block_access: false,
-                            },
-                            file: Some(String::from("a.out")),
-                            vmastart: Some(0x561bc8d8f000),
-                            vmasize: Some(0x1000),
-                        })
-                    })
+                        trap: events::KernelTrapType::Segfault { location: 0 },
+                        procname: String::from("a.out"),
+                        pid: 36075,
+                        ip: 0x0000561bc8d8f12e,
+                        sp: 0x00007ffd5833d0c0,
+                        errcode: events::SegfaultErrorCode {
+                            reason: events::SegfaultReason::NoPageFound,
+                            access_type: events::SegfaultAccessType::Read,
+                            access_mode: events::SegfaultAccessMode::User,
+                            use_of_reserved_bit: false,
+                            instruction_fetch: false,
+                            protection_keys_block_access: false,
+                        },
+                        file: Some(String::from("a.out")),
+                        vmastart: Some(0x561bc8d8f000),
+                        vmasize: Some(0x1000),
+                    }
                 }
             );
         });
@@ -1320,17 +1277,14 @@ mod test {
         assert!(suppressed_callback.is_some());
         assert_eq!(
             suppressed_callback.unwrap(),
-            events::Event {
-                version: events::Version::V1,
+            events::Version::V1 {
                 timestamp,
-                platform: events::Platform::Linux(events::LinuxPlatform {
+                event: events::EventType::LinuxSuppressedCallback {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
-                    event: events::LinuxEvent::SuppressedCallback(events::SuppressedCallbackInfo {
-                        function_name: "show_signal_msg".to_owned(),
-                        count: 9,
-                    }),
-                })
+                    function_name: "show_signal_msg".to_owned(),
+                    count: 9,
+                }
             }
         )
     }

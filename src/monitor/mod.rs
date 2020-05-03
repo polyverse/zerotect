@@ -40,7 +40,7 @@ impl From<EventParserError> for MonitorError {
     }
 }
 
-pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), MonitorError> {
+pub fn monitor(mc: MonitorConfig, sink: Sender<events::Version>) -> Result<(), MonitorError> {
     if mc.verbosity > 0 {
         eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
     }

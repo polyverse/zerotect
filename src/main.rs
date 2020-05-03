@@ -38,7 +38,7 @@ fn main() {
         },
     };
 
-    let (monitor_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
+    let (monitor_sink, emitter_source): (Sender<events::Version>, Receiver<events::Version>) =
         mpsc::channel();
 
     let env_config_copy = polytect_config.clone();
