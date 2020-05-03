@@ -623,117 +623,96 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-01-05T09:01:24.605Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-01-05T09:01:24.605Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": {
-                            "Segfault": 0
-                          },
-                          "procname": "a.out",
-                          "pid": 36175,
-                          "ip": 94677333766446,
-                          "sp": 140726083244224,
-                          "errcode": {
-                            "reason": "NoPageFound",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": false,
-                            "protection_keys_block_access": false
-                          },
-                          "file": "a.out",
-                          "vmasize": 4096,
-                          "vmastart": 94677333766144
-                        }
-                      }
+                    "trap": {
+                        "type": "Segfault",
+                        "location": 0
+                    },
+                    "procname": "a.out",
+                    "pid": 36175,
+                    "ip": 94677333766446,
+                    "sp": 140726083244224,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "file": "a.out",
+                    "vmasize": 4096,
+                    "vmastart": 94677333766144
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-01-05T09:01:24.605Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-01-05T09:01:24.605Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": {
-                            "Segfault": 0
-                          },
-                          "procname": "a.out",
-                          "pid": 36275,
-                          "ip": 0,
-                          "sp": 140726083244224,
-                          "errcode": {
-                            "reason": "NoPageFound",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": false,
-                            "protection_keys_block_access": false
-                          },
-                          "file": "a.out",
-                          "vmastart": 94677333766144,
-                          "vmasize": 4096
-                        }
-                    }
+                    "trap": {
+                        "type": "Segfault",
+                        "location": 0
+                    },
+                    "procname": "a.out",
+                    "pid": 36275,
+                    "ip": 0,
+                    "sp": 140726083244224,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "file": "a.out",
+                    "vmastart": 94677333766144,
+                    "vmasize": 4096
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
         assert_eq!(
             to_value(&event3).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-01-05T09:01:24.605Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-01-05T09:01:24.605Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": {
-                            "Segfault": 140734460831928
-                          },
-                          "procname": "a.out",
-                          "pid": 37659,
-                          "ip": 140734460831928,
-                          "sp": 140734460831672,
-                          "errcode": {
-                            "reason": "ProtectionFault",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": true,
-                            "protection_keys_block_access": false
-                          },
-                          "file": null,
-                          "vmasize": null,
-                          "vmastart": null
-                        }
-                    }
+                    "trap": {
+                        "type": "Segfault",
+                        "location": 140734460831928
+                    },
+                    "procname": "a.out",
+                    "pid": 37659,
+                    "ip": 140734460831928,
+                    "sp": 140734460831672,
+                    "errcode": {
+                        "reason": "ProtectionFault",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": true,
+                        "protection_keys_block_access": false
+                    },
+                    "file": null,
+                    "vmasize": null,
+                    "vmastart": null
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
     }
 
@@ -818,75 +797,63 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-03-06T21:16:37.845Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-03-06T21:16:37.845Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": "InvalidOpcode",
-                          "procname": "a.out",
-                          "pid": 38175,
-                          "ip": 94677333766446,
-                          "sp": 140726083244224,
-                          "errcode": {
-                            "reason": "NoPageFound",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": false,
-                            "protection_keys_block_access": false
-                          },
-                          "file": "a.out",
-                          "vmastart": 94677333766144,
-                          "vmasize": 4096
-                        }
-                    }
+                    "trap": {
+                        "type": "InvalidOpcode"
+                    },
+                    "procname": "a.out",
+                    "pid": 38175,
+                    "ip": 94677333766446,
+                    "sp": 140726083244224,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "file": "a.out",
+                    "vmastart": 94677333766144,
+                    "vmasize": 4096
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-03-06T21:16:37.845Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-03-06T21:16:37.845Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": "InvalidOpcode",
-                          "procname": "a.out",
-                          "pid": 38275,
-                          "ip": 94677333766446,
-                          "sp": 140726083244224,
-                          "errcode": {
-                            "reason": "NoPageFound",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": false,
-                            "protection_keys_block_access": false
-                          },
-                          "file": null,
-                          "vmastart": null,
-                          "vmasize": null
-                        }
-                    }
+                    "trap": {
+                        "type": "InvalidOpcode"
+                    },
+                    "procname": "a.out",
+                    "pid": 38275,
+                    "ip": 94677333766446,
+                    "sp": 140726083244224,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "file": null,
+                    "vmastart": null,
+                    "vmasize": null
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
     }
 
@@ -975,79 +942,65 @@ mod test {
 
         assert_eq!(
             to_value(&event1).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-01-06T11:03:24.323Z",
-            "platform": {
-                "Linux": {
-                    "facility": "Kern",
-                    "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": {
-                            "Generic": "foo"
-                          },
-                          "procname": "a.out",
-                          "pid": 39175,
-                          "ip": 94677333766446,
-                          "sp": 140726083244224,
-                          "errcode": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-01-06T11:03:24.323Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
+                        "facility": "Kern",
+                        "level": "Warning",
+                        "trap": {
+                            "type": "Generic",
+                            "description": "foo"
+                        },
+                        "procname": "a.out",
+                        "pid": 39175,
+                        "ip": 94677333766446,
+                        "sp": 140726083244224,
+                        "errcode": {
                             "reason": "NoPageFound",
                             "access_type": "Read",
                             "access_mode": "User",
                             "use_of_reserved_bit": false,
                             "instruction_fetch": false,
                             "protection_keys_block_access": false
-                          },
-                          "vmastart": 94677333766144,
-                          "file": "a.out",
-                          "vmasize": 4096
-                        }
-                    }
+                        },
+                        "vmastart": 94677333766144,
+                        "file": "a.out",
+                        "vmasize": 4096
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
         assert_eq!(
             to_value(&event2).unwrap(),
-            from_str::<serde_json::Value>(
-                r#"{
-            "version": "V1",
-            "timestamp": "1970-01-06T11:03:24.323Z",
-            "platform": {
-                "Linux": {
+            from_str::<serde_json::Value>(r#"{
+                "version": "V1",
+                "timestamp": "1970-01-06T11:03:24.323Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
                     "facility": "Kern",
                     "level": "Warning",
-                    "event": {
-                        "KernelTrap": {
-                          "trap": {
-                            "Generic": "bar"
-                          },
-                          "procname": "a.out",
-                          "pid": 39275,
-                          "ip": 94677333766446,
-                          "sp": 140726083244224,
-                          "errcode": {
-                            "reason": "NoPageFound",
-                            "access_type": "Read",
-                            "access_mode": "User",
-                            "use_of_reserved_bit": false,
-                            "instruction_fetch": false,
-                            "protection_keys_block_access": false
-                          },
-                          "vmastart": null,
-                          "vmasize": null,
-                          "file": null
-                        }
-                    }
+                    "trap": {
+                        "type": "Generic",
+                        "description": "bar"
+                    },
+                    "procname": "a.out",
+                    "pid": 39275,
+                    "ip": 94677333766446,
+                    "sp": 140726083244224,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "User",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "vmastart": null,
+                    "vmasize": null,
+                    "file": null
                 }
-            }
-          }"#
-            )
-            .unwrap()
+            }"#).unwrap()
         );
     }
 
