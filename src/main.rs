@@ -87,11 +87,14 @@ fn main() {
     }
 
     let mverbosity = polytect_config.verbosity;
+    let mc = polytect_config.monitor_config;
     let monitor_thread_result = thread::Builder::new()
         .name("Event Monitoring Thread".to_owned())
         .spawn(move || {
             let mc = monitor::MonitorConfig {
                 verbosity: mverbosity,
+                gobble_old_events: mc.gobble_old_events,
+
             };
             if let Err(e) = monitor::monitor(mc, monitor_sink) {
                 eprintln!("Error launching Monitor: {}", e);

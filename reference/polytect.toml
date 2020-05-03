@@ -5,6 +5,9 @@ exception_trace = true
 fatal_signals = true
 klog_include_timestamp = true
 
+[monitor_config]
+gobble_old_events = false
+
 [console_config]
 format = 'Text'
 

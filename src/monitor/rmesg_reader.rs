@@ -19,12 +19,16 @@ type LinesIterator = Box<dyn Iterator<Item = RMesgResult> + Send>;
 #[derive(Clone)]
 pub struct RMesgReaderConfig {
     pub poll_interval: Duration,
+    pub gobble_old_events: bool,
 }
 
 pub struct RMesgReader {
     _verbosity: u8,
     rmesg_line_reader: TimeoutIterator<RMesgResult>,
     system_start_time: DateTime<Utc>,
+
+    // only read events from this time on
+    event_stream_start_time: DateTime<Utc>,
 }
 
 impl RMesgReader {
@@ -41,16 +45,25 @@ impl RMesgReader {
             eprintln!("Or you may tell polytect to auto-configure the flag on the command-line or config file.");
         }
 
+
+        let system_start_time = system::system_start_time()?;
+
+        let event_stream_start_time = match config.gobble_old_events{
+            true => system_start_time,
+            false => Utc::now(),
+        };
+
         let rmesg_reader = Box::new(RMesgLinesIterator::with_options(
             false,
             config.poll_interval,
         )?);
-        RMesgReader::with_lines_iterator(rmesg_reader, system::system_start_time()?, verbosity)
+        RMesgReader::with_lines_iterator(rmesg_reader, system_start_time, event_stream_start_time, verbosity)
     }
 
     fn with_lines_iterator(
         reader: LinesIterator,
         system_start_time: DateTime<Utc>,
+        event_stream_start_time: DateTime<Utc>,
         verbosity: u8,
     ) -> Result<RMesgReader, KMsgParserError> {
         let mut rmesg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
@@ -70,6 +83,7 @@ impl RMesgReader {
             _verbosity: verbosity,
             rmesg_line_reader,
             system_start_time,
+            event_stream_start_time,
         })
     }
 
@@ -128,6 +142,11 @@ impl RMesgReader {
                     )))
                 }
             };
+
+            // exit if sequence number is less than where desired
+            if timestamp < self.event_stream_start_time {
+                return Err(KMsgParsingError::EventTooOld);
+            }
 
             let message = rmesgparts["message"].to_owned();
 
@@ -189,7 +208,7 @@ impl Iterator for RMesgReader {
                         eprintln!("Iterator completed. No more messages expected");
                         return None;
                     }
-                    KMsgParsingError::SequenceNumTooOld => {
+                    KMsgParsingError::EventTooOld => {
                         // keep looking until there's an error, or some message is returned
                         // Not sure about Rust's tail recursion, so looping to avoid stack overflows.
                         continue;
@@ -252,6 +271,7 @@ mod test {
         let mut iter = RMesgReader::with_lines_iterator(
             Box::new(peekable_line_iter),
             Utc.timestamp_millis(4624626262),
+            Utc.timestamp_millis(0),
             3,
         )
         .unwrap();
@@ -270,6 +290,7 @@ mod test {
         let mut iter = RMesgReader::with_lines_iterator(
             Box::new(peekable_line_iter),
             Utc.timestamp_millis(4624626262),
+            Utc.timestamp_millis(0),
             3,
         )
         .unwrap();
@@ -309,6 +330,7 @@ never open>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 
         let mut iter = RMesgReader::with_lines_iterator(
             Box::new(peekable_line_iter),
             Utc.timestamp_millis(4624626262),
+            Utc.timestamp_millis(0),
             3,
         )
         .unwrap();

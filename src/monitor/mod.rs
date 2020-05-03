@@ -19,6 +19,7 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct MonitorConfig {
     pub verbosity: u8,
+    pub gobble_old_events: bool,
 }
 
 #[derive(Debug)]
@@ -46,8 +47,8 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Version>) -> Result<(), M
     }
 
     let dev_msg_reader_config = DevKMsgReaderConfig {
-        from_sequence_number: 0,
         flush_timeout: Duration::from_secs(1),
+        gobble_old_events: mc.gobble_old_events,
     };
 
     let kmsg_iterator: Box<dyn Iterator<Item = KMsg> + Send> = match DevKMsgReader::with_file(
@@ -64,6 +65,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Version>) -> Result<(), M
 
             let rmesg_reader_config = RMesgReaderConfig {
                 poll_interval: Duration::from_secs(10),
+                gobble_old_events: mc.gobble_old_events,
             };
             Box::new(RMesgReader::with_config(rmesg_reader_config, mc.verbosity)?)
         }

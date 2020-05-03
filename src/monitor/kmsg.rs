@@ -63,7 +63,7 @@ impl From<rmesg::error::RMesgError> for KMsgParserError {
 #[derive(Debug)]
 pub enum KMsgParsingError {
     Completed,
-    SequenceNumTooOld,
+    EventTooOld,
     EmptyLine,
     Generic(String),
 }
@@ -75,8 +75,8 @@ impl Display for KMsgParsingError {
             "KMsgParsingError:: {}",
             match self {
                 KMsgParsingError::Completed => "Completed Parsing",
-                KMsgParsingError::SequenceNumTooOld =>
-                    "sequence number too old (we've parsed newer messages than these)",
+                KMsgParsingError::EventTooOld =>
+                    "Event too old due to timestamp or sequence number (we've parsed newer messages than these)",
                 KMsgParsingError::EmptyLine => "Empty line",
                 KMsgParsingError::Generic(s) => s,
             }

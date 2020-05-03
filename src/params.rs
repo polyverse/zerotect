@@ -16,6 +16,8 @@ use strum_macros::EnumString;
 
 const AUTO_CONFIGURE: &str = "auto-configure";
 
+const GOBBLE_OLD_EVENTS_FLAG: &str = "gobble-old-events";
+
 const CONSOLE_OUTPUT_FLAG: &str = "console";
 
 const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
@@ -62,11 +64,16 @@ pub struct AutoConfigure {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MonitorConfig {
+    pub gobble_old_events: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolytectParams {
     pub verbosity: u8,
 
     pub auto_configure: AutoConfigure,
-
+    pub monitor_config: MonitorConfig,
     pub console_config: Option<ConsoleConfig>,
     pub polycorder_config: Option<PolycorderConfig>,
 }
@@ -80,7 +87,7 @@ pub struct PolytectParamOptions {
     pub verbosity: Option<u8>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
-
+    pub monitor_config: Option<MonitorConfigOptions>,
     pub console_config: Option<ConsoleConfigOptions>,
     pub polycorder_config: Option<PolycorderConfigOptions>,
 }
@@ -94,6 +101,11 @@ pub struct AutoConfigureOptions {
     pub exception_trace: Option<bool>,
     pub fatal_signals: Option<bool>,
     pub klog_include_timestamp: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MonitorConfigOptions {
+    pub gobble_old_events: Option<bool>,
 }
 
 // A proxy-structure to deserialize into
@@ -130,6 +142,7 @@ pub enum InnerError {
     TomlDeserializationError(toml::de::Error),
     StrumParseError(strum::ParseError),
     ParseIntError(std::num::ParseIntError),
+    TryFromIntError(std::num::TryFromIntError),
 }
 
 #[derive(Debug)]
@@ -183,6 +196,15 @@ impl From<std::num::ParseIntError> for ParsingError {
         }
     }
 }
+impl From<std::num::TryFromIntError> for ParsingError {
+    fn from(err: std::num::TryFromIntError) -> ParsingError {
+        ParsingError {
+            message: format!("Inner std::num::TryFromIntError :: {}", err),
+            inner_error: InnerError::TryFromIntError(err),
+        }
+    }
+}
+
 
 /// Parse command-line arguments
 /// maybe_args - allows unit-testing of arguments. Use None to parse
@@ -217,6 +239,9 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, KLOG_INCLUDE_TIMESTAMP])
                             .multiple(true)
                             .help(format!("Automatically configure the system on the user's behalf.").as_str()))
+                        .arg(Arg::with_name(GOBBLE_OLD_EVENTS_FLAG)
+                            .long(GOBBLE_OLD_EVENTS_FLAG)
+                            .help(format!("When enabled, gobbles events from the past (if found) in logs. By default polytect only captures events after it has started.").as_str()))
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
                             .long(CONSOLE_OUTPUT_FLAG)
                             .value_name("format")
@@ -282,9 +307,11 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
         },
     };
 
-    let verbosity = match u8::try_from(matches.occurrences_of("verbose")) {
-        Ok(cmd_verbosity) => cmd_verbosity,
-        Err(e) => panic!("Number of occurrences of verbose flag on commandline couldn't be converted into an 8-bit (one-byte) integer due to Error: {}. That's a LOT of verbosity. Since this is a system-level agent, it does not default to something saner. Aborting program.", e),
+    let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
+
+    let monitor_config = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
+        0 => MonitorConfig{gobble_old_events: false},
+        _ => MonitorConfig{gobble_old_events: true},
     };
 
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
@@ -331,10 +358,11 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
     };
 
     Ok(PolytectParams {
+        verbosity,
         auto_configure,
+        monitor_config,
         console_config,
         polycorder_config,
-        verbosity,
     })
 }
 
@@ -358,6 +386,10 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
                     fatal_signals: false,
                     klog_include_timestamp: false,
                 },
+            },
+            monitor_config: match polytect_param_options.monitor_config {
+                Some(mc) => MonitorConfig{gobble_old_events: mc.gobble_old_events.unwrap_or(false)},
+                None => MonitorConfig{gobble_old_events: false},
             },
             console_config: match polytect_param_options.console_config {
                 Some(cco) => match cco.format {
@@ -662,6 +694,9 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
+            monitor_config: MonitorConfig{
+                gobble_old_events: rand::thread_rng().gen_bool(0.5),
+            },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
                     true => ConsoleOutputFormat::JSON,
@@ -716,6 +751,7 @@ mod test {
         let config_obtained = PolytectParams {
             verbosity: config_options_obtained.verbosity,
             auto_configure: config_options_obtained.auto_configure,
+            monitor_config: config_options_obtained.monitor_config,
             polycorder_config: Some(polycorder_config),
             console_config: Some(console_config),
         };
@@ -796,6 +832,9 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
+            monitor_config: MonitorConfig{
+                gobble_old_events: rand::thread_rng().gen_bool(0.5),
+            },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
                     true => ConsoleOutputFormat::JSON,
@@ -844,6 +883,9 @@ mod test {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
+            },
+            monitor_config: MonitorConfig{
+                gobble_old_events: rand::thread_rng().gen_bool(0.5),
             },
             console_config: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(ConsoleConfig {
@@ -1074,6 +1116,9 @@ mod test {
                 exception_trace: true,
                 fatal_signals: true,
                 klog_include_timestamp: true,
+            },
+            monitor_config: MonitorConfig{
+                gobble_old_events: false,
             },
             console_config: Some(ConsoleConfig {
                 format: ConsoleOutputFormat::Text,
