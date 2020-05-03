@@ -92,6 +92,9 @@ create_polytect_conf() {
     tomlcontents=$(printf "${tomlcontents}\nfatal_signals = true")
     tomlcontents=$(printf "${tomlcontents}\nklog_include_timestamp = true")
     tomlcontents=$(printf "${tomlcontents}\n ")
+    tomlcontents=$(printf "${tomlcontents}\n[monitor_config]")
+    tomlcontents=$(printf "${tomlcontents}\ngobble_old_events = false")
+    tomlcontents=$(printf "${tomlcontents}\n ")
     tomlcontents=$(printf "${tomlcontents}\n[polycorder_config]")
     tomlcontents=$(printf "${tomlcontents}\nauth_key = '$authkey'")
 
