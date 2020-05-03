@@ -14,6 +14,8 @@ deploy:
   - provider: releases
     file:
       - "target/x86_64-unknown-linux-musl/release/polytect"
+      - "reference/schema.json"
+      - "reference/polytect.toml"
       - "install/install.sh"
       - "install/systemd/systemd-install.sh"
       - "install/openrc/openrc-install.sh"
