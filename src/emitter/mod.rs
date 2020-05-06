@@ -46,7 +46,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
     }
     if let Some(tc) = ec.polycorder_config {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
-        emitters.push(Box::new(polycorder::new(tc)?));
+        emitters.push(Box::new(polycorder::new(tc, ec.verbosity)?));
     }
 
     loop {
