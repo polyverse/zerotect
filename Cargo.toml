@@ -5,32 +5,33 @@ authors = ["Archis Gore <archis@polyverse.io>"]
 edition = "2018"
 
 [dependencies]
-sys-info = "0.6.0"
+log = "0.4.8"
+sys-info = "0.7.0"
 sysctl = "0.4.0"
 strum = "0.18.0"
 strum_macros = "0.18.0"
 regex = "1"
 typename = "0.1.2"
 enum-display-derive = "0.1.0"
-num = "0.2"
+num = "0.3.0"
 lazy_static = "1.4.0"
 num-traits = "0.2"
 num-derive = "0.3.0"
 timeout-iterator = "0.5.0"
-serde = { version = "1.0.106", features = ["derive"] }
-serde_json = { version = "1.0.51", features = ["arbitrary_precision"]}
-reqwest = { version = "0.10.4", features = ["json", "blocking", "gzip", "brotli"] }
+serde = { version = "1.0.114", features = ["derive"] }
+serde_json = { version = "1.0.56", features = ["arbitrary_precision"]}
+reqwest = { version = "0.10.6", features = ["json", "blocking", "gzip", "brotli"] }
 chrono = { version = "0.4", features = ["serde"] }
-schemars = { version = "0.7.1", features = ["chrono"]}
+schemars = { version = "0.7.6", features = ["chrono"]}
 pretty_assertions = "0.6.1"
 toml = "0.5.6"
 rand = "0.7.3"
 http = "0.2.1"
 rmesg = "0.5.0"
-libflate = "1.0.0"
+libflate = "1.0.2"
 
 [dependencies.clap]
-version = "2.33.0"
+version = "2.33.1"
 default-features = false
 
 # Cherry-pick the features you'd like to use
