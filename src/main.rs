@@ -4,9 +4,12 @@
 extern crate enum_display_derive;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
 
 mod emitter;
 mod events;
+mod formatter;
 mod monitor;
 mod params;
 mod system;
@@ -112,6 +115,7 @@ fn main() {
     let everbosity = polytect_config.verbosity;
     let console_config = polytect_config.console_config;
     let polycorder_config = polytect_config.polycorder_config;
+    let log_config = polytect_config.log_config;
 
     let emitter_thread_result = thread::Builder::new()
         .name("Event Emitter Thread".to_owned())
@@ -120,6 +124,7 @@ fn main() {
                 verbosity: everbosity,
                 console_config,
                 polycorder_config,
+                log_config,
             };
             if let Err(e) = emitter::emit(ec, emitter_source) {
                 eprintln!("Error launching Emitter: {}", e);

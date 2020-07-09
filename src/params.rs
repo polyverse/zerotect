@@ -26,22 +26,45 @@ const UNIDENTIFIED_NODE: &str = "unidentified";
 const FLUSH_TIMEOUT_SECONDS_FLAG: &str = "flush-timeout-secs";
 const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 
+const LOG_DESTINATION_FLAG: &str = "log";
+const LOG_FORMAT_FLAG: &str = "log-format";
+
+const POSSIBLE_FORMATS: &[&str] = &["text", "json"];
+
 const CONFIG_FILE_FLAG: &str = "configfile";
 
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
 const DEFAULT_POLYCORDER_FLUSH_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
-pub enum ConsoleOutputFormat {
+pub enum OutputFormat {
     #[strum(serialize = "text")]
     Text,
     #[strum(serialize = "json")]
     JSON,
+
+    // Microfocus ArcSight Common Event Format
+    #[strum(serialize = "cef")]
+    CEF,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConsoleConfig {
-    pub format: ConsoleOutputFormat,
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
+pub enum LogDestination {
+    #[strum(serialize = "syslog")]
+    Syslog,
+    #[strum(serialize = "file")]
+    File,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LogConfig {
+    pub format: OutputFormat,
+    pub destination: LogDestination,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -76,6 +99,7 @@ pub struct PolytectParams {
     pub monitor_config: MonitorConfig,
     pub console_config: Option<ConsoleConfig>,
     pub polycorder_config: Option<PolycorderConfig>,
+    pub log_config: Option<LogConfig>,
 }
 
 // A proxy-structure to deserialize into
@@ -90,6 +114,7 @@ pub struct PolytectParamOptions {
     pub monitor_config: Option<MonitorConfigOptions>,
     pub console_config: Option<ConsoleConfigOptions>,
     pub polycorder_config: Option<PolycorderConfigOptions>,
+    pub log_config: Option<LogConfigOptions>,
 }
 
 // A proxy-structure to deserialize into
@@ -131,6 +156,12 @@ pub struct PolycorderConfigOptions {
 #[derive(Deserialize)]
 pub struct ConsoleConfigOptions {
     pub format: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LogConfigOptions {
+    pub format: Option<String>,
+    pub destination: Option<String>,
 }
 
 #[derive(Debug)]
@@ -244,7 +275,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
                             .long(CONSOLE_OUTPUT_FLAG)
                             .value_name("format")
-                            .possible_values(&["text", "json"])
+                            .possible_values(POSSIBLE_FORMATS)
                             .case_insensitive(true)
                             .help(format!("Prints all monitored data to the console in the specified format.").as_str()))
                         .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
@@ -271,6 +302,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
                             .help(format!("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty.").as_str()))
+                        .arg(Arg::with_name(LOG_DESTINATION_FLAG)
+                            .long(LOG_DESTINATION_FLAG)
+                            .value_name("log_destination")
+                            .possible_values(&["syslog", "file"])
+                            .case_insensitive(true)
+                            .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
+                        .arg(Arg::with_name(LOG_FORMAT_FLAG)
+                            .long(NODE_ID_FLAG)
+                            .value_name("log_format")
+                            .possible_values(POSSIBLE_FORMATS)
+                            .requires(LOG_DESTINATION_FLAG)
+                            .help(format!("The format in which log entries are written.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
@@ -318,10 +361,10 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
     };
 
     let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
-        Some(v) => match ConsoleOutputFormat::from_str(v.trim().to_ascii_lowercase().as_str()) {
+        Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
             Ok(format) => Some(ConsoleConfig{format}),
             Err(e) => {
-                return Err(ParsingError{inner_error: InnerError::None, message: format!("Console configuration value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", v, e)})
+                return Err(ParsingError{inner_error: InnerError::None, message: format!("Console configuration value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", formatstr, e)})
             },
         },
         None => None,
@@ -360,12 +403,35 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
         }
     };
 
+    let log_config = match matches.value_of(LOG_DESTINATION_FLAG) {
+        Some(destinationstr) => match LogDestination::from_str(destinationstr.trim().to_ascii_lowercase().as_str()) {
+            Ok(destination) => {
+                // resolve format if specified
+                let format = match matches.value_of(LOG_FORMAT_FLAG) {
+                    Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
+                        Ok(format) => format,
+                        Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Log format set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", formatstr, e)}),
+                    },
+                    None => OutputFormat::JSON,
+                };
+
+                Some(LogConfig{
+                    destination,
+                    format
+                })
+            },
+            Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Log destination set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", destinationstr, e)}),
+        },
+        None => None,
+    };
+
     Ok(PolytectParams {
         verbosity,
         auto_configure,
         monitor_config,
         console_config,
         polycorder_config,
+        log_config,
     })
 }
 
@@ -376,49 +442,94 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
     let polytect_param_options: PolytectParamOptions =
         toml::from_str(str::from_utf8(&filecontents)?)?;
 
-    let params = PolytectParams{
-            verbosity: polytect_param_options.verbosity.unwrap_or(0),
-            auto_configure: match polytect_param_options.auto_configure {
-                Some(ac) => AutoConfigure {
-                    exception_trace: ac.exception_trace.unwrap_or(false),
-                    fatal_signals: ac.fatal_signals.unwrap_or(false),
-                    klog_include_timestamp: ac.klog_include_timestamp.unwrap_or(false),
-                },
-                None => AutoConfigure{
-                    exception_trace: false,
-                    fatal_signals: false,
-                    klog_include_timestamp: false,
-                },
+    let params = PolytectParams {
+        verbosity: polytect_param_options.verbosity.unwrap_or(0),
+        auto_configure: match polytect_param_options.auto_configure {
+            Some(ac) => AutoConfigure {
+                exception_trace: ac.exception_trace.unwrap_or(false),
+                fatal_signals: ac.fatal_signals.unwrap_or(false),
+                klog_include_timestamp: ac.klog_include_timestamp.unwrap_or(false),
             },
-            monitor_config: match polytect_param_options.monitor_config {
-                Some(mc) => MonitorConfig{gobble_old_events: mc.gobble_old_events.unwrap_or(false)},
-                None => MonitorConfig{gobble_old_events: false},
+            None => AutoConfigure {
+                exception_trace: false,
+                fatal_signals: false,
+                klog_include_timestamp: false,
             },
-            console_config: match polytect_param_options.console_config {
-                Some(cco) => match cco.format {
-                    Some(f) => match ConsoleOutputFormat::from_str(f.trim().to_ascii_lowercase().as_str()) {
-                        Ok(format) => Some(ConsoleConfig{format}),
-                        Err(e) => return Err(ParsingError{inner_error: InnerError::StrumParseError(e), message: format!("Unable to parse {} into the enum ConsoleOutputFormat, due to error: {}", f, e)}),
-                    },
-                    None => None,
-                }
-                None => None,
+        },
+        monitor_config: match polytect_param_options.monitor_config {
+            Some(mc) => MonitorConfig {
+                gobble_old_events: mc.gobble_old_events.unwrap_or(false),
             },
-            polycorder_config: match polytect_param_options.polycorder_config {
-                None => None,
-                Some(pco) => {
-                    match pco.auth_key {
-                        None => None,
-                        Some(ak) => Some(PolycorderConfig{
-                            auth_key: ak.trim().to_owned(),
-                            node_id: pco.node_id.unwrap_or(UNIDENTIFIED_NODE.to_owned()),
-                            flush_event_count: pco.flush_event_count.unwrap_or(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT),
-                            flush_timeout:  pco.flush_timeout.unwrap_or(DEFAULT_POLYCORDER_FLUSH_TIMEOUT),
+            None => MonitorConfig {
+                gobble_old_events: false,
+            },
+        },
+        console_config: match polytect_param_options.console_config {
+            Some(cco) => match cco.format {
+                Some(formatstr) => {
+                    match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
+                        Ok(format) => Some(ConsoleConfig { format }),
+                        Err(e) => return Err(ParsingError {
+                            inner_error: InnerError::StrumParseError(e),
+                            message: format!(
+                                "Unable to parse {} into the enum OutputFormat, due to error: {}",
+                                formatstr, e
+                            ),
                         }),
                     }
                 }
-            }
-        };
+                None => None,
+            },
+            None => None,
+        },
+        polycorder_config: match polytect_param_options.polycorder_config {
+            None => None,
+            Some(pco) => match pco.auth_key {
+                None => None,
+                Some(ak) => Some(PolycorderConfig {
+                    auth_key: ak.trim().to_owned(),
+                    node_id: pco.node_id.unwrap_or(UNIDENTIFIED_NODE.to_owned()),
+                    flush_event_count: pco
+                        .flush_event_count
+                        .unwrap_or(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT),
+                    flush_timeout: pco
+                        .flush_timeout
+                        .unwrap_or(DEFAULT_POLYCORDER_FLUSH_TIMEOUT),
+                }),
+            },
+        },
+        log_config: match polytect_param_options.log_config {
+            None => None,
+            Some(lc) => match lc.destination {
+                None => None,
+                Some(d) => {
+                    match LogDestination::from_str(d.trim().to_ascii_lowercase().as_str()) {
+                        Ok(destination) => {
+                            let format = match lc.format {
+                                    None => OutputFormat::JSON,
+                                    Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
+                                        Ok(format) => format,
+                                        Err(e) => return Err(ParsingError{inner_error: InnerError::StrumParseError(e), message: format!("Unable to parse {} into the enum OutputFormat, due to error: {}", formatstr, e)}),
+                                    },
+                                };
+
+                            Some(LogConfig {
+                                destination,
+                                format,
+                            })
+                        }
+                        Err(e) => return Err(ParsingError {
+                            inner_error: InnerError::StrumParseError(e),
+                            message: format!(
+                                "Unable to parse {} into the enum LogDestination, due to error: {}",
+                                d, e
+                            ),
+                        }),
+                    }
+                }
+            },
+        },
+    };
 
     Ok(params)
 }
@@ -484,7 +595,7 @@ mod test {
         assert_eq!(1, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::Text, cc.format);
+        assert_eq!(OutputFormat::Text, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("authkey", pc.auth_key);
@@ -552,7 +663,7 @@ mod test {
                 pc.err().unwrap()
             );
             assert_eq!(
-                ConsoleOutputFormat::Text,
+                OutputFormat::Text,
                 pc.unwrap().console_config.unwrap().format
             )
         }
@@ -571,7 +682,7 @@ mod test {
                 pc.err().unwrap()
             );
             assert_eq!(
-                ConsoleOutputFormat::JSON,
+                OutputFormat::JSON,
                 pc.unwrap().console_config.unwrap().format
             );
         }
@@ -680,7 +791,7 @@ mod test {
         assert_eq!(40, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::Text, cc.format);
+        assert_eq!(OutputFormat::Text, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("AuthKeyFromAccountManager3700793", pc.auth_key);
@@ -702,8 +813,8 @@ mod test {
             },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
-                    true => ConsoleOutputFormat::JSON,
-                    false => ConsoleOutputFormat::Text,
+                    true => OutputFormat::JSON,
+                    false => OutputFormat::Text,
                 },
             }),
             polycorder_config: Some(PolycorderConfig {
@@ -717,6 +828,16 @@ mod test {
                 ),
                 flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
                 flush_event_count: rand::thread_rng().gen_range(0, 500),
+            }),
+            log_config: Some(LogConfig {
+                destination: match rand::thread_rng().gen_bool(0.5) {
+                    true => LogDestination::Syslog,
+                    false => LogDestination::File,
+                },
+                format: match rand::thread_rng().gen_bool(0.5) {
+                    true => OutputFormat::JSON,
+                    false => OutputFormat::Text,
+                },
             }),
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
@@ -751,12 +872,19 @@ mod test {
             format: config_options_obtained.console_config.unwrap().format,
         };
 
+        let log_options_config = config_options_obtained.log_config.unwrap();
+        let log_config = LogConfig {
+            destination: log_options_config.destination,
+            format: log_options_config.format,
+        };
+
         let config_obtained = PolytectParams {
             verbosity: config_options_obtained.verbosity,
             auto_configure: config_options_obtained.auto_configure,
             monitor_config: config_options_obtained.monitor_config,
             polycorder_config: Some(polycorder_config),
             console_config: Some(console_config),
+            log_config: Some(log_config),
         };
 
         assert_eq!(
@@ -818,7 +946,7 @@ mod test {
         assert_eq!(7, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::Text, cc.format);
+        assert_eq!(OutputFormat::Text, cc.format);
 
         let pc = config.polycorder_config.unwrap();
         assert_eq!("AuthKeyFromPolyverseAccountManager97439", pc.auth_key);
@@ -840,8 +968,8 @@ mod test {
             },
             console_config: Some(ConsoleConfig {
                 format: match rand::thread_rng().gen_bool(0.5) {
-                    true => ConsoleOutputFormat::JSON,
-                    false => ConsoleOutputFormat::Text,
+                    true => OutputFormat::JSON,
+                    false => OutputFormat::Text,
                 },
             }),
             polycorder_config: Some(PolycorderConfig {
@@ -855,6 +983,16 @@ mod test {
                 ),
                 flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
                 flush_event_count: rand::thread_rng().gen_range(0, 500),
+            }),
+            log_config: Some(LogConfig {
+                destination: match rand::thread_rng().gen_bool(0.5) {
+                    true => LogDestination::Syslog,
+                    false => LogDestination::File,
+                },
+                format: match rand::thread_rng().gen_bool(0.5) {
+                    true => OutputFormat::JSON,
+                    false => OutputFormat::Text,
+                },
             }),
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
@@ -893,8 +1031,8 @@ mod test {
             console_config: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(ConsoleConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
-                        true => ConsoleOutputFormat::JSON,
-                        false => ConsoleOutputFormat::Text,
+                        true => OutputFormat::JSON,
+                        false => OutputFormat::Text,
                     },
                 }),
                 false => None,
@@ -914,6 +1052,16 @@ mod test {
                 }),
                 false => None,
             },
+            log_config: Some(LogConfig {
+                destination: match rand::thread_rng().gen_bool(0.5) {
+                    true => LogDestination::Syslog,
+                    false => LogDestination::File,
+                },
+                format: match rand::thread_rng().gen_bool(0.5) {
+                    true => OutputFormat::JSON,
+                    false => OutputFormat::Text,
+                },
+            }),
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
 
@@ -1072,7 +1220,7 @@ mod test {
         assert_eq!(3, config.verbosity);
 
         let cc = config.console_config.unwrap();
-        assert_eq!(ConsoleOutputFormat::Text, cc.format);
+        assert_eq!(OutputFormat::Text, cc.format);
     }
 
     #[test]
@@ -1124,13 +1272,17 @@ mod test {
                 gobble_old_events: false,
             },
             console_config: Some(ConsoleConfig {
-                format: ConsoleOutputFormat::Text,
+                format: OutputFormat::Text,
             }),
             polycorder_config: Some(PolycorderConfig {
                 auth_key: format!("AuthKeyFromPolyverseAccountManager"),
                 node_id: "UsefulNodeIdentifierToGroupEvents".to_owned(),
                 flush_timeout: DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
+            }),
+            log_config: Some(LogConfig {
+                destination: LogDestination::Syslog,
+                format: OutputFormat::JSON,
             }),
             verbosity: 0,
         };

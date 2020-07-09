@@ -72,10 +72,12 @@ pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder
     };
     let content_type_json = match HeaderValue::from_str(CONTENT_TYPE_JSON) {
         Ok(c) => c,
-        Err(e) => return Err(PolycorderError(format!(
+        Err(e) => {
+            return Err(PolycorderError(format!(
             "Polycorder: Aborting. Unable to create the content type json header due to error: {}",
             e
-        ))),
+        )))
+        }
     };
 
     let mut headers = HeaderMap::new();

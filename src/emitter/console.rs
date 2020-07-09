@@ -2,25 +2,25 @@
 
 use crate::emitter;
 use crate::events;
+use crate::formatter::{new as new_formatter, Formatter};
 use crate::params;
-use serde_json;
 
 pub struct Console {
     config: params::ConsoleConfig,
+    formatter: Box<dyn Formatter>,
 }
 
 impl emitter::Emitter for Console {
     fn emit(&self, event: &events::Version) {
-        match self.config.format {
-            params::ConsoleOutputFormat::Text => println!("{}", event),
-            params::ConsoleOutputFormat::JSON => match serde_json::to_string(&event) {
-                Ok(json) => println!("{}", json),
-                Err(e) => println!("Unable to Serialize event to JSON: {}", e),
-            },
+        match self.formatter.format(event) {
+            Ok(formattedstr) => println!("{}", formattedstr),
+            Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),
         }
     }
 }
 
 pub fn new(config: params::ConsoleConfig) -> Console {
-    Console { config }
+    let formatter = new_formatter(&config.format);
+
+    Console { config, formatter }
 }
