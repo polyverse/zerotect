@@ -13,9 +13,9 @@ deploy:
 # which the "Public Repos" permission, to enable pushing releases.
   - provider: releases
     file:
-      - "target/x86_64-unknown-linux-musl/release/polytect"
+      - "target/x86_64-unknown-linux-musl/release/zerotect"
       - "reference/schema.json"
-      - "reference/polytect.toml"
+      - "reference/zerotect.toml"
       - "install/install.sh"
       - "install/systemd/systemd-install.sh"
       - "install/openrc/openrc-install.sh"

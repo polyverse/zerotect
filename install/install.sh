@@ -1,17 +1,17 @@
 #!/bin/sh
 # Copyright (c) 2019 Polyverse Corporation
 
-remote_scripts_location="https://github.com/polyverse/polytect/releases/latest/download"
+remote_scripts_location="https://github.com/polyverse/zerotect/releases/latest/download"
 
 print_usage() {
     printf "Usage:\n"
     printf "  $0 <polycorder auth key> [node id] | uninstall\n"
     printf "\n"
-    printf "<polycorder auth key> : The polycorder auth key allows polytect to send detected events to Polycorder,\n"
+    printf "<polycorder auth key> : The polycorder auth key allows zerotect to send detected events to Polycorder,\n"
     printf "                        the hosted analytics platform available in the Polyverse Account dashboard.\n"
     printf "[node id]             : An optional node identifier/discriminator which would allow analytics to\n"
     printf "                        differentiate this particular node's events.\n"
-    printf "uninstall             : When used as the single argument, removes polytect from this system.\n"
+    printf "uninstall             : When used as the single argument, removes zerotect from this system.\n"
 }
 
 is_systemd() {
@@ -105,7 +105,7 @@ call_script() {
     return 1
 }
 
-printf "Polytect installer\n"
+printf "Zerotect installer\n"
 printf "\n"
 printf "This script detects your init system and triages to the appropriate sub-script\n"
 printf "for that init system.\n"
@@ -114,7 +114,7 @@ printf "\n"
 # Ensuring we are root
 if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
    printf "This script must be run as root because it needs to reliably detect the init system,\n"
-   printf "and be able to install the polytect service using the appropriate install script.\n"
+   printf "and be able to install the zerotect service using the appropriate install script.\n"
    exit 1
 fi
 
@@ -142,4 +142,4 @@ if [ "$?" = "0" ]; then
     exit $?
 fi
 
-printf "No more init systems supported. Polytect does not have a recipe for your system.\n"
+printf "No more init systems supported. Zerotect does not have a recipe for your system.\n"

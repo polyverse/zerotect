@@ -1,26 +1,26 @@
 #!/bin/sh
 # Copyright (c) 2019 Polyverse Corporation
 
-polytect_binary="polytect"
-polytect_remote_location="https://github.com/polyverse/polytect/releases/latest/download"
-polytect_local_location="/usr/local/bin"
+zerotect_binary="zerotect"
+zerotect_remote_location="https://github.com/polyverse/zerotect/releases/latest/download"
+zerotect_local_location="/usr/local/bin"
 
-tomldir="/etc/polytect"
-tomlfile="polytect.toml"
+tomldir="/etc/zerotect"
+tomlfile="zerotect.toml"
 
 upstart_job_dir="/etc/init"
-upstart_job_file="polytect.conf"
+upstart_job_file="zerotect.conf"
 
 print_usage() {
     printf "\n"
     printf "Usage:\n"
     printf "  $0 <polycorder auth key> [node id] | uninstall\n"
     printf "\n"
-    printf "<polycorder auth key> : The polycorder auth key allows polytect to send detected events to Polycorder,\n"
+    printf "<polycorder auth key> : The polycorder auth key allows zerotect to send detected events to Polycorder,\n"
     printf "                        the hosted analytics platform available in the Polyverse Account dashboard.\n"
     printf "[node id]             : An optional node identifier/discriminator which would allow analytics to\n"
     printf "                        differentiate this particular node's events.\n"
-    printf "uninstall             : When used as the single argument, removes polytect from this system.\n"
+    printf "uninstall             : When used as the single argument, removes zerotect from this system.\n"
 }
 
 is_upstart() {
@@ -44,7 +44,7 @@ is_upstart() {
 
     printf "Ensuring upstart job file directory ($upstart_job_dir) exists...\n"
     if [ ! -d "$upstart_job_dir" ]; then
-        printf "The directory $upstart_job_dir is required to configure the polytect service.\n"
+        printf "The directory $upstart_job_dir is required to configure the zerotect service.\n"
         printf "This script does not support any non-standard configurations and behaviors of upstart.\n"
         return 1
     fi
@@ -52,39 +52,39 @@ is_upstart() {
     return 0
 }
 
-download_latest_polytect() {
+download_latest_zerotect() {
 
     #make sure local location exists
-    if [ ! -d "$polytect_local_location" ]; then
-        printf "$polytect_local_location does not exist. Creating it...\n"
-        mkdir -p -m 755 $polytect_local_location
+    if [ ! -d "$zerotect_local_location" ]; then
+        printf "$zerotect_local_location does not exist. Creating it...\n"
+        mkdir -p -m 755 $zerotect_local_location
     fi
 
-    printf "Downloading the latest $polytect_binary from $polytect_location, and saving into $polytect_local_location\n"
+    printf "Downloading the latest $zerotect_binary from $zerotect_location, and saving into $zerotect_local_location\n"
     type wget 2>&1 1>/dev/null
     if [ "$?" = "0" ]; then
-        printf "Using wget to download polytect...\n"
-        wget -q -O "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+        printf "Using wget to download zerotect...\n"
+        wget -q -O "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary"
     else
         type curl 2>&1 1>/dev/null
         if [ "$?" = "0" ]; then
-            printf "Using curl to download polytect...\n"
-            curl -s -L -o "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+            printf "Using curl to download zerotect...\n"
+            curl -s -L -o "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary"
         else
-            printf "Neither curl nor wget found on the system. Unable to download polytect binary.\n"
+            printf "Neither curl nor wget found on the system. Unable to download zerotect binary.\n"
             exit 1
         fi
     fi
 
-    printf "Making polytect executable...\n"
-    chmod 755 "$polytect_local_location/$polytect_binary"
+    printf "Making zerotect executable...\n"
+    chmod 755 "$zerotect_local_location/$zerotect_binary"
 }
 
-create_polytect_conf() {
+create_zerotect_conf() {
     authey="$1"
     nodeid="$2"
 
-    printf "Creating polytect configuration file at $tomldir/$tomlfile\n"
+    printf "Creating zerotect configuration file at $tomldir/$tomlfile\n"
     if [ ! -d "$tomldir" ]; then
         mkdir -p -m 755 "$tomldir"
     fi
@@ -124,7 +124,7 @@ create_upstart_job_file() {
     upstart_job=$(printf "${upstart_job}\nstart on runlevel [2345]")
     upstart_job=$(printf "${upstart_job}\nstop on runlevel [016]")
     upstart_job=$(printf "${upstart_job}\n ")
-    upstart_job=$(printf "${upstart_job}\nexec $polytect_local_location/$polytect_binary --configfile $tomldir/$tomlfile")
+    upstart_job=$(printf "${upstart_job}\nexec $zerotect_local_location/$zerotect_binary --configfile $tomldir/$tomlfile")
     upstart_job=$(printf "${upstart_job}\n ")
 
     printf "Writing $upstart_job_dir/$upstart_job_file file with contents:\n"
@@ -132,24 +132,24 @@ create_upstart_job_file() {
 
     printf "$upstart_job" > $upstart_job_dir/$upstart_job_file
 
-    printf "Enable polytect monitor starting at bootup\n"
+    printf "Enable zerotect monitor starting at bootup\n"
     initctl reload-configuration
 
-    printf "Starting polytect now\n"
-    initctl start polytect
+    printf "Starting zerotect now\n"
+    initctl start zerotect
 }
 
 uninstall() {
     if [ -f "$upstart_job_dir/$upstart_job_file" ]; then
-        printf "Found polytect job file: $upstart_job_dir/$upstart_job_file. Removing it (after stopping service).\n"
-        initctl stop polytect
+        printf "Found zerotect job file: $upstart_job_dir/$upstart_job_file. Removing it (after stopping service).\n"
+        initctl stop zerotect
         rm $upstart_job_dir/$upstart_job_file
         initctl reload-configuration
     fi
 
-    if [ -f "$polytect_local_location/$polytect_binary" ]; then
-        printf "Found polytect binary: $polytect_local_location/$polytect_binary. Removing it.\n"
-        rm $polytect_local_location/$polytect_binary
+    if [ -f "$zerotect_local_location/$zerotect_binary" ]; then
+        printf "Found zerotect binary: $zerotect_local_location/$zerotect_binary. Removing it.\n"
+        rm $zerotect_local_location/$zerotect_binary
     fi
 
     if [ -f "$tomldir/$tomlfile" ]; then
@@ -160,12 +160,12 @@ uninstall() {
     fi
 }
 
-printf "Polytect installer for systemd\n"
+printf "zerotect installer for systemd\n"
 
 # Ensuring we are root
 if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
    printf "This script must be run as root because it needs to reliably detect the init system,\n"
-   printf "and be able to install the polytect service if systemd is found.\n"
+   printf "and be able to install the zerotect service if systemd is found.\n"
    exit 1
 fi
 
@@ -202,15 +202,15 @@ authkey="$1"
 nodeid="$2"
 
 
-download_latest_polytect
+download_latest_zerotect
 
-create_polytect_conf "$authkey" "$nodeid"
+create_zerotect_conf "$authkey" "$nodeid"
 
 create_upstart_job_file
 
-pid=$(pgrep polytect)
+pid=$(pgrep zerotect)
 if [ -z "$pid" ]; then
-    printf "Polytect is not running in the background. Something went wrong.\n"
+    printf "zerotect is not running in the background. Something went wrong.\n"
 else
-    printf "Polytect successfully installed and running in the background.\n"
+    printf "zerotect successfully installed and running in the background.\n"
 fi

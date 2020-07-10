@@ -22,7 +22,7 @@ const GZIP_THRESHOLD_BYTES: usize = 512;
 const CONTENT_ENCODING_GZIP: &str = "gzip";
 const CONTENT_ENCODING_IDENTITY: &str = "identity";
 const CONTENT_TYPE_JSON: &str = "application/json";
-const USER_AGENT: &str = "polytect";
+const USER_AGENT: &str = "zerotect";
 
 pub struct Polycorder {
     sender: Sender<events::Version>,

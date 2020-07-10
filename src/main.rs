@@ -30,7 +30,7 @@ fn main() {
         process::exit(1);
     }
 
-    let polytect_config = match params::parse_args(None) {
+    let zerotect_config = match params::parse_args(None) {
         Ok(pc) => pc,
         Err(e) => match e.inner_error {
             params::InnerError::ClapError(ce) => ce.exit(),
@@ -44,7 +44,7 @@ fn main() {
     let (monitor_sink, emitter_source): (Sender<events::Version>, Receiver<events::Version>) =
         mpsc::channel();
 
-    let env_config_copy = polytect_config.clone();
+    let env_config_copy = zerotect_config.clone();
     let config_event_sink = monitor_sink.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
     let env_thread_result = thread::Builder::new().name("Environment Configuration Thread".to_owned()).spawn(move || {
@@ -89,8 +89,8 @@ fn main() {
         process::exit(1);
     }
 
-    let mverbosity = polytect_config.verbosity;
-    let mc = polytect_config.monitor_config;
+    let mverbosity = zerotect_config.verbosity;
+    let mc = zerotect_config.monitor_config;
     let monitor_thread_result = thread::Builder::new()
         .name("Event Monitoring Thread".to_owned())
         .spawn(move || {
@@ -112,10 +112,10 @@ fn main() {
         }
     };
 
-    let everbosity = polytect_config.verbosity;
-    let console_config = polytect_config.console_config;
-    let polycorder_config = polytect_config.polycorder_config;
-    let log_config = polytect_config.log_config;
+    let everbosity = zerotect_config.verbosity;
+    let console_config = zerotect_config.console_config;
+    let polycorder_config = zerotect_config.polycorder_config;
+    let log_config = zerotect_config.log_config;
 
     let emitter_thread_result = thread::Builder::new()
         .name("Event Emitter Thread".to_owned())

@@ -126,11 +126,11 @@ pub enum EventType {
         count: usize,
     },
 
-    /// This is a Polytect-internal event. Polytect can be commanded to set and ensure certain
+    /// This is a zerotect-internal event. zerotect can be commanded to set and ensure certain
     /// configuration settings to capture events, such as enabling kernel fatal-signals, or
     /// core dumps.
     ///
-    /// This event is triggered when, after Polytect has configured a machine as commanded, the
+    /// This event is triggered when, after zerotect has configured a machine as commanded, the
     /// configuration later mismatched. It means someone attempted to undo those changes.
     ///
     /// This event usually tells an observer they may not be seeing other events because they may be
@@ -139,10 +139,10 @@ pub enum EventType {
         /// The key in question whose values mismatched.
         key: String,
 
-        /// The value polytect configured and thus expected.
+        /// The value zerotect configured and thus expected.
         expected_value: String,
 
-        /// The value polytect observed.
+        /// The value zerotect observed.
         observed_value: String,
     },
 }
@@ -308,7 +308,7 @@ pub enum LogLevel {
 #[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
 #[serde(tag = "type")]
 pub enum KernelTrapType {
-    /// This is type Polytect doesn't know how to parse. So it captures and stores the string description.
+    /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
     Generic { description: String },
 
     /// Segfault occurs when an invalid memory access is performed (writing to read-only memory,

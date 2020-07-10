@@ -19,3 +19,7 @@ flush_event_count = 10
 [polycorder_config.flush_timeout]
 secs = 10
 nanos = 0
+
+[log_config]
+format = 'JSON'
+destination = 'Syslog'

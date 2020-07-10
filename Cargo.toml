@@ -1,5 +1,5 @@
 [package]
-name = "polytect"
+name = "zerotect"
 version = "0.1.0"
 authors = ["Archis Gore <archis@polyverse.io>"]
 edition = "2018"

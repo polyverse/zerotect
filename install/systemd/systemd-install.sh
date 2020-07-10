@@ -1,26 +1,26 @@
 #!/bin/sh
 # Copyright (c) 2019 Polyverse Corporation
 
-polytect_binary="polytect"
-polytect_remote_location="https://github.com/polyverse/polytect/releases/latest/download"
-polytect_local_location="/usr/local/bin"
+zerotect_binary="zerotect"
+zerotect_remote_location="https://github.com/polyverse/zerotect/releases/latest/download"
+zerotect_local_location="/usr/local/bin"
 
-tomldir="/etc/polytect"
-tomlfile="polytect.toml"
+tomldir="/etc/zerotect"
+tomlfile="zerotect.toml"
 
 systemd_unit_dir="/etc/systemd/system"
-systemd_unit_file="polytect.service"
+systemd_unit_file="zerotect.service"
 
 print_usage() {
     printf "\n"
     printf "Usage:\n"
     printf "  $0 <polycorder auth key> [node id] | uninstall\n"
     printf "\n"
-    printf "<polycorder auth key> : The polycorder auth key allows polytect to send detected events to Polycorder,\n"
+    printf "<polycorder auth key> : The polycorder auth key allows zerotect to send detected events to Polycorder,\n"
     printf "                        the hosted analytics platform available in the Polyverse Account dashboard.\n"
     printf "[node id]             : An optional node identifier/discriminator which would allow analytics to\n"
     printf "                        differentiate this particular node's events.\n"
-    printf "uninstall             : When used as the single argument, removes polytect from this system.\n"
+    printf "uninstall             : When used as the single argument, removes zerotect from this system.\n"
 }
 
 is_systemd() {
@@ -41,7 +41,7 @@ is_systemd() {
 
     printf "Ensuring systemd unit file directory ($systemd_unit_dir) exists...\n"
     if [ ! -d "$systemd_unit_dir" ]; then
-        printf "The directory $systemd_unit_dir is required to configure the polytect service.\n"
+        printf "The directory $systemd_unit_dir is required to configure the zerotect service.\n"
         printf "This script does not support any non-standard configurations and behaviors of systemd.\n"
         return 1
     fi
@@ -49,39 +49,39 @@ is_systemd() {
     return 0
 }
 
-download_latest_polytect() {
+download_latest_zerotect() {
 
     #make sure local location exists
-    if [ ! -d "$polytect_local_location" ]; then
-        printf "$polytect_local_location does not exist. Creating it...\n"
-        mkdir -p -m 755 $polytect_local_location
+    if [ ! -d "$zerotect_local_location" ]; then
+        printf "$zerotect_local_location does not exist. Creating it...\n"
+        mkdir -p -m 755 $zerotect_local_location
     fi
 
-    printf "Downloading the latest $polytect_binary from $polytect_location, and saving into $polytect_local_location\n"
+    printf "Downloading the latest $zerotect_binary from $zerotect_location, and saving into $zerotect_local_location\n"
     type wget 2>&1 1>/dev/null
     if [ "$?" = "0" ]; then
-        printf "Using wget to download polytect...\n"
-        wget -q -O "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+        printf "Using wget to download zerotect...\n"
+        wget -q -O "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary"
     else
         type curl 2>&1 1>/dev/null
         if [ "$?" = "0" ]; then
-            printf "Using curl to download polytect...\n"
-            curl -s -L -o "$polytect_local_location/$polytect_binary" "$polytect_remote_location/$polytect_binary"
+            printf "Using curl to download zerotect...\n"
+            curl -s -L -o "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary"
         else
-            printf "Neither curl nor wget found on the system. Unable to download polytect binary.\n"
+            printf "Neither curl nor wget found on the system. Unable to download zerotect binary.\n"
             exit 1
         fi
     fi
 
-    printf "Making polytect executable...\n"
-    chmod 755 "$polytect_local_location/$polytect_binary"
+    printf "Making zerotect executable...\n"
+    chmod 755 "$zerotect_local_location/$zerotect_binary"
 }
 
-create_polytect_conf() {
+create_zerotect_conf() {
     authey="$1"
     nodeid="$2"
 
-    printf "Creating polytect configuration file at $tomldir/$tomlfile\n"
+    printf "Creating zerotect configuration file at $tomldir/$tomlfile\n"
     if [ ! -d "$tomldir" ]; then
         mkdir -p -m 755 "$tomldir"
     fi
@@ -119,7 +119,7 @@ create_systemd_unit_file() {
     systemd_unit=$(printf "${systemd_unit}\nAfter=network-online.target")
     systemd_unit=$(printf "${systemd_unit}\n ")
     systemd_unit=$(printf "${systemd_unit}\n[Service]")
-    systemd_unit=$(printf "${systemd_unit}\nExecStart=$polytect_local_location/$polytect_binary --configfile $tomldir/$tomlfile")
+    systemd_unit=$(printf "${systemd_unit}\nExecStart=$zerotect_local_location/$zerotect_binary --configfile $tomldir/$tomlfile")
     systemd_unit=$(printf "${systemd_unit}\n ")
     systemd_unit=$(printf "${systemd_unit}\n[Install]")
     systemd_unit=$(printf "${systemd_unit}\nWantedBy=multi-user.target")
@@ -131,24 +131,24 @@ create_systemd_unit_file() {
 
     printf "$systemd_unit" > $systemd_unit_dir/$systemd_unit_file
 
-    printf "Enable polytect monitor starting at bootup\n"
-    systemctl enable polytect
+    printf "Enable zerotect monitor starting at bootup\n"
+    systemctl enable zerotect
 
-    printf "Starting polytect now\n"
-    systemctl start polytect
+    printf "Starting zerotect now\n"
+    systemctl start zerotect
 }
 
 uninstall() {
     if [ -f "$systemd_unit_dir/$systemd_unit_file" ]; then
-        printf "Found polytect service unit: $systemd_unit_dir/$systemd_unit_file. Removing it (after stopping service).\n"
-        systemctl stop polytect
-        systemctl disable polytect
+        printf "Found zerotect service unit: $systemd_unit_dir/$systemd_unit_file. Removing it (after stopping service).\n"
+        systemctl stop zerotect
+        systemctl disable zerotect
         rm $systemd_unit_dir/$systemd_unit_file
     fi
 
-    if [ -f "$polytect_local_location/$polytect_binary" ]; then
-        printf "Found polytect binary: $polytect_local_location/$polytect_binary. Removing it.\n"
-        rm $polytect_local_location/$polytect_binary
+    if [ -f "$zerotect_local_location/$zerotect_binary" ]; then
+        printf "Found zerotect binary: $zerotect_local_location/$zerotect_binary. Removing it.\n"
+        rm $zerotect_local_location/$zerotect_binary
     fi
 
     if [ -f "$tomldir/$tomlfile" ]; then
@@ -159,12 +159,12 @@ uninstall() {
     fi
 }
 
-printf "Polytect installer for systemd\n"
+printf "zerotect installer for systemd\n"
 
 # Ensuring we are root
 if [ "$EUID" != "0" ] && [ "$USER" != "root" ]; then
    printf "This script must be run as root because it needs to reliably detect the init system,\n"
-   printf "and be able to install the polytect service if systemd is found.\n"
+   printf "and be able to install the zerotect service if systemd is found.\n"
    exit 1
 fi
 
@@ -201,15 +201,15 @@ authkey="$1"
 nodeid="$2"
 
 
-download_latest_polytect
+download_latest_zerotect
 
-create_polytect_conf "$authkey" "$nodeid"
+create_zerotect_conf "$authkey" "$nodeid"
 
 create_systemd_unit_file
 
-pid=$(pgrep polytect)
+pid=$(pgrep zerotect)
 if [ -z "$pid" ]; then
-    printf "Polytect is not running in the background. Something went wrong.\n"
+    printf "zerotect is not running in the background. Something went wrong.\n"
 else
-    printf "Polytect successfully installed and running in the background.\n"
+    printf "zerotect successfully installed and running in the background.\n"
 fi

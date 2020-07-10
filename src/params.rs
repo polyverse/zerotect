@@ -92,7 +92,7 @@ pub struct MonitorConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PolytectParams {
+pub struct zerotectParams {
     pub verbosity: u8,
 
     pub auto_configure: AutoConfigure,
@@ -107,7 +107,7 @@ pub struct PolytectParams {
 // what values were specified in TOML and which ones
 // were not.
 #[derive(Deserialize)]
-pub struct PolytectParamOptions {
+pub struct zerotectParamOptions {
     pub verbosity: Option<u8>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
@@ -239,7 +239,7 @@ impl From<std::num::TryFromIntError> for ParsingError {
 /// Parse command-line arguments
 /// maybe_args - allows unit-testing of arguments. Use None to parse
 ///     arguments from the operating system.
-pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, ParsingError> {
+pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<zerotectParams, ParsingError> {
     let args: Vec<OsString> = match maybe_args {
         Some(args) => args,
         None => {
@@ -251,7 +251,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
         }
     };
 
-    let matches = App::new("Polytect")
+    let matches = App::new("zerotect")
                         .setting(AppSettings::DeriveDisplayOrder)
                         .version("1.0")
                         .author("Polyverse Corporation <support@polyverse.com>")
@@ -271,7 +271,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .help(format!("Automatically configure the system on the user's behalf.").as_str()))
                         .arg(Arg::with_name(GOBBLE_OLD_EVENTS_FLAG)
                             .long(GOBBLE_OLD_EVENTS_FLAG)
-                            .help(format!("When enabled, gobbles events from the past (if found) in logs. By default polytect only captures events after it has started.").as_str()))
+                            .help(format!("When enabled, gobbles events from the past (if found) in logs. By default zerotect only captures events after it has started.").as_str()))
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
                             .long(CONSOLE_OUTPUT_FLAG)
                             .value_name("format")
@@ -309,7 +309,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .case_insensitive(true)
                             .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
                         .arg(Arg::with_name(LOG_FORMAT_FLAG)
-                            .long(NODE_ID_FLAG)
+                            .long(LOG_FORMAT_FLAG)
                             .value_name("log_format")
                             .possible_values(POSSIBLE_FORMATS)
                             .requires(LOG_DESTINATION_FLAG)
@@ -318,7 +318,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
                             .short("v")
                             .long("verbose")
                             .multiple(true)
-                            .help(format!("Increase debug verbosity of polytect.").as_str()))
+                            .help(format!("Increase debug verbosity of zerotect.").as_str()))
                         .get_matches_from_safe(args)?;
 
     if let Some(configfile) = matches.value_of(CONFIG_FILE_FLAG) {
@@ -425,7 +425,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
         None => None,
     };
 
-    Ok(PolytectParams {
+    Ok(zerotectParams {
         verbosity,
         auto_configure,
         monitor_config,
@@ -437,14 +437,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<PolytectParams, P
 
 /// Parse params from config file if one was provided
 /// https://github.com/clap-rs/clap/issues/748
-pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError> {
+pub fn parse_config_file(filepath: &str) -> Result<zerotectParams, ParsingError> {
     let filecontents = fs::read(filepath)?;
-    let polytect_param_options: PolytectParamOptions =
+    let zerotect_param_options: zerotectParamOptions =
         toml::from_str(str::from_utf8(&filecontents)?)?;
 
-    let params = PolytectParams {
-        verbosity: polytect_param_options.verbosity.unwrap_or(0),
-        auto_configure: match polytect_param_options.auto_configure {
+    let params = zerotectParams {
+        verbosity: zerotect_param_options.verbosity.unwrap_or(0),
+        auto_configure: match zerotect_param_options.auto_configure {
             Some(ac) => AutoConfigure {
                 exception_trace: ac.exception_trace.unwrap_or(false),
                 fatal_signals: ac.fatal_signals.unwrap_or(false),
@@ -456,7 +456,7 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
                 klog_include_timestamp: false,
             },
         },
-        monitor_config: match polytect_param_options.monitor_config {
+        monitor_config: match zerotect_param_options.monitor_config {
             Some(mc) => MonitorConfig {
                 gobble_old_events: mc.gobble_old_events.unwrap_or(false),
             },
@@ -464,7 +464,7 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
                 gobble_old_events: false,
             },
         },
-        console_config: match polytect_param_options.console_config {
+        console_config: match zerotect_param_options.console_config {
             Some(cco) => match cco.format {
                 Some(formatstr) => {
                     match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
@@ -482,7 +482,7 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
             },
             None => None,
         },
-        polycorder_config: match polytect_param_options.polycorder_config {
+        polycorder_config: match zerotect_param_options.polycorder_config {
             None => None,
             Some(pco) => match pco.auth_key {
                 None => None,
@@ -498,7 +498,7 @@ pub fn parse_config_file(filepath: &str) -> Result<PolytectParams, ParsingError>
                 }),
             },
         },
-        log_config: match polytect_param_options.log_config {
+        log_config: match zerotect_param_options.log_config {
             None => None,
             Some(lc) => match lc.destination {
                 None => None,
@@ -802,7 +802,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_random_values() {
-        let config_expected = PolytectParams {
+        let config_expected = zerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -878,7 +878,7 @@ mod test {
             format: log_options_config.format,
         };
 
-        let config_obtained = PolytectParams {
+        let config_obtained = zerotectParams {
             verbosity: config_options_obtained.verbosity,
             auto_configure: config_options_obtained.auto_configure,
             monitor_config: config_options_obtained.monitor_config,
@@ -957,7 +957,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_random_values_through_args() {
-        let config_expected = PolytectParams {
+        let config_expected = zerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -1019,7 +1019,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_optional_fields_through_args() {
-        let config_expected = PolytectParams {
+        let config_expected = zerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -1262,7 +1262,7 @@ mod test {
 
     #[test]
     fn generate_reference_toml_config_file() {
-        let config_expected = PolytectParams {
+        let config_expected = zerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: true,
                 fatal_signals: true,
@@ -1290,7 +1290,7 @@ mod test {
         let toml_file = format!(
             "{}{}",
             env!("CARGO_MANIFEST_DIR"),
-            "/reference/polytect.toml"
+            "/reference/zerotect.toml"
         );
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
         println!("Writing TOML string to file: {}", &toml_file);

@@ -42,7 +42,7 @@ impl RMesgReader {
             eprintln!("Events may be ignored or missed until they are enabled.");
             eprintln!("You can enable timestamps by running the following: ");
             eprintln!("  echo Y > /sys/module/printk/parameters/time");
-            eprintln!("Or you may tell polytect to auto-configure the flag on the command-line or config file.");
+            eprintln!("Or you may tell zerotect to auto-configure the flag on the command-line or config file.");
         }
 
         let system_start_time = system::system_start_time()?;

@@ -234,7 +234,7 @@
           }
         },
         {
-          "description": "This is a Polytect-internal event. Polytect can be commanded to set and ensure certain configuration settings to capture events, such as enabling kernel fatal-signals, or core dumps.\n\nThis event is triggered when, after Polytect has configured a machine as commanded, the configuration later mismatched. It means someone attempted to undo those changes.\n\nThis event usually tells an observer they may not be seeing other events because they may be disabled.",
+          "description": "This is a zerotect-internal event. zerotect can be commanded to set and ensure certain configuration settings to capture events, such as enabling kernel fatal-signals, or core dumps.\n\nThis event is triggered when, after zerotect has configured a machine as commanded, the configuration later mismatched. It means someone attempted to undo those changes.\n\nThis event usually tells an observer they may not be seeing other events because they may be disabled.",
           "type": "object",
           "required": [
             "expected_value",
@@ -244,7 +244,7 @@
           ],
           "properties": {
             "expected_value": {
-              "description": "The value polytect configured and thus expected.",
+              "description": "The value zerotect configured and thus expected.",
               "type": "string"
             },
             "key": {
@@ -252,7 +252,7 @@
               "type": "string"
             },
             "observed_value": {
-              "description": "The value polytect observed.",
+              "description": "The value zerotect observed.",
               "type": "string"
             },
             "type": {
@@ -267,6 +267,7 @@
     },
     "FatalSignalType": {
       "description": "The type of Fatal Signal detected Comprehensive list of POSIX signals in the linux kernel can be found int he kernel source tree: https://github.com/torvalds/linux/blob/master/include/linux/signal.h#L339\n\nA bit more detail may be found in the man-pages: http://man7.org/linux/man-pages/man7/signal.7.html",
+      "type": "string",
       "enum": [
         "SIGHUP",
         "SIGINT",
@@ -304,7 +305,7 @@
       "description": "The types of kernel traps understood",
       "anyOf": [
         {
-          "description": "This is type Polytect doesn't know how to parse. So it captures and stores the string description.",
+          "description": "This is type zerotect doesn't know how to parse. So it captures and stores the string description.",
           "type": "object",
           "required": [
             "description",
@@ -362,6 +363,7 @@
     },
     "LogFacility": {
       "description": "Linux kmesg (kernel message buffer) Log Facility.",
+      "type": "string",
       "enum": [
         "Kern",
         "User",
@@ -379,6 +381,7 @@
     },
     "LogLevel": {
       "description": "Linux kmesg (kernel message buffer) Log Level.",
+      "type": "string",
       "enum": [
         "Emergency",
         "Alert",
@@ -392,6 +395,7 @@
     },
     "SegfaultAccessMode": {
       "description": "The context under which the Segmentation Fault was triggered",
+      "type": "string",
       "enum": [
         "Kernel",
         "User"
@@ -399,6 +403,7 @@
     },
     "SegfaultAccessType": {
       "description": "The type of Access that triggered this Segmentation Fault",
+      "type": "string",
       "enum": [
         "Read",
         "Write"
@@ -456,6 +461,7 @@
     },
     "SegfaultReason": {
       "description": "The reason for the Segmentation Fault",
+      "type": "string",
       "enum": [
         "NoPageFound",
         "ProtectionFault"
