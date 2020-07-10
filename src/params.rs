@@ -92,7 +92,7 @@ pub struct MonitorConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct zerotectParams {
+pub struct ZerotectParams {
     pub verbosity: u8,
 
     pub auto_configure: AutoConfigure,
@@ -107,7 +107,7 @@ pub struct zerotectParams {
 // what values were specified in TOML and which ones
 // were not.
 #[derive(Deserialize)]
-pub struct zerotectParamOptions {
+pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
@@ -239,7 +239,7 @@ impl From<std::num::TryFromIntError> for ParsingError {
 /// Parse command-line arguments
 /// maybe_args - allows unit-testing of arguments. Use None to parse
 ///     arguments from the operating system.
-pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<zerotectParams, ParsingError> {
+pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, ParsingError> {
     let args: Vec<OsString> = match maybe_args {
         Some(args) => args,
         None => {
@@ -425,7 +425,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<zerotectParams, P
         None => None,
     };
 
-    Ok(zerotectParams {
+    Ok(ZerotectParams {
         verbosity,
         auto_configure,
         monitor_config,
@@ -437,12 +437,12 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<zerotectParams, P
 
 /// Parse params from config file if one was provided
 /// https://github.com/clap-rs/clap/issues/748
-pub fn parse_config_file(filepath: &str) -> Result<zerotectParams, ParsingError> {
+pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError> {
     let filecontents = fs::read(filepath)?;
-    let zerotect_param_options: zerotectParamOptions =
+    let zerotect_param_options: ZerotectParamOptions =
         toml::from_str(str::from_utf8(&filecontents)?)?;
 
-    let params = zerotectParams {
+    let params = ZerotectParams {
         verbosity: zerotect_param_options.verbosity.unwrap_or(0),
         auto_configure: match zerotect_param_options.auto_configure {
             Some(ac) => AutoConfigure {
@@ -802,7 +802,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_random_values() {
-        let config_expected = zerotectParams {
+        let config_expected = ZerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -878,7 +878,7 @@ mod test {
             format: log_options_config.format,
         };
 
-        let config_obtained = zerotectParams {
+        let config_obtained = ZerotectParams {
             verbosity: config_options_obtained.verbosity,
             auto_configure: config_options_obtained.auto_configure,
             monitor_config: config_options_obtained.monitor_config,
@@ -957,7 +957,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_random_values_through_args() {
-        let config_expected = zerotectParams {
+        let config_expected = ZerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -1019,7 +1019,7 @@ mod test {
 
     #[test]
     fn toml_serialize_and_parse_optional_fields_through_args() {
-        let config_expected = zerotectParams {
+        let config_expected = ZerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -1262,7 +1262,7 @@ mod test {
 
     #[test]
     fn generate_reference_toml_config_file() {
-        let config_expected = zerotectParams {
+        let config_expected = ZerotectParams {
             auto_configure: AutoConfigure {
                 exception_trace: true,
                 fatal_signals: true,
