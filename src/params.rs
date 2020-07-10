@@ -29,7 +29,7 @@ const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 const LOG_DESTINATION_FLAG: &str = "log";
 const LOG_FORMAT_FLAG: &str = "log-format";
 
-const POSSIBLE_FORMATS: &[&str] = &["text", "json"];
+const POSSIBLE_FORMATS: &[&str] = &["text", "json", "cef"];
 
 const CONFIG_FILE_FLAG: &str = "configfile";
 
