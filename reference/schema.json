@@ -4,7 +4,7 @@
   "description": "Event is the complete structure that Polycorder (Polyverse-hosted zero-day detection service) understands. This structure is also the reference schema/format for all detect-efforts.\n\nAs such, it is encouraged to have many detectors that emit data in this structure.\n\nDifferent implementations of the structure may very. Various fields may come or go.\n\nAll parsers are encouraged to first test the \"Version\" field and then parse the correct structure. The field `version` is guaranteed to exist on ALL versions and instances of Event. Any structure/data that does not contain the version field, is considered invalid.",
   "anyOf": [
     {
-      "description": "Version is guaranteed to exist. All other fields may change or not exist, and it is recommended to use a different version when making breaking changes to all other fields. It allows parsers to test on version and determine if they know what to do with the rest.",
+      "description": "Version is guaranteed to exist. All other fields may change or not exist, and it is recommended to use a different version when making breaking changes to all other fields. It allows parsers to test on version and determine if they know what to do with the rest. For this particular variant, set DeviceVersion to a fixed value \"V1\"",
       "type": "object",
       "required": [
         "event",

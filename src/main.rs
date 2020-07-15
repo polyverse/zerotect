@@ -6,6 +6,8 @@ extern crate enum_display_derive;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate rust_cef_derive;
 
 mod emitter;
 mod events;

@@ -1,30 +1,11 @@
 use crate::events;
 use crate::formatter::{FormatResult, Formatter};
-
-// CEF:Version|Device Vendor|Device Product|
-const CEF_PREFIX: &str = "CEF:0|polyverse|zerotect";
+use rust_cef::ToCef;
 
 pub struct CEFFormatter {}
 impl Formatter for CEFFormatter {
     fn format(&self, event: &events::Version) -> FormatResult {
-        let mut cef_event = String::from(CEF_PREFIX);
-
-        match event {
-            events::Version::V1{timestamp: _, event: event_type} => {
-                // | Device Version
-                cef_event.push_str("|V1");
-
-                // | Device Event Class ID | Name | Severity
-                match event_type {
-                    events::EventType::LinuxKernelTrap{..} => cef_event.push_str("|LinuxKernelTrap|Linux Kernel Trap|10"),
-                    events::EventType::LinuxFatalSignal{..} => cef_event.push_str("|LinuxFatalSignal|Linux Fatal Signal|10"),
-                    events::EventType::ConfigMismatch{..} => cef_event.push_str("|ConfigMismatch|Configuration mismatched what zerotect expected|4"),
-                    events::EventType::LinuxSuppressedCallback{..} => cef_event.push_str("|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3"),
-                }
-            }
-        }
-
-        Ok(cef_event)
+        Ok(event.to_cef()?)
     }
 }
 
@@ -35,6 +16,19 @@ impl Formatter for CEFFormatter {
 mod test {
     use super::*;
     use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
+
+    macro_rules! map(
+        { $($key:expr => $value:expr),+ } => {
+            {
+                let mut m = ::std::collections::HashMap::new();
+                $(
+                    m.insert($key.to_owned(), $value.to_owned());
+                )+
+                m
+            }
+         };
+        );
 
     #[test]
     fn test_linux_kernel_trap() {
@@ -64,8 +58,78 @@ mod test {
             },
         };
 
-        let formatter = CEFFormatter{};
+        let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxKernelTrap|Linux Kernel Trap|10");
+        assert_eq!(
+            formatter.format(&event1).unwrap(),
+            "CEF:0|polyverse|zerotect|V1|LinuxKernelTrap|Linux Kernel Trap|10|"
+        );
+    }
+
+    #[test]
+    fn test_linux_fatal_signal() {
+        let timestamp = Utc.timestamp_millis(471804323);
+
+        let event1 = events::Version::V1 {
+            timestamp,
+            event: events::EventType::LinuxFatalSignal {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                signal: events::FatalSignalType::SIGSEGV,
+                stack_dump: Some(events::StackDump {
+                    cpu: 1,
+                    pid: 36075,
+                    command: "a.out".to_owned(),
+                    kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
+                    hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
+                    taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
+                    registers: HashMap::new(),
+                }),
+            },
+        };
+
+        let formatter = CEFFormatter {};
+
+        assert_eq!(
+            formatter.format(&event1).unwrap(),
+            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|"
+        );
+    }
+
+    #[test]
+    fn test_linux_suppressed_callback() {
+        let timestamp = Utc.timestamp_millis(471804323);
+
+        let event1 = events::Version::V1 {
+            timestamp,
+            event: events::EventType::LinuxSuppressedCallback {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                function_name: "show_signal_msg".to_owned(),
+                count: 9,
+            },
+        };
+
+        let formatter = CEFFormatter {};
+
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|");
+    }
+
+    #[test]
+    fn test_zerotect_config_mismatch() {
+        let timestamp = Utc.timestamp_millis(471804323);
+
+        let event1 = events::Version::V1 {
+            timestamp,
+            event: events::EventType::ConfigMismatch {
+                key: "/sys/module/printk/parameters/time".to_owned(),
+                expected_value: "Y".to_owned(),
+                observed_value: "N".to_owned(),
+            },
+        };
+
+        let formatter = CEFFormatter {};
+
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|");
     }
 }

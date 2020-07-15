@@ -24,13 +24,41 @@ use typename::TypeName;
 /// on ALL versions and instances of Event. Any structure/data that does not
 /// contain the version field, is considered invalid.
 ///
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Serialize,
+    JsonSchema,
+    ToCef,
+    CefHeaderVersion,
+    CefHeaderDeviceVendor,
+    CefHeaderDeviceProduct,
+    CefHeaderDeviceVersion,
+    CefHeaderDeviceEventClassID,
+    CefHeaderName,
+    CefHeaderSeverity,
+    CefExtensions,
+)]
+#[cef_values(
+    CefHeaderVersion = "0",
+    CefHeaderDeviceVendor = "polyverse",
+    CefHeaderDeviceProduct = "zerotect"
+)]
 #[serde(tag = "version")]
 pub enum Version {
     /// Version is guaranteed to exist. All other fields may change or not exist,
     /// and it is recommended to use a different version when making breaking changes
     /// to all other fields. It allows parsers to test on version and determine if they
     /// know what to do with the rest.
+    /// For this particular variant, set DeviceVersion to a fixed value "V1"
+    #[cef_values(CefHeaderDeviceVersion = "V1")]
+    // For this variant, inherit the other three headers from the event field
+    #[cef_inherit(
+        CefHeaderDeviceEventClassID = "event",
+        CefHeaderName = "event",
+        CefHeaderSeverity = "event"
+    )]
     V1 {
         /// This is universal and important for all events. They occur at a time.
         timestamp: DateTime<Utc>,
@@ -49,11 +77,25 @@ impl Display for Version {
 }
 
 /// The Platform this event originated on.
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Serialize,
+    JsonSchema,
+    CefHeaderDeviceEventClassID,
+    CefHeaderName,
+    CefHeaderSeverity,
+)]
 #[serde(tag = "type")]
 pub enum EventType {
     /// The Linux platform and event details in the Linux context
     /// A Kernel Trap event - the kernel stops process execution for attempting something stupid
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "LinuxKernelTrap",
+        CefHeaderName = "Linux Kernel Trap",
+        CefHeaderSeverity = "10"
+    )]
     LinuxKernelTrap {
         /// The type of kernel trap triggered
         /// A Log-level for this event - was it critical?
@@ -90,6 +132,11 @@ pub enum EventType {
     },
 
     /// A Fatal Signal from the process because the process did something stupid
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "LinuxFatalSignal",
+        CefHeaderName = "Linux Fatal Signal",
+        CefHeaderSeverity = "10"
+    )]
     LinuxFatalSignal {
         /// A Log-level for this event - was it critical?
         level: LogLevel,
@@ -112,6 +159,11 @@ pub enum EventType {
     /// This is a crucial data point because under Blind ROP attacks an error
     /// might happen thousands of times but may only be logged once, with all the
     /// remaining attempts being suppressed.
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "LinuxSuppressedCallback",
+        CefHeaderName = "Linux kernel suppressed repetitive log entries",
+        CefHeaderSeverity = "3"
+    )]
     LinuxSuppressedCallback {
         /// A Log-level for this event - was it critical?
         level: LogLevel,
@@ -135,6 +187,11 @@ pub enum EventType {
     ///
     /// This event usually tells an observer they may not be seeing other events because they may be
     /// disabled.
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "ConfigMismatch",
+        CefHeaderName = "Configuration mismatched what zerotect expected",
+        CefHeaderSeverity = "4"
+    )]
     ConfigMismatch {
         /// The key in question whose values mismatched.
         key: String,

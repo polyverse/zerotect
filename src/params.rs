@@ -469,13 +469,15 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 Some(formatstr) => {
                     match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
                         Ok(format) => Some(ConsoleConfig { format }),
-                        Err(e) => return Err(ParsingError {
-                            inner_error: InnerError::StrumParseError(e),
-                            message: format!(
+                        Err(e) => {
+                            return Err(ParsingError {
+                                inner_error: InnerError::StrumParseError(e),
+                                message: format!(
                                 "Unable to parse {} into the enum OutputFormat, due to error: {}",
                                 formatstr, e
                             ),
-                        }),
+                            })
+                        }
                     }
                 }
                 None => None,
@@ -502,10 +504,9 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
             None => None,
             Some(lc) => match lc.destination {
                 None => None,
-                Some(d) => {
-                    match LogDestination::from_str(d.trim().to_ascii_lowercase().as_str()) {
-                        Ok(destination) => {
-                            let format = match lc.format {
+                Some(d) => match LogDestination::from_str(d.trim().to_ascii_lowercase().as_str()) {
+                    Ok(destination) => {
+                        let format = match lc.format {
                                     None => OutputFormat::JSON,
                                     Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
                                         Ok(format) => format,
@@ -513,20 +514,21 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                                     },
                                 };
 
-                            Some(LogConfig {
-                                destination,
-                                format,
-                            })
-                        }
-                        Err(e) => return Err(ParsingError {
+                        Some(LogConfig {
+                            destination,
+                            format,
+                        })
+                    }
+                    Err(e) => {
+                        return Err(ParsingError {
                             inner_error: InnerError::StrumParseError(e),
                             message: format!(
                                 "Unable to parse {} into the enum LogDestination, due to error: {}",
                                 d, e
                             ),
-                        }),
+                        })
                     }
-                }
+                },
             },
         },
     };
