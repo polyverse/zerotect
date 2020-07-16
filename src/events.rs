@@ -53,17 +53,17 @@ pub enum Version {
     /// know what to do with the rest.
     /// For this particular variant, set DeviceVersion to a fixed value "V1"
     #[cef_values(CefHeaderDeviceVersion = "V1")]
-    // For this variant, inherit the other three headers from the event field
-    #[cef_inherit(
-        CefHeaderDeviceEventClassID = "event",
-        CefHeaderName = "event",
-        CefHeaderSeverity = "event"
-    )]
     V1 {
         /// This is universal and important for all events. They occur at a time.
         timestamp: DateTime<Utc>,
 
         /// Platform records fields specific to a specific mechanism/platform.
+        // For this variant, inherit the other three headers from the event field
+        #[cef_inherit(
+            CefHeaderDeviceEventClassID,
+            CefHeaderName,
+            CefHeaderSeverity
+        )]
         event: EventType,
     },
 }
