@@ -20,6 +20,8 @@ pub type LinesIterator = Box<dyn Iterator<Item = LineItem> + Send>;
 
 const DEV_KMSG_LOCATION: &str = "/dev/kmsg";
 
+const LEVEL_MASK: u32 = (1 << 3) - 1;
+
 #[derive(Clone)]
 pub struct DevKMsgReaderConfig {
     pub flush_timeout: Duration,
@@ -155,7 +157,7 @@ impl DevKMsgReader {
             Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
-                    match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev >> 3)) {
+                    match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev & LEVEL_MASK)) {
                          (Some(facility), Some(level)) => (facility, level),
                          _ => return Err(KMsgParsingError::Generic(format!("Unable to parse {} into log facility and level. Line: {}", faclev, line_str)))
                     }
@@ -331,7 +333,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
+            level: events::LogLevel::Notice,
             timestamp: iter.system_start_time,
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
         });
@@ -341,7 +343,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
+            level: events::LogLevel::Info,
             timestamp: iter.system_start_time,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });
@@ -353,7 +355,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
@@ -368,7 +370,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
@@ -408,7 +410,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: event_timestamp,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
@@ -439,7 +441,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
+            level: events::LogLevel::Info,
             timestamp: iter.system_start_time,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
         });
@@ -451,7 +453,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
@@ -484,7 +486,7 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(entry, KMsg{
             facility: events::LogFacility::Kern,
-            level: events::LogLevel::Emergency,
+            level: events::LogLevel::Notice,
             timestamp: iter.system_start_time,
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
         });
@@ -496,7 +498,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from(
                     r"Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
@@ -513,7 +515,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
@@ -528,7 +530,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
