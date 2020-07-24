@@ -423,7 +423,7 @@ mod test {
 5,0,bad!!!n 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019
 6,1,0,-;Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text
 6,bad!!;x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
-6,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
+4,3,0,-,more,deets;x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'";
 
         let peekable_line_iter: LinesIterator =
             Box::new(realistic_message.lines().map(|s| Ok(s.to_owned())));
@@ -453,7 +453,7 @@ mod test {
             entry,
             KMsg {
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Info,
+                level: events::LogLevel::Warning,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
             }
@@ -562,7 +562,7 @@ mod test {
             let entry = maybe_entry.unwrap();
             assert_eq!(entry, KMsg{
                 facility: events::LogFacility::Kern,
-                level: events::LogLevel::Emergency,
+                level: events::LogLevel::Notice,
                 timestamp: iter.system_start_time,
                 message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
             });
