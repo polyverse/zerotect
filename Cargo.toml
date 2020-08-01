@@ -5,7 +5,7 @@ authors = ["Archis Gore <archis@polyverse.io>"]
 edition = "2018"
 
 [dependencies]
-log = "0.4.8"
+log = "0.4.11"
 sys-info = "0.7.0"
 sysctl = "0.4.0"
 strum = "0.18.0"
@@ -27,10 +27,11 @@ pretty_assertions = "0.6.1"
 toml = "0.5.6"
 rand = "0.7.3"
 http = "0.2.1"
-rmesg = "0.5.0"
+rmesg = "0.6.0"
 libflate = "1.0.2"
 rust-cef-derive = "0.0.5"
 rust-cef = "0.0.5"
+syslog = "5.0.0"
 
 [dependencies.clap]
 version = "2.33.1"

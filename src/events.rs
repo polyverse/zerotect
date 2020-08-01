@@ -64,6 +64,7 @@ pub enum Version {
             CefHeaderName,
             CefHeaderSeverity
         )]
+        #[cef_ext_gobble]
         event: EventType,
     },
 }
@@ -86,6 +87,7 @@ impl Display for Version {
     CefHeaderDeviceEventClassID,
     CefHeaderName,
     CefHeaderSeverity,
+    CefExtensions,
 )]
 #[serde(tag = "type")]
 pub enum EventType {

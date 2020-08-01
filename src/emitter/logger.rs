@@ -5,6 +5,7 @@ use crate::events;
 use crate::formatter::{new as new_formatter, Formatter};
 use crate::params;
 
+
 pub struct Logger {
     config: params::LogConfig,
     formatter: Box<dyn Formatter>,
@@ -21,6 +22,5 @@ impl emitter::Emitter for Logger {
 
 pub fn new(config: params::LogConfig) -> Logger {
     let formatter = new_formatter(&config.format);
-
     Logger { config, formatter }
 }

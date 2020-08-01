@@ -13,6 +13,7 @@ use std::str;
 use std::str::FromStr;
 use std::time::Duration;
 use strum_macros::EnumString;
+use std::default::Default;
 
 const AUTO_CONFIGURE: &str = "auto-configure";
 
@@ -26,8 +27,11 @@ const UNIDENTIFIED_NODE: &str = "unidentified";
 const FLUSH_TIMEOUT_SECONDS_FLAG: &str = "flush-timeout-secs";
 const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 
-const LOG_DESTINATION_FLAG: &str = "log";
 const LOG_FORMAT_FLAG: &str = "log-format";
+const LOG_DESTINATION_FLAG: &str = "log";
+const LOG_DESTINATION_SYSLOG: &str = "syslog";
+const LOG_DESTINATION_FILE: &str = "file";
+const POSSIBLE_LOG_DESTINATIONS: &[&str] = &[LOG_DESTINATION_SYSLOG, LOG_DESTINATION_FILE];
 
 const POSSIBLE_FORMATS: &[&str] = &["text", "json", "cef"];
 
@@ -56,9 +60,17 @@ pub struct ConsoleConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
 pub enum LogDestination {
     #[strum(serialize = "syslog")]
-    Syslog,
+    Syslog(SyslogConfig),
     #[strum(serialize = "file")]
-    File,
+    File(FilelogConfig),
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SyslogConfig {
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FilelogConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -305,7 +317,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                         .arg(Arg::with_name(LOG_DESTINATION_FLAG)
                             .long(LOG_DESTINATION_FLAG)
                             .value_name("log_destination")
-                            .possible_values(&["syslog", "file"])
+                            .possible_values(POSSIBLE_LOG_DESTINATIONS)
                             .case_insensitive(true)
                             .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
                         .arg(Arg::with_name(LOG_FORMAT_FLAG)
@@ -314,6 +326,12 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .possible_values(POSSIBLE_FORMATS)
                             .requires(LOG_DESTINATION_FLAG)
                             .help(format!("The format in which log entries are written.").as_str()))
+                        .arg(Arg::with_name(LOG_DESTINATION_FLAG)
+                            .long(LOG_DESTINATION_FLAG)
+                            .value_name("log_destination")
+                            .possible_values(POSSIBLE_LOG_DESTINATIONS)
+                            .case_insensitive(true)
+                            .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")

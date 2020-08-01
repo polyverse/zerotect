@@ -66,7 +66,14 @@ download_latest_zerotect() {
         type curl 2>&1 1>/dev/null
         if [ "$?" = "0" ]; then
             printf "Using curl to download zerotect...\n"
-            curl -s -L -o "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary"
+            output=$(curl -L -o "$zerotect_local_location/$zerotect_binary" "$zerotect_remote_location/$zerotect_binary" 2>&1)
+            possible_too_many_requests=$(echo "$output" | grep "429 too many requests")
+            if [[ "$possible_too_many_requests" != "" ]]; then
+                echo "Upstream said we made too many requests. Sleeping for 10 seconds..."
+                sleep 10
+                echo "Retrying recursively..."
+                download_latest_zerotect
+            fi
         else
             printf "Neither curl nor wget found on the system. Unable to download zerotect binary.\n"
             exit 1
