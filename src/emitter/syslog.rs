@@ -2,9 +2,8 @@
 
 use crate::emitter;
 use crate::events;
-use crate::formatter::{new as new_formatter, Formatter};
+use crate::formatter::Formatter;
 use crate::params;
-
 
 pub struct Logger {
     config: params::SyslogConfig,
@@ -18,9 +17,4 @@ impl emitter::Emitter for Logger {
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),
         }
     }
-}
-
-pub fn new(config: params::SyslogConfig) -> Logger {
-    let formatter = new_formatter(&config.format);
-    Logger { config, formatter }
 }

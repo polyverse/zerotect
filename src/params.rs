@@ -100,7 +100,6 @@ pub struct ZerotectParams {
     pub polycorder_config: Option<PolycorderConfig>,
     pub syslog_config: Option<SyslogConfig>,
     pub logfile_config: Option<LogFileConfig>,
-
 }
 
 // A proxy-structure to deserialize into
@@ -447,7 +446,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
         },
         console_config: match zerotect_param_options.console_config {
             Some(cco) => match cco.format {
-                Some(formatstr) => Some(ConsoleConfig{
+                Some(formatstr) => Some(ConsoleConfig {
                     format: OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
                 }),
                 None => None,
@@ -1082,7 +1081,6 @@ mod test {
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT, pc.flush_event_count);
     }
-
 
     #[test]
     fn toml_parse_parse_case_insensitive_enums() {

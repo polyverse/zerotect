@@ -59,11 +59,7 @@ pub enum Version {
 
         /// Platform records fields specific to a specific mechanism/platform.
         // For this variant, inherit the other three headers from the event field
-        #[cef_inherit(
-            CefHeaderDeviceEventClassID,
-            CefHeaderName,
-            CefHeaderSeverity
-        )]
+        #[cef_inherit(CefHeaderDeviceEventClassID, CefHeaderName, CefHeaderSeverity)]
         #[cef_ext_gobble]
         event: EventType,
     },

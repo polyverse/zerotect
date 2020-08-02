@@ -9,8 +9,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
 
 mod console;
-mod syslog;
 mod polycorder;
+mod syslog;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
