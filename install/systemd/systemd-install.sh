@@ -145,6 +145,18 @@ create_systemd_unit_file() {
     systemctl start zerotect
 }
 
+ensure_zerotect_running() {
+    pid=$(pgrep zerotect)
+    if [ -z "$pid" ]; then
+        printf "zerotect is not running in the background. Something went wrong.\n"
+        printf "Service status:\m"
+        systemctl status zerotect
+        exit 1
+    else
+        printf "zerotect successfully installed and running in the background.\n"
+    fi
+}
+
 uninstall() {
     if [ -f "$systemd_unit_dir/$systemd_unit_file" ]; then
         printf "Found zerotect service unit: $systemd_unit_dir/$systemd_unit_file. Removing it (after stopping service).\n"
@@ -214,9 +226,4 @@ create_zerotect_conf "$authkey" "$nodeid"
 
 create_systemd_unit_file
 
-pid=$(pgrep zerotect)
-if [ -z "$pid" ]; then
-    printf "zerotect is not running in the background. Something went wrong.\n"
-else
-    printf "zerotect successfully installed and running in the background.\n"
-fi
+ensure_zerotect_running

@@ -145,6 +145,18 @@ create_openrc_init_file() {
     rc-service zerotect start
 }
 
+ensure_zerotect_running() {
+    pid=$(pgrep zerotect)
+    if [ -z "$pid" ]; then
+        printf "zerotect is not running in the background. Something went wrong.\n"
+        printf "Service status:\m"
+        rc-service zerotect status
+        exit 1
+    else
+        printf "zerotect successfully installed and running in the background.\n"
+    fi
+}
+
 uninstall() {
     if [ -f "$openrc_init_dir/$openrc_init_file" ]; then
         printf "Found zerotect init file: $openrc_init_dir/$openrc_init_file. Removing it (after stopping service).\n"
@@ -213,9 +225,4 @@ create_zerotect_conf "$authkey" "$nodeid"
 
 create_openrc_init_file
 
-pid=$(pgrep zerotect)
-if [ -z "$pid" ]; then
-    printf "Zerotect is not running in the background. Something went wrong.\n"
-else
-    printf "Zerotect successfully installed and running in the background.\n"
-fi
+ensure_zerotect_running
