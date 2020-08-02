@@ -7,7 +7,7 @@ use crate::params;
 
 
 pub struct Logger {
-    config: params::LogConfig,
+    config: params::SyslogConfig,
     formatter: Box<dyn Formatter>,
 }
 
@@ -20,7 +20,7 @@ impl emitter::Emitter for Logger {
     }
 }
 
-pub fn new(config: params::LogConfig) -> Logger {
+pub fn new(config: params::SyslogConfig) -> Logger {
     let formatter = new_formatter(&config.format);
     Logger { config, formatter }
 }

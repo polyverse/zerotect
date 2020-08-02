@@ -13,7 +13,6 @@ use std::str;
 use std::str::FromStr;
 use std::time::Duration;
 use strum_macros::EnumString;
-use std::default::Default;
 
 const AUTO_CONFIGURE: &str = "auto-configure";
 
@@ -27,12 +26,6 @@ const UNIDENTIFIED_NODE: &str = "unidentified";
 const FLUSH_TIMEOUT_SECONDS_FLAG: &str = "flush-timeout-secs";
 const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 
-const LOG_FORMAT_FLAG: &str = "log-format";
-const LOG_DESTINATION_FLAG: &str = "log";
-const LOG_DESTINATION_SYSLOG: &str = "syslog";
-const LOG_DESTINATION_FILE: &str = "file";
-const POSSIBLE_LOG_DESTINATIONS: &[&str] = &[LOG_DESTINATION_SYSLOG, LOG_DESTINATION_FILE];
-
 const POSSIBLE_FORMATS: &[&str] = &["text", "json", "cef"];
 
 const CONFIG_FILE_FLAG: &str = "configfile";
@@ -44,6 +37,7 @@ const DEFAULT_POLYCORDER_FLUSH_TIMEOUT: Duration = Duration::from_secs(10);
 pub enum OutputFormat {
     #[strum(serialize = "text")]
     Text,
+
     #[strum(serialize = "json")]
     JSON,
 
@@ -57,26 +51,14 @@ pub struct ConsoleConfig {
     pub format: OutputFormat,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
-pub enum LogDestination {
-    #[strum(serialize = "syslog")]
-    Syslog(SyslogConfig),
-    #[strum(serialize = "file")]
-    File(FilelogConfig),
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyslogConfig {
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FilelogConfig {
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct LogConfig {
     pub format: OutputFormat,
-    pub destination: LogDestination,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogFileConfig {
+    pub format: OutputFormat,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -107,11 +89,18 @@ pub struct MonitorConfig {
 pub struct ZerotectParams {
     pub verbosity: u8,
 
+    // auto-configure system
     pub auto_configure: AutoConfigure,
+
+    // only one monitor config
     pub monitor_config: MonitorConfig,
+
+    // supported emitters
     pub console_config: Option<ConsoleConfig>,
     pub polycorder_config: Option<PolycorderConfig>,
-    pub log_config: Option<LogConfig>,
+    pub syslog_config: Option<SyslogConfig>,
+    pub logfile_config: Option<LogFileConfig>,
+
 }
 
 // A proxy-structure to deserialize into
@@ -126,7 +115,8 @@ pub struct ZerotectParamOptions {
     pub monitor_config: Option<MonitorConfigOptions>,
     pub console_config: Option<ConsoleConfigOptions>,
     pub polycorder_config: Option<PolycorderConfigOptions>,
-    pub log_config: Option<LogConfigOptions>,
+    pub syslog: Option<SyslogConfigOptions>,
+    pub logfile: Option<LogFileConfigOptions>,
 }
 
 // A proxy-structure to deserialize into
@@ -170,10 +160,14 @@ pub struct ConsoleConfigOptions {
     pub format: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct LogConfigOptions {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SyslogConfigOptions {
     pub format: Option<String>,
-    pub destination: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogFileConfigOptions {
+    pub format: Option<String>,
 }
 
 #[derive(Debug)]
@@ -182,8 +176,8 @@ pub enum InnerError {
     IoError(io::Error),
     ClapError(clap::Error),
     Utf8Error(str::Utf8Error),
-    TomlDeserializationError(toml::de::Error),
     StrumParseError(strum::ParseError),
+    TomlDeserializationError(toml::de::Error),
     ParseIntError(std::num::ParseIntError),
     TryFromIntError(std::num::TryFromIntError),
 }
@@ -244,6 +238,14 @@ impl From<std::num::TryFromIntError> for ParsingError {
         ParsingError {
             message: format!("Inner std::num::TryFromIntError :: {}", err),
             inner_error: InnerError::TryFromIntError(err),
+        }
+    }
+}
+impl From<strum::ParseError> for ParsingError {
+    fn from(err: strum::ParseError) -> ParsingError {
+        ParsingError {
+            message: format!("Inner strum::ParseError :: {}", err),
+            inner_error: InnerError::StrumParseError(err),
         }
     }
 }
@@ -314,24 +316,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
                             .help(format!("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty.").as_str()))
-                        .arg(Arg::with_name(LOG_DESTINATION_FLAG)
-                            .long(LOG_DESTINATION_FLAG)
-                            .value_name("log_destination")
-                            .possible_values(POSSIBLE_LOG_DESTINATIONS)
-                            .case_insensitive(true)
-                            .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
-                        .arg(Arg::with_name(LOG_FORMAT_FLAG)
-                            .long(LOG_FORMAT_FLAG)
-                            .value_name("log_format")
-                            .possible_values(POSSIBLE_FORMATS)
-                            .requires(LOG_DESTINATION_FLAG)
-                            .help(format!("The format in which log entries are written.").as_str()))
-                        .arg(Arg::with_name(LOG_DESTINATION_FLAG)
-                            .long(LOG_DESTINATION_FLAG)
-                            .value_name("log_destination")
-                            .possible_values(POSSIBLE_LOG_DESTINATIONS)
-                            .case_insensitive(true)
-                            .help(format!("Sends monitored to a log destination such as syslog or a file.").as_str()))
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
@@ -421,35 +405,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         }
     };
 
-    let log_config = match matches.value_of(LOG_DESTINATION_FLAG) {
-        Some(destinationstr) => match LogDestination::from_str(destinationstr.trim().to_ascii_lowercase().as_str()) {
-            Ok(destination) => {
-                // resolve format if specified
-                let format = match matches.value_of(LOG_FORMAT_FLAG) {
-                    Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
-                        Ok(format) => format,
-                        Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Log format set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", formatstr, e)}),
-                    },
-                    None => OutputFormat::JSON,
-                };
-
-                Some(LogConfig{
-                    destination,
-                    format
-                })
-            },
-            Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Log destination set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", destinationstr, e)}),
-        },
-        None => None,
-    };
-
     Ok(ZerotectParams {
         verbosity,
         auto_configure,
         monitor_config,
         console_config,
         polycorder_config,
-        log_config,
+        syslog_config: None,
+        logfile_config: None,
     })
 }
 
@@ -484,20 +447,9 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
         },
         console_config: match zerotect_param_options.console_config {
             Some(cco) => match cco.format {
-                Some(formatstr) => {
-                    match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
-                        Ok(format) => Some(ConsoleConfig { format }),
-                        Err(e) => {
-                            return Err(ParsingError {
-                                inner_error: InnerError::StrumParseError(e),
-                                message: format!(
-                                "Unable to parse {} into the enum OutputFormat, due to error: {}",
-                                formatstr, e
-                            ),
-                            })
-                        }
-                    }
-                }
+                Some(formatstr) => Some(ConsoleConfig{
+                    format: OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
+                }),
                 None => None,
             },
             None => None,
@@ -518,37 +470,8 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 }),
             },
         },
-        log_config: match zerotect_param_options.log_config {
-            None => None,
-            Some(lc) => match lc.destination {
-                None => None,
-                Some(d) => match LogDestination::from_str(d.trim().to_ascii_lowercase().as_str()) {
-                    Ok(destination) => {
-                        let format = match lc.format {
-                                    None => OutputFormat::JSON,
-                                    Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
-                                        Ok(format) => format,
-                                        Err(e) => return Err(ParsingError{inner_error: InnerError::StrumParseError(e), message: format!("Unable to parse {} into the enum OutputFormat, due to error: {}", formatstr, e)}),
-                                    },
-                                };
-
-                        Some(LogConfig {
-                            destination,
-                            format,
-                        })
-                    }
-                    Err(e) => {
-                        return Err(ParsingError {
-                            inner_error: InnerError::StrumParseError(e),
-                            message: format!(
-                                "Unable to parse {} into the enum LogDestination, due to error: {}",
-                                d, e
-                            ),
-                        })
-                    }
-                },
-            },
-        },
+        syslog_config: None,
+        logfile_config: None,
     };
 
     Ok(params)
@@ -786,7 +709,7 @@ mod test {
         fatal_signals = true
 
         [console_config]
-        format = 'text'
+        format = 'Text'
 
         [polycorder_config]
         auth_key = 'AuthKeyFromAccountManager3700793'
@@ -849,16 +772,8 @@ mod test {
                 flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
                 flush_event_count: rand::thread_rng().gen_range(0, 500),
             }),
-            log_config: Some(LogConfig {
-                destination: match rand::thread_rng().gen_bool(0.5) {
-                    true => LogDestination::Syslog,
-                    false => LogDestination::File,
-                },
-                format: match rand::thread_rng().gen_bool(0.5) {
-                    true => OutputFormat::JSON,
-                    false => OutputFormat::Text,
-                },
-            }),
+            syslog_config: None,
+            logfile_config: None,
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
 
@@ -892,19 +807,14 @@ mod test {
             format: config_options_obtained.console_config.unwrap().format,
         };
 
-        let log_options_config = config_options_obtained.log_config.unwrap();
-        let log_config = LogConfig {
-            destination: log_options_config.destination,
-            format: log_options_config.format,
-        };
-
         let config_obtained = ZerotectParams {
             verbosity: config_options_obtained.verbosity,
             auto_configure: config_options_obtained.auto_configure,
             monitor_config: config_options_obtained.monitor_config,
             polycorder_config: Some(polycorder_config),
             console_config: Some(console_config),
-            log_config: Some(log_config),
+            syslog_config: None,
+            logfile_config: None,
         };
 
         assert_eq!(
@@ -1004,16 +914,8 @@ mod test {
                 flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
                 flush_event_count: rand::thread_rng().gen_range(0, 500),
             }),
-            log_config: Some(LogConfig {
-                destination: match rand::thread_rng().gen_bool(0.5) {
-                    true => LogDestination::Syslog,
-                    false => LogDestination::File,
-                },
-                format: match rand::thread_rng().gen_bool(0.5) {
-                    true => OutputFormat::JSON,
-                    false => OutputFormat::Text,
-                },
-            }),
+            syslog_config: None,
+            logfile_config: None,
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
 
@@ -1072,16 +974,8 @@ mod test {
                 }),
                 false => None,
             },
-            log_config: Some(LogConfig {
-                destination: match rand::thread_rng().gen_bool(0.5) {
-                    true => LogDestination::Syslog,
-                    false => LogDestination::File,
-                },
-                format: match rand::thread_rng().gen_bool(0.5) {
-                    true => OutputFormat::JSON,
-                    false => OutputFormat::Text,
-                },
-            }),
+            syslog_config: None,
+            logfile_config: None,
             verbosity: rand::thread_rng().gen_range(0, 250),
         };
 
@@ -1187,6 +1081,42 @@ mod test {
         assert_eq!(UNIDENTIFIED_NODE, pc.node_id);
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT, pc.flush_event_count);
+    }
+
+
+    #[test]
+    fn toml_parse_parse_case_insensitive_enums() {
+        let tomlcontents = r#"
+        [console_config]
+        format = 'tExT'
+
+        "#;
+
+        let toml_file = unique_temp_toml_file();
+        println!("Writing TOML string to file: {}", &toml_file);
+        fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
+
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. Also test words aren't split"),
+            OsString::from("--configfile"),
+            OsString::from(&toml_file),
+        ];
+
+        let maybe_config = parse_args(Some(args));
+        if let Err(e) = &maybe_config {
+            match &e.inner_error {
+                InnerError::ClapError(ce) => ce.exit(),
+                e => assert!(
+                    false,
+                    "Unexpected error when parsing command-line config file flag: {:?}",
+                    e
+                ),
+            }
+        }
+        let config = maybe_config.unwrap();
+
+        assert!(config.console_config.is_some());
+        assert_eq!(OutputFormat::Text, config.console_config.unwrap().format);
     }
 
     #[test]
@@ -1300,10 +1230,8 @@ mod test {
                 flush_timeout: DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
             }),
-            log_config: Some(LogConfig {
-                destination: LogDestination::Syslog,
-                format: OutputFormat::JSON,
-            }),
+            syslog_config: None,
+            logfile_config: None,
             verbosity: 0,
         };
 

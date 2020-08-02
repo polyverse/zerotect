@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
 
 mod console;
-mod logger;
+mod syslog;
 mod polycorder;
 
 pub trait Emitter {
@@ -21,7 +21,8 @@ pub struct EmitterConfig {
     pub verbosity: u8,
     pub console_config: Option<params::ConsoleConfig>,
     pub polycorder_config: Option<params::PolycorderConfig>,
-    pub log_config: Option<params::LogConfig>,
+    pub syslog_config: Option<params::SyslogConfig>,
+    pub logfile_config: Option<params::LogFileConfig>,
 }
 
 #[derive(Debug)]
@@ -49,10 +50,6 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
     if let Some(tc) = ec.polycorder_config {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
         emitters.push(Box::new(polycorder::new(tc, ec.verbosity)?));
-    }
-    if let Some(tc) = ec.log_config {
-        eprintln!("Emitter: Initialized Log emitter. Expect messages to be logged based on configuration (syslog or a file).");
-        emitters.push(Box::new(logger::new(tc)));
     }
 
     loop {

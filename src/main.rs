@@ -114,10 +114,12 @@ fn main() {
         }
     };
 
+    // split these up before a move
     let everbosity = zerotect_config.verbosity;
     let console_config = zerotect_config.console_config;
     let polycorder_config = zerotect_config.polycorder_config;
-    let log_config = zerotect_config.log_config;
+    let syslog_config = zerotect_config.syslog_config;
+    let logfile_config = zerotect_config.logfile_config;
 
     let emitter_thread_result = thread::Builder::new()
         .name("Event Emitter Thread".to_owned())
@@ -126,7 +128,8 @@ fn main() {
                 verbosity: everbosity,
                 console_config,
                 polycorder_config,
-                log_config,
+                syslog_config,
+                logfile_config,
             };
             if let Err(e) = emitter::emit(ec, emitter_source) {
                 eprintln!("Error launching Emitter: {}", e);
