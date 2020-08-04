@@ -4,7 +4,7 @@ use crate::emitter;
 use crate::events;
 use crate::formatter::{new as new_formatter, Formatter as EventFormatter};
 use crate::params::{LogFileConfig, OutputFormat};
-use file_rotate::{FileRotate, RotationMode};
+use file_rotate_record_boundary::{FileRotate, RotationMode};
 use std::error;
 use std::fmt::{Display, Formatter as FmtFormatter, Result as FmtResult};
 use std::fs::OpenOptions;
@@ -56,7 +56,7 @@ pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
     let writer: Box<dyn Write> = match lfc.rotation_file_count {
         Some(rfc) => match lfc.rotation_file_max_size {
             //wrap file in file-rotation
-            Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::Bytes(rfms), rfc)),
+            Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::BytesSurpassed(rfms), rfc)),
             None => return Err(FileLoggerError::MissingParameter(format!("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless."))),
         },
         None => match lfc.rotation_file_max_size {
