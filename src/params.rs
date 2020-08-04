@@ -55,6 +55,8 @@ const SYSLOG_HOSTNAME: &str = "syslog-hostname";
 /// When set, log to a log file (with an optional format parameter)
 const LOGFILE_PATH_FLAG: &str = "log-file-path";
 const LOGFILE_FORMAT_FLAG: &str = "log-file-format";
+const LOGFILE_ROTATION_COUNT_FLAG: &str = "log-file-rotation-count";
+const LOGFILE_ROTATION_SIZE_FLAG: &str = "log-file-rotation-max-size";
 
 // Defaults
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
@@ -115,6 +117,13 @@ pub enum SyslogDestination {
 pub struct LogFileConfig {
     pub format: OutputFormat,
     pub filepath: String,
+
+    /// How many files to rotate over?
+    /// $filepath.0, $filepath.1, ... upto $filepath.N
+    pub rotation_file_count: Option<usize>,
+
+    /// For each file, what is the maximum size (in bytes) at which to rotate to the next one?
+    pub rotation_file_max_size: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -162,6 +171,12 @@ pub struct ZerotectParams {
 // really helps with TOML-deserialization to know
 // what values were specified in TOML and which ones
 // were not.
+//
+// TOML deserializer doesn't do defaulting - so all fields need to be captured
+// as Option'al and then defaulted
+//
+// Secondly, TOML doesn't deserialize into Enums (even with EnumString),
+// so those have to be parsed from String's.
 #[derive(Deserialize)]
 pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
@@ -170,8 +185,8 @@ pub struct ZerotectParamOptions {
     pub monitor_config: Option<MonitorConfigOptions>,
     pub console_config: Option<ConsoleConfigOptions>,
     pub polycorder_config: Option<PolycorderConfigOptions>,
-    pub syslog: Option<SyslogConfigOptions>,
-    pub logfile: Option<LogFileConfigOptions>,
+    pub syslog_config: Option<SyslogConfigOptions>,
+    pub logfile_config: Option<LogFileConfigOptions>,
 }
 
 // A proxy-structure to deserialize into
@@ -218,11 +233,19 @@ pub struct ConsoleConfigOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyslogConfigOptions {
     pub format: Option<String>,
+    pub destination: Option<String>,
+    pub path: Option<String>,
+    pub server: Option<String>,
+    pub local: Option<String>,
+    pub hostname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LogFileConfigOptions {
     pub format: Option<String>,
+    pub filepath: Option<String>,
+    pub rotation_file_count: Option<usize>,
+    pub rotation_file_max_size: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -446,6 +469,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("path")
                             .requires(LOGFILE_FORMAT_FLAG)
                             .help(format!("Sends all monitored data to a log file specified in the path.").as_str()))
+                        // log file rotation count
+                        .arg(Arg::with_name(LOGFILE_ROTATION_COUNT_FLAG)
+                            .long(LOGFILE_ROTATION_COUNT_FLAG)
+                            .value_name("count")
+                            .requires_all(&[LOGFILE_PATH_FLAG,LOGFILE_ROTATION_SIZE_FLAG])
+                            .help(format!("Setting this enables file rotation. Files are rotated as $path.0, $path.1.. etc. upto the number specified by this argument (and then starting back at $path.0 when the N'th file exceeds max size).").as_str()))
+                        // log file rotation max size
+                        .arg(Arg::with_name(LOGFILE_ROTATION_SIZE_FLAG)
+                            .long(LOGFILE_ROTATION_SIZE_FLAG)
+                            .value_name("size")
+                            .requires_all(&[LOGFILE_PATH_FLAG, LOGFILE_ROTATION_COUNT_FLAG])
+                            .help(format!("Setting this enables file rotation. A new file is begin in the rotation sequence when the current file exceeds the size (in bytes) specified by this argument.").as_str()))
 
                         // verbose internal logging?
                         .arg(Arg::with_name("verbose")
@@ -603,6 +638,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                 Some(path) => Some(LogFileConfig{
                     format,
                     filepath: path.to_owned(),
+                    rotation_file_count: match matches.value_of(LOGFILE_ROTATION_COUNT_FLAG) {
+                        None => None,
+                        Some(rcfstr) => Some(rcfstr.parse::<usize>()?)
+                    },
+                    rotation_file_max_size: match matches.value_of(LOGFILE_ROTATION_SIZE_FLAG) {
+                        None => None,
+                        Some(rsfstr) => Some(rsfstr.parse::<usize>()?)
+                    },
                 }),
                 None => None,
             },
@@ -658,14 +701,14 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 Some(formatstr) => Some(ConsoleConfig {
                     format: OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
                 }),
-                None => None,
+                None => return Err(ParsingError{message: "In config file, the console configuration key was specified without a format. Please remove console configuration entirely, or provide a valid format to format events in.".to_owned(), inner_error: InnerError::None}),
             },
             None => None,
         },
         polycorder_config: match zerotect_param_options.polycorder_config {
             None => None,
             Some(pco) => match pco.auth_key {
-                None => None,
+                None => return Err(ParsingError{message: "In config file, the polycorder configuration key was specified without an authkey. Please remove polycorder configuration entirely, or provide a valid authkey to publish events with.".to_owned(), inner_error: InnerError::None}),
                 Some(ak) => Some(PolycorderConfig {
                     auth_key: ak.trim().to_owned(),
                     node_id: pco.node_id.unwrap_or(UNIDENTIFIED_NODE.to_owned()),
@@ -678,8 +721,38 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 }),
             },
         },
-        syslog_config: None,
-        logfile_config: None,
+        syslog_config: match zerotect_param_options.syslog_config {
+            None => None,
+            Some(sco) => Some(SyslogConfig{
+                format: match sco.format {
+                    None => return Err(ParsingError{message: "In config file, the syslog configuration key was specified without a format. Please remove syslog configuration entirely, or provide a valid format to format events in.".to_owned(), inner_error: InnerError::None}),
+                    Some(formatstr) => OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
+                },
+                destination: match sco.destination {
+                    None => SyslogDestination::Default,
+                    Some(formatstr) => SyslogDestination::from_str(formatstr.to_ascii_lowercase().as_str())?,
+                },
+                hostname: sco.hostname,
+                server: sco.server,
+                local: sco.local,
+                path: sco.path,
+            }),
+        },
+        logfile_config: match zerotect_param_options.logfile_config {
+            None => None,
+            Some(lfc) => Some(LogFileConfig{
+                format: match lfc.format {
+                    None => return Err(ParsingError{message: "In config file, the log file configuration key was specified without a format. Please remove log file configuration entirely, or provide a valid format to format events in.".to_owned(), inner_error: InnerError::None}),
+                    Some(formatstr) => OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
+                },
+                filepath: match lfc.filepath {
+                    None => return Err(ParsingError{message: "In config file, the log file configuration key was specified without a file path. Please remove log file configuration entirely, or provide a valid path to a while where events should be logged.".to_owned(), inner_error: InnerError::None}),
+                    Some(pathstr) => pathstr,
+                },
+                rotation_file_count: lfc.rotation_file_count,
+                rotation_file_max_size: lfc.rotation_file_max_size,
+            })
+        },
     };
 
     Ok(params)
@@ -738,15 +811,13 @@ mod test {
             OsString::from("--syslog"),
             OsString::from("cef"),
             OsString::from("--syslog-destination"),
-            OsString::from("unix"),
+            OsString::from("udp"),
             OsString::from("--syslog-hostname"),
             OsString::from("testhost"),
             OsString::from("--syslog-server"),
             OsString::from("127.0.0.1:5"),
             OsString::from("--syslog-local"),
             OsString::from("127.0.0.1:2"),
-            //OsString::from("--syslog-unix-socket-path"),
-            //OsString::from("/dev/log"),
         ];
 
         let config = parse_args(Some(args)).unwrap();
@@ -765,6 +836,12 @@ mod test {
         assert_eq!("nodeid34235", pc.node_id);
         assert_eq!(Duration::from_secs(89), pc.flush_timeout);
         assert_eq!(53, pc.flush_event_count);
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(SyslogDestination::Udp, sc.destination);
+        assert_eq!(Some("testhost".to_owned()), sc.hostname);
+        assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
+        assert_eq!(Some("127.0.0.1:2".to_owned()), sc.local);
     }
 
     #[test]
@@ -917,6 +994,68 @@ mod test {
 
         let config = parse_args(Some(args));
         assert!(config.is_err());
+    }
+
+    #[test]
+    fn commandline_args_parse_syslog_tcp() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. First param ignored."),
+            OsString::from("--syslog"),
+            OsString::from("cef"),
+            OsString::from("--syslog-destination"),
+            OsString::from("tcp"),
+            OsString::from("--syslog-hostname"),
+            OsString::from("testhost"),
+            OsString::from("--syslog-server"),
+            OsString::from("127.0.0.1:5"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(SyslogDestination::Tcp, sc.destination);
+        assert_eq!(Some("testhost".to_owned()), sc.hostname);
+        assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
+        assert_eq!(None, sc.local);
+    }
+
+    #[test]
+    fn commandline_args_parse_syslog_unix() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. First param ignored."),
+            OsString::from("--syslog"),
+            OsString::from("cef"),
+            OsString::from("--syslog-destination"),
+            OsString::from("unix"),
+            OsString::from("--syslog-unix-socket-path"),
+            OsString::from("/some/socket/path"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(SyslogDestination::Unix, sc.destination);
+        assert_eq!(Some("/some/socket/path".to_owned()), sc.path);
+        assert_eq!(None, sc.hostname);
+        assert_eq!(None, sc.local);
+    }
+
+    #[test]
+    fn commandline_args_parse_syslog_default() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. First param ignored."),
+            OsString::from("--syslog"),
+            OsString::from("cef"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(SyslogDestination::Default, sc.destination);
+        assert_eq!(None, sc.path);
+        assert_eq!(None, sc.server);
+        assert_eq!(None, sc.hostname);
+        assert_eq!(None, sc.local);
     }
 
     #[test]
@@ -1339,7 +1478,7 @@ mod test {
     }
 
     #[test]
-    fn toml_skip_polycorder_config_if_no_authkey() {
+    fn toml_error_polycorder_config_if_no_authkey() {
         let tomlcontents = r#"
         verbosity = 3
 
@@ -1370,26 +1509,7 @@ mod test {
         ];
 
         let maybe_config = parse_args(Some(args));
-        if let Err(e) = &maybe_config {
-            match &e.inner_error {
-                InnerError::ClapError(ce) => ce.exit(),
-                e => assert!(
-                    false,
-                    "Unexpected error when parsing command-line config file flag: {:?}",
-                    e
-                ),
-            }
-        }
-        let config = maybe_config.unwrap();
-
-        assert_eq!(true, config.auto_configure.exception_trace);
-        assert_eq!(true, config.auto_configure.fatal_signals);
-        assert_eq!(true, config.console_config.is_some());
-        assert_eq!(false, config.polycorder_config.is_some());
-        assert_eq!(3, config.verbosity);
-
-        let cc = config.console_config.unwrap();
-        assert_eq!(OutputFormat::Text, cc.format);
+        assert!(maybe_config.is_err());
     }
 
     #[test]

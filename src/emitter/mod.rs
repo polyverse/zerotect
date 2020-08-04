@@ -63,6 +63,10 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
         emitters.push(Box::new(syslogger::new(sc)?));
     }
 
+    if emitters.len() == 0 {
+        return Err(EmitterError(format!("Emitter: There are no emitters configured. Zerotect is useless if not emitting somewhere.")));
+    }
+
     loop {
         match source.recv() {
             Ok(event) => {

@@ -41,7 +41,7 @@ impl emitter::Emitter for FileLogger {
     fn emit(&mut self, event: &events::Version) {
         match self.event_formatter.format(event) {
             Ok(formattedstr) => match self.writer.write_fmt(format_args!("{}", formattedstr)) {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(e) => eprintln!("Error writing to file {}", e),
             },
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.output_format, e),
