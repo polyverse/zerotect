@@ -31,7 +31,9 @@ rmesg = "0.6.0"
 libflate = "1.0.2"
 rust-cef-derive = "0.0.5"
 rust-cef = "0.0.5"
+fern = "0.6.0"
 syslog = "5.0.0"
+libc = "0.2.74"
 
 [dependencies.clap]
 version = "2.33.1"

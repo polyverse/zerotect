@@ -11,7 +11,7 @@ pub struct Console {
 }
 
 impl emitter::Emitter for Console {
-    fn emit(&self, event: &events::Version) {
+    fn emit(&mut self, event: &events::Version) {
         match self.formatter.format(event) {
             Ok(formattedstr) => println!("{}", formattedstr),
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),

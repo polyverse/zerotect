@@ -403,14 +403,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                                 //udp requires local address
                                 (SYSLOG_DESTINATION_UDP, SYSLOG_LOCAL_ADDR),
 
-                                //udp and tcp require hostname
-                                (SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME),
-                                (SYSLOG_DESTINATION_TCP, SYSLOG_HOSTNAME),
-
                                 // unix requires socket path
                                 (SYSLOG_DESTINATION_UNIX, SYSLOG_UNIX_SOCKET_PATH),
                             ])
                             .help(format!("The syslog destination type. If a destination is selected, the destination configuration flags are explicitly required and defaults are not used.").as_str()))
+
+
+                        //syslog hostname (optional)
+                        .arg(Arg::with_name(SYSLOG_HOSTNAME)
+                            .long(SYSLOG_HOSTNAME)
+                            .value_name("hostname")
+                            .requires(SYSLOG_DESTINATION_FLAG)
+                            .help(format!("The syslog tcp server addr to send to. (usually ip:port)").as_str()))
 
                         // syslog tcp options
                         .arg(Arg::with_name(SYSLOG_SERVER_ADDR)
@@ -425,13 +429,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("addr")
                             .requires(SYSLOG_DESTINATION_FLAG)
                             .help(format!("The syslog udp local addr to bind to. (usually ip:port)").as_str()))
-
-                        //syslog hostname when tcp or udp are destinations
-                        .arg(Arg::with_name(SYSLOG_HOSTNAME)
-                            .long(SYSLOG_HOSTNAME)
-                            .value_name("hostname")
-                            .requires(SYSLOG_DESTINATION_FLAG)
-                            .help(format!("The syslog tcp server addr to send to. (usually ip:port)").as_str()))
 
                         //syslog unix socket path
                         .arg(Arg::with_name(SYSLOG_UNIX_SOCKET_PATH)

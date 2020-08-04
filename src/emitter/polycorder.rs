@@ -36,7 +36,7 @@ struct Report<'l> {
 }
 
 impl emitter::Emitter for Polycorder {
-    fn emit(&self, event: &events::Version) {
+    fn emit(&mut self, event: &events::Version) {
         let movable_copy = (*event).clone();
         if let Err(e) = self.sender.send(movable_copy) {
             eprintln!("Polycorder: Error queing event to Polycorder: {}", e);
