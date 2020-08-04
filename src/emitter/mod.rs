@@ -9,9 +9,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
 
 mod console;
+mod logger;
 mod polycorder;
-mod syslogger;
-use syslog;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
@@ -40,12 +39,11 @@ impl From<polycorder::PolycorderError> for EmitterError {
     }
 }
 
-impl From<syslog::Error> for EmitterError {
-    fn from(err: syslog::Error) -> EmitterError {
-        EmitterError(format!("syslog::Error: {}", err))
+impl From<logger::LoggerError> for EmitterError {
+    fn from(err: logger::LoggerError) -> EmitterError {
+        EmitterError(format!("logger::LoggerError: {}", err))
     }
 }
-
 
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
@@ -61,7 +59,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
     }
     if let Some(sc) = ec.syslog_config {
         eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
-        emitters.push(Box::new(syslogger::new(sc)?));
+        emitters.push(Box::new(logger::new(sc)?));
     }
 
     loop {

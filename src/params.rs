@@ -41,13 +41,16 @@ const SYSLOG_DESTINATION_FLAG: &str = "syslog-destination";
 const SYSLOG_DESTINATION_UNIX: &str = "unix";
 const SYSLOG_DESTINATION_TCP: &str = "tcp";
 const SYSLOG_DESTINATION_UDP: &str = "udp";
-const SYSLOG_POSSIBLE_DESTINATIONS: &[&str] = &[SYSLOG_DESTINATION_UNIX, SYSLOG_DESTINATION_TCP, SYSLOG_DESTINATION_UDP];
+const SYSLOG_POSSIBLE_DESTINATIONS: &[&str] = &[
+    SYSLOG_DESTINATION_UNIX,
+    SYSLOG_DESTINATION_TCP,
+    SYSLOG_DESTINATION_UDP,
+];
 
 const SYSLOG_UNIX_SOCKET_PATH: &str = "syslog-unix-socket-path";
 const SYSLOG_SERVER_ADDR: &str = "syslog-server";
 const SYSLOG_LOCAL_ADDR: &str = "syslog-local";
 const SYSLOG_HOSTNAME: &str = "syslog-hostname";
-
 
 /// When set, log to a log file (with an optional format parameter)
 const LOGFILE_OUTPUT_FLAG: &str = "logfile";
@@ -74,18 +77,37 @@ pub struct ConsoleConfig {
     pub format: OutputFormat,
 }
 
+/// Acknowledged that this would be better as an Enum (with each destination variant containing
+/// the fields relevant to it. The reason it is not, is so it may be easily serialized
+/// to TOML (and thus, deserialized with equal ease.)
+///
+/// https://docs.rs/toml/0.5.6/toml/ser/fn.to_string.html
+/// > Serialization can fail if T's implementation of Serialize decides to fail, if T contains a map with
+/// > non-string keys, or if T attempts to serialize an unsupported datatype such as an enum, tuple, or tuple struct.
+///
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyslogConfig {
     pub format: OutputFormat,
     pub destination: SyslogDestination,
+    pub path: Option<String>,
+    pub server: Option<String>,
+    pub local: Option<String>,
+    pub hostname: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
 pub enum SyslogDestination {
+    #[strum(serialize = "default")]
     Default,
-    Unix{path: String},
-    Tcp{server: String, hostname: String},
-    Udp{local: String, server: String, hostname: String},
+
+    #[strum(serialize = "unix")]
+    Unix,
+
+    #[strum(serialize = "tcp")]
+    Tcp,
+
+    #[strum(serialize = "udp")]
+    Udp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -518,40 +540,61 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     let syslog_config = match matches.value_of(SYSLOG_OUTPUT_FLAG) {
         Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
-            Ok(format) => {
+            Ok(format) => match matches.value_of(SYSLOG_DESTINATION_FLAG) {
                 // let's see if syslog destination is set
-                let destination = match matches.value_of(SYSLOG_DESTINATION_FLAG) {
-                    Some(destinationstr) => match destinationstr.trim().to_ascii_lowercase().as_str() {
-                        SYSLOG_DESTINATION_UNIX => match matches.value_of(SYSLOG_UNIX_SOCKET_PATH) {
-                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UNIX, SYSLOG_UNIX_SOCKET_PATH)}),
-                            Some(pathstr) => SyslogDestination::Unix{path: pathstr.to_owned()},
+                Some(destinationstr) => match destinationstr.trim().to_ascii_lowercase().as_str() {
+                    SYSLOG_DESTINATION_UNIX => match matches.value_of(SYSLOG_UNIX_SOCKET_PATH) {
+                        None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UNIX, SYSLOG_UNIX_SOCKET_PATH)}),
+                        Some(pathstr) => Some(SyslogConfig{
+                            format,
+                            destination: SyslogDestination::Unix,
+                            path: Some(pathstr.to_owned()),
+                            local: None,
+                            server: None,
+                            hostname: None,
+                        }),
+                    }
+                    SYSLOG_DESTINATION_TCP => match matches.value_of(SYSLOG_SERVER_ADDR) {
+                        None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_TCP, SYSLOG_SERVER_ADDR)}),
+                        Some(server_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
+                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME)}),
+                            Some(hostname) => Some(SyslogConfig{
+                                format,
+                                destination: SyslogDestination::Tcp,
+                                path: None,
+                                local: None,
+                                server: Some(server_addr.to_owned()),
+                                hostname: Some(hostname.to_owned()),
+                            }),
                         }
-                        SYSLOG_DESTINATION_TCP => match matches.value_of(SYSLOG_SERVER_ADDR) {
-                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_TCP, SYSLOG_SERVER_ADDR)}),
-                            Some(server_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
+                    }
+                    SYSLOG_DESTINATION_UDP => match matches.value_of(SYSLOG_SERVER_ADDR) {
+                        None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_SERVER_ADDR)}),
+                        Some(server_addr) => match matches.value_of(SYSLOG_LOCAL_ADDR) {
+                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_LOCAL_ADDR)}),
+                            Some(local_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
                                 None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME)}),
-                                Some(hostname) => SyslogDestination::Tcp{server: server_addr.to_owned(), hostname: hostname.to_owned()},
+                                Some(hostname) => Some(SyslogConfig{
+                                    format,
+                                    destination: SyslogDestination::Udp,
+                                    path: None,
+                                    local: Some(local_addr.to_owned()),
+                                    server: Some(server_addr.to_owned()),
+                                    hostname: Some(hostname.to_owned()),
+                                }),
                             }
                         }
-                        SYSLOG_DESTINATION_UDP => match matches.value_of(SYSLOG_SERVER_ADDR) {
-                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_SERVER_ADDR)}),
-                            Some(server_addr) => match matches.value_of(SYSLOG_LOCAL_ADDR) {
-                                None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_LOCAL_ADDR)}),
-                                Some(local_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
-                                    None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME)}),
-                                    Some(hostname) => SyslogDestination::Udp{server: server_addr.to_owned(), local: local_addr.to_owned(), hostname: hostname.to_owned()},
-                                }
-                            }
-                        },
-                        val => return Err(ParsingError{inner_error: InnerError::None, message: format!("{} set to {} which is not recognized. Supported values are: {}.", SYSLOG_DESTINATION_FLAG, val, SYSLOG_POSSIBLE_DESTINATIONS.join(","))}),
                     },
-                    None => SyslogDestination::Default,
-                };
-
-                Some(SyslogConfig{
+                    val => return Err(ParsingError{inner_error: InnerError::None, message: format!("{} set to {} which is not recognized. Supported values are: {}.", SYSLOG_DESTINATION_FLAG, val, SYSLOG_POSSIBLE_DESTINATIONS.join(","))}),
+                },
+                None => Some(SyslogConfig{
                     format,
-                    destination,
-                })
+                    destination: SyslogDestination::Default,
+                    path: None,
+                    local: None,
+                    server: None,
+                    hostname: None,
+                }),
             },
             Err(e) => {
                 return Err(ParsingError{inner_error: InnerError::None, message: format!("Syslog format value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", formatstr, e)})
@@ -1384,7 +1427,14 @@ mod test {
                 flush_timeout: DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
             }),
-            syslog_config: None,
+            syslog_config: Some(SyslogConfig{
+                format: OutputFormat::CEF,
+                destination: SyslogDestination::Udp,
+                local: Some("# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)".to_owned()),
+                server: Some("# applicable to tcp and udp - the host:port to send syslog to (i.e. 127.0.0.1:601 or 127.0.0.1:514)".to_owned()),
+                hostname: Some("# applicable to tcp and udp hostname for long entries".to_owned()),
+                path: Some("# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)".to_owned()),
+            }),
             logfile_config: None,
             verbosity: 0,
         };

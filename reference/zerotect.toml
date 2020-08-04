@@ -19,3 +19,11 @@ flush_event_count = 10
 [polycorder_config.flush_timeout]
 secs = 10
 nanos = 0
+
+[syslog_config]
+format = 'CEF'
+destination = 'Udp'
+path = '# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)'
+server = '# applicable to tcp and udp - the host:port to send syslog to (i.e. 127.0.0.1:601 or 127.0.0.1:514)'
+local = '# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)'
+hostname = '# applicable to tcp and udp hostname for long entries'
