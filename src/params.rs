@@ -818,6 +818,14 @@ mod test {
             OsString::from("127.0.0.1:5"),
             OsString::from("--syslog-local"),
             OsString::from("127.0.0.1:2"),
+            OsString::from("--log-file-format"),
+            OsString::from("cef"),
+            OsString::from("--log-file-path"),
+            OsString::from("/tmp/zerotect/zerotect.log"),
+            OsString::from("--log-file-rotation-count"),
+            OsString::from("1"),
+            OsString::from("--log-file-rotation-size"),
+            OsString::from("10"),
         ];
 
         let config = parse_args(Some(args)).unwrap();
@@ -842,6 +850,12 @@ mod test {
         assert_eq!(Some("testhost".to_owned()), sc.hostname);
         assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:2".to_owned()), sc.local);
+
+        let lfc = config.logfile_config.unwrap();
+        assert_eq!("/tmp/zerotect/zerotect.log", lfc.filepath);
+        assert_eq!(OutputFormat::CEF, lfc.format);
+        assert_eq!(Some(1), lfc.rotation_file_count);
+        assert_eq!(Some(10), lfc.rotation_file_max_size);
     }
 
     #[test]
