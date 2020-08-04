@@ -64,11 +64,11 @@ pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
             None => match OpenOptions::new()
                 .append(true)
                 .create_new(true)
-                .open("foo.txt")
+                .open(lfc.filepath.clone())
             {
                 Ok(file) => Box::new(file),
                 Err(err) => match err.kind() {
-                    ErrorKind::AlreadyExists => Box::new(OpenOptions::new().append(true).open("foo.txt")?),
+                    ErrorKind::AlreadyExists => Box::new(OpenOptions::new().append(true).open(lfc.filepath)?),
                     _ => return Err(FileLoggerError::from(err)),
                 },
             },
