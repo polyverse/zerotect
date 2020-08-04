@@ -9,6 +9,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
 
 mod console;
+mod filelogger;
 mod polycorder;
 mod syslogger;
 
