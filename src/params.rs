@@ -14,22 +14,45 @@ use std::str::FromStr;
 use std::time::Duration;
 use strum_macros::EnumString;
 
+/// All configs may be loaded from a file (and overridden with any CLI flags)
+const CONFIG_FILE_FLAG: &str = "configfile";
+
 const AUTO_CONFIGURE: &str = "auto-configure";
 
 const GOBBLE_OLD_EVENTS_FLAG: &str = "gobble-old-events";
 
-const CONSOLE_OUTPUT_FLAG: &str = "console";
-
+/// Polycorder always takes the JSON log format
 const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 const NODE_ID_FLAG: &str = "node";
 const UNIDENTIFIED_NODE: &str = "unidentified";
 const FLUSH_TIMEOUT_SECONDS_FLAG: &str = "flush-timeout-secs";
 const FLUSH_EVENT_COUNT_FLAG: &str = "flush-event-count";
 
+/// For all non-polycorder destinations, one of these formats may be selected
 const POSSIBLE_FORMATS: &[&str] = &["text", "json", "cef"];
 
-const CONFIG_FILE_FLAG: &str = "configfile";
+/// When set, log to console (with an optional format parameter)
+const CONSOLE_OUTPUT_FLAG: &str = "console";
 
+/// When set, log to syslog (with an optional format parameter)
+const SYSLOG_OUTPUT_FLAG: &str = "syslog";
+
+const SYSLOG_DESTINATION_FLAG: &str = "syslog-destination";
+const SYSLOG_DESTINATION_UNIX: &str = "unix";
+const SYSLOG_DESTINATION_TCP: &str = "tcp";
+const SYSLOG_DESTINATION_UDP: &str = "udp";
+const SYSLOG_POSSIBLE_DESTINATIONS: &[&str] = &[SYSLOG_DESTINATION_UNIX, SYSLOG_DESTINATION_TCP, SYSLOG_DESTINATION_UDP];
+
+const SYSLOG_UNIX_SOCKET_PATH: &str = "syslog-unix-socket-path";
+const SYSLOG_SERVER_ADDR: &str = "syslog-server";
+const SYSLOG_LOCAL_ADDR: &str = "syslog-local";
+const SYSLOG_HOSTNAME: &str = "syslog-hostname";
+
+
+/// When set, log to a log file (with an optional format parameter)
+const LOGFILE_OUTPUT_FLAG: &str = "logfile";
+
+// Defaults
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
 const DEFAULT_POLYCORDER_FLUSH_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -54,6 +77,15 @@ pub struct ConsoleConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyslogConfig {
     pub format: OutputFormat,
+    pub destination: SyslogDestination,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SyslogDestination {
+    Default,
+    Unix{path: String},
+    Tcp{server: String, hostname: String},
+    Udp{local: String, server: String, hostname: String},
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -269,12 +301,16 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                         .version("1.0")
                         .author("Polyverse Corporation <support@polyverse.com>")
                         .about("Detect attempted (and ultimately failed) attacks and exploits using known and unknown vulnerabilities by observing side effects (segfaults, crashes, etc.)")
+
+                        // config file
                         .arg(Arg::with_name(CONFIG_FILE_FLAG)
                             .long(CONFIG_FILE_FLAG)
                             .value_name("filepath")
                             .takes_value(true)
                             .conflicts_with_all(&[AUTO_CONFIGURE, CONSOLE_OUTPUT_FLAG, POLYCORDER_OUTPUT_FLAG, NODE_ID_FLAG, "verbose"])
                             .help(format!("Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)").as_str()))
+
+                        // configure automatically
                         .arg(Arg::with_name(AUTO_CONFIGURE)
                             .long(AUTO_CONFIGURE)
                             .value_name("sysctl-flag-to-auto-configure")
@@ -282,15 +318,21 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, KLOG_INCLUDE_TIMESTAMP])
                             .multiple(true)
                             .help(format!("Automatically configure the system on the user's behalf.").as_str()))
+
+                        // Start monitoring events right now or from the past?
                         .arg(Arg::with_name(GOBBLE_OLD_EVENTS_FLAG)
                             .long(GOBBLE_OLD_EVENTS_FLAG)
                             .help(format!("When enabled, gobbles events from the past (if found) in logs. By default zerotect only captures events after it has started.").as_str()))
+
+                        // console output
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
                             .long(CONSOLE_OUTPUT_FLAG)
                             .value_name("format")
                             .possible_values(POSSIBLE_FORMATS)
                             .case_insensitive(true)
                             .help(format!("Prints all monitored data to the console in the specified format.").as_str()))
+
+                        // polycorder output
                         .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
                             .long(POLYCORDER_OUTPUT_FLAG)
                             .value_name("authkey")
@@ -315,6 +357,76 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
                             .help(format!("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty.").as_str()))
+
+                        // syslog output
+                        .arg(Arg::with_name(SYSLOG_OUTPUT_FLAG)
+                            .long(SYSLOG_OUTPUT_FLAG)
+                            .value_name("format")
+                            .possible_values(POSSIBLE_FORMATS)
+                            .case_insensitive(true)
+                            .help(format!("Sends all monitored data to syslog in the specified format. Unless a destination is selected, tries to send to standard syslog destinations when in order of unix socket, tcp and udp. Since the UDP destination will almost never fail, if there is no listener, logs will be lost.").as_str()))
+
+                        // syslog destinations
+                        .arg(Arg::with_name(SYSLOG_DESTINATION_FLAG)
+                            .long(SYSLOG_DESTINATION_FLAG)
+                            .value_name("destination")
+                            .possible_values(SYSLOG_POSSIBLE_DESTINATIONS)
+                            .case_insensitive(true)
+                            .requires(SYSLOG_OUTPUT_FLAG)
+                            .requires_ifs(&[
+                                //udp and tcp require server address
+                                (SYSLOG_DESTINATION_UDP, SYSLOG_SERVER_ADDR),
+                                (SYSLOG_DESTINATION_TCP, SYSLOG_SERVER_ADDR),
+
+                                //udp requires local address
+                                (SYSLOG_DESTINATION_UDP, SYSLOG_LOCAL_ADDR),
+
+                                //udp and tcp require hostname
+                                (SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME),
+                                (SYSLOG_DESTINATION_TCP, SYSLOG_HOSTNAME),
+
+                                // unix requires socket path
+                                (SYSLOG_DESTINATION_UNIX, SYSLOG_UNIX_SOCKET_PATH),
+                            ])
+                            .help(format!("The syslog destination type. If a destination is selected, the destination configuration flags are explicitly required and defaults are not used.").as_str()))
+
+                        // syslog tcp options
+                        .arg(Arg::with_name(SYSLOG_SERVER_ADDR)
+                            .long(SYSLOG_SERVER_ADDR)
+                            .value_name("addr")
+                            .requires(SYSLOG_DESTINATION_FLAG)
+                            .help(format!("The syslog udp server addr to send to. (usually ip:port)").as_str()))
+
+                        // syslog udp options
+                        .arg(Arg::with_name(SYSLOG_LOCAL_ADDR)
+                            .long(SYSLOG_LOCAL_ADDR)
+                            .value_name("addr")
+                            .requires(SYSLOG_DESTINATION_FLAG)
+                            .help(format!("The syslog udp local addr to bind to. (usually ip:port)").as_str()))
+
+                        //syslog hostname when tcp or udp are destinations
+                        .arg(Arg::with_name(SYSLOG_HOSTNAME)
+                            .long(SYSLOG_HOSTNAME)
+                            .value_name("hostname")
+                            .requires(SYSLOG_DESTINATION_FLAG)
+                            .help(format!("The syslog tcp server addr to send to. (usually ip:port)").as_str()))
+
+                        //syslog unix socket path
+                        .arg(Arg::with_name(SYSLOG_UNIX_SOCKET_PATH)
+                            .long(SYSLOG_UNIX_SOCKET_PATH)
+                            .value_name("path")
+                            .requires(SYSLOG_DESTINATION_FLAG)
+                            .help(format!("The unix socket to send to. (usually /dev/log or /var/run/syslog)").as_str()))
+
+                        // logfile output
+                        .arg(Arg::with_name(LOGFILE_OUTPUT_FLAG)
+                            .long(LOGFILE_OUTPUT_FLAG)
+                            .value_name("format")
+                            .possible_values(POSSIBLE_FORMATS)
+                            .case_insensitive(true)
+                            .help(format!("Sends all monitored data to syslog in the specified format.").as_str()))
+
+                        // verbose internal logging?
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
@@ -404,13 +516,57 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         }
     };
 
+    let syslog_config = match matches.value_of(SYSLOG_OUTPUT_FLAG) {
+        Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
+            Ok(format) => {
+                // let's see if syslog destination is set
+                let destination = match matches.value_of(SYSLOG_DESTINATION_FLAG) {
+                    Some(destinationstr) => match destinationstr.trim().to_ascii_lowercase().as_str() {
+                        SYSLOG_DESTINATION_UNIX => match matches.value_of(SYSLOG_UNIX_SOCKET_PATH) {
+                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UNIX, SYSLOG_UNIX_SOCKET_PATH)}),
+                            Some(pathstr) => SyslogDestination::Unix{path: pathstr.to_owned()},
+                        }
+                        SYSLOG_DESTINATION_TCP => match matches.value_of(SYSLOG_SERVER_ADDR) {
+                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_TCP, SYSLOG_SERVER_ADDR)}),
+                            Some(server_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
+                                None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME)}),
+                                Some(hostname) => SyslogDestination::Tcp{server: server_addr.to_owned(), hostname: hostname.to_owned()},
+                            }
+                        }
+                        SYSLOG_DESTINATION_UDP => match matches.value_of(SYSLOG_SERVER_ADDR) {
+                            None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_SERVER_ADDR)}),
+                            Some(server_addr) => match matches.value_of(SYSLOG_LOCAL_ADDR) {
+                                None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_LOCAL_ADDR)}),
+                                Some(local_addr) => match matches.value_of(SYSLOG_HOSTNAME) {
+                                    None => return Err(ParsingError{inner_error: InnerError::None, message: format!("When {} is set to {}, the {} flag must be set.", SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP, SYSLOG_HOSTNAME)}),
+                                    Some(hostname) => SyslogDestination::Udp{server: server_addr.to_owned(), local: local_addr.to_owned(), hostname: hostname.to_owned()},
+                                }
+                            }
+                        },
+                        val => return Err(ParsingError{inner_error: InnerError::None, message: format!("{} set to {} which is not recognized. Supported values are: {}.", SYSLOG_DESTINATION_FLAG, val, SYSLOG_POSSIBLE_DESTINATIONS.join(","))}),
+                    },
+                    None => SyslogDestination::Default,
+                };
+
+                Some(SyslogConfig{
+                    format,
+                    destination,
+                })
+            },
+            Err(e) => {
+                return Err(ParsingError{inner_error: InnerError::None, message: format!("Syslog format value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", formatstr, e)})
+            },
+        },
+        None => None,
+    };
+
     Ok(ZerotectParams {
         verbosity,
         auto_configure,
         monitor_config,
         console_config,
         polycorder_config,
-        syslog_config: None,
+        syslog_config,
         logfile_config: None,
     })
 }

@@ -10,7 +10,8 @@ use std::sync::mpsc::Receiver;
 
 mod console;
 mod polycorder;
-mod syslog;
+mod syslogger;
+use syslog;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
@@ -39,6 +40,13 @@ impl From<polycorder::PolycorderError> for EmitterError {
     }
 }
 
+impl From<syslog::Error> for EmitterError {
+    fn from(err: syslog::Error) -> EmitterError {
+        EmitterError(format!("syslog::Error: {}", err))
+    }
+}
+
+
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
@@ -50,6 +58,10 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
     if let Some(tc) = ec.polycorder_config {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
         emitters.push(Box::new(polycorder::new(tc, ec.verbosity)?));
+    }
+    if let Some(sc) = ec.syslog_config {
+        eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
+        emitters.push(Box::new(syslogger::new(sc)?));
     }
 
     loop {
