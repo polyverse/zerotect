@@ -104,28 +104,36 @@ pub enum EventType {
 
         trap: KernelTrapType,
 
+        #[cef_ext_field]
         /// Name of the process in which the trap occurred
         procname: String,
 
+        #[cef_ext_field]
         /// Process ID
         pid: usize,
 
+        #[cef_ext_field]
         /// Instruction Pointer (what memory address was executing)
         ip: usize,
 
+        #[cef_ext_field]
         /// Stack Pointer
         sp: usize,
 
         /// The error code for the trap
+        #[cef_ext_gobble]
         errcode: SegfaultErrorCode,
 
         /// (Optional) File in which the trap occurred (could be the main executable or library).
+        #[cef_ext_optional_field]
         file: Option<String>,
 
         /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
+        #[cef_ext_optional_field]
         vmastart: Option<usize>,
 
         /// (Optional) The Virtual Memory Size of this file's mapping.
+        #[cef_ext_optional_field]
         vmasize: Option<usize>,
     },
 
@@ -143,9 +151,11 @@ pub enum EventType {
         facility: LogFacility,
 
         /// The type of Fatal triggered
+        #[cef_ext_field]
         signal: FatalSignalType,
 
         /// An Optional Stack Dump if one was found and parsable.
+        #[cef_ext_optional_gobble]
         stack_dump: Option<StackDump>,
     },
 
@@ -420,20 +430,31 @@ pub enum SegfaultAccessMode {
 /// Segmentation Fault ErrorCode flags parsed into a structure
 /// See more: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
 /// See more: https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
 pub struct SegfaultErrorCode {
     /// The reason for the segmentation fault
+    #[cef_ext_field]
     pub reason: SegfaultReason,
+
     /// The type of access causing the fault
+    #[cef_ext_field]
     pub access_type: SegfaultAccessType,
+
     /// The mode under which access was performed
+    #[cef_ext_field]
     pub access_mode: SegfaultAccessMode,
+
     /// use of reserved bits in the page table entry detected (the kernel will panic if this happens)
+    #[cef_ext_field]
     pub use_of_reserved_bit: bool,
+
     /// fault was an instruction fetch, not data read or write
+    #[cef_ext_field]
     pub instruction_fetch: bool,
+
     /// Memory Protection Keys related. Not sure what exactly triggers this.
     /// See more: https://lore.kernel.org/patchwork/patch/633070/
+    #[cef_ext_field]
     pub protection_keys_block_access: bool,
 }
 
@@ -590,27 +611,34 @@ pub enum FatalSignalType {
 }
 
 /// Stack Dump (when parsed)
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
 pub struct StackDump {
     /// Which CPU/Core it dumped on
+    #[cef_ext_field]
     pub cpu: usize,
 
     /// Process ID
+    #[cef_ext_field]
     pub pid: usize,
 
     /// Command (how was the process executed)
+    #[cef_ext_field]
     pub command: String,
 
     /// Kernel descriptor
+    #[cef_ext_field]
     pub kernel: String,
 
     /// Hardware descriptor
+    #[cef_ext_field]
     pub hardware: String,
 
     // Arbitrary task key-pairs
+    #[cef_ext_gobble_kv_iterator]
     pub taskinfo: HashMap<String, String>,
 
     /// Arbitrary register value key-pairs
+    #[cef_ext_gobble_kv_iterator]
     pub registers: HashMap<String, String>,
 }
 

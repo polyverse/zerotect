@@ -62,7 +62,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|V1|LinuxKernelTrap|Linux Kernel Trap|10|"
+            "CEF:0|polyverse|zerotect|V1|LinuxKernelTrap|Linux Kernel Trap|10|access_mode=User access_type=Read file=a.out instruction_fetch=false ip=0 pid=36275 procname=a.out protection_keys_block_access=false reason=NoPageFound sp=140726083244224 use_of_reserved_bit=false vmasize=4096 vmastart=94677333766144"
         );
     }
 
@@ -92,7 +92,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|"
+            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|command=a.out cpu=1 hardware=BHYVE, BIOS 1.00 03/14/2014 kernel=Not tainted 4.14.131-linuxkit #1 pid=36075 signal=SIGSEGV task.stack=ffffb493c0e98000 task=ffff9b08f2e1c3c0"
         );
     }
 
