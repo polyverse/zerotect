@@ -824,7 +824,7 @@ mod test {
             OsString::from("/tmp/zerotect/zerotect.log"),
             OsString::from("--log-file-rotation-count"),
             OsString::from("1"),
-            OsString::from("--log-file-rotation-size"),
+            OsString::from("--log-file-rotation-max-size"),
             OsString::from("10"),
         ];
 
@@ -1055,6 +1055,61 @@ mod test {
     }
 
     #[test]
+    fn commandline_args_parse_logfile_no_rotation() {
+        let args: Vec<OsString> = vec![
+            OsString::from("programname"),
+            OsString::from("--log-file-format"),
+            OsString::from("text"),
+            OsString::from("--log-file-path"),
+            OsString::from("/tmp/zerotect/zerotect.log"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+
+        let lfc = config.logfile_config.unwrap();
+        assert_eq!(OutputFormat::Text, lfc.format);
+        assert_eq!("/tmp/zerotect/zerotect.log", lfc.filepath);
+        assert_eq!(None, lfc.rotation_file_count);
+        assert_eq!(None, lfc.rotation_file_max_size);
+    }
+
+    #[test]
+    fn commandline_args_parse_logfile_require_both_basic_params() {
+        let args: Vec<OsString> = vec![OsString::from("--log-file-format"), OsString::from("json")];
+
+        let config = parse_args(Some(args));
+        assert!(config.is_err())
+    }
+
+    #[test]
+    fn commandline_args_parse_logfile_optional_params_require_basic_params() {
+        let args: Vec<OsString> = vec![
+            OsString::from("--log-file-rotation-count"),
+            OsString::from("1"),
+            OsString::from("--log-file-rotation-max-size"),
+            OsString::from("10"),
+        ];
+
+        let config = parse_args(Some(args));
+        assert!(config.is_err())
+    }
+
+    #[test]
+    fn commandline_args_parse_logfile_require_both_optional_params() {
+        let args: Vec<OsString> = vec![
+            OsString::from("--log-file-format"),
+            OsString::from("json"),
+            OsString::from("--log-file-path"),
+            OsString::from("/tmp/zerotect/zerotect.log"),
+            OsString::from("--log-file-rotation-count"),
+            OsString::from("1"),
+        ];
+
+        let config = parse_args(Some(args));
+        assert!(config.is_err())
+    }
+
+    #[test]
     fn commandline_args_parse_syslog_default() {
         let args: Vec<OsString> = vec![
             OsString::from("burner program name. First param ignored."),
@@ -1073,7 +1128,7 @@ mod test {
     }
 
     #[test]
-    fn toml_parse_all() {
+    fn toml_parse_all_direct() {
         let tomlcontents = r#"
         verbosity = 40
 
@@ -1092,6 +1147,21 @@ mod test {
         [polycorder_config.flush_timeout]
         secs = 39
         nanos = 0
+
+        [syslog_config]
+        format = 'CeF'
+        destination = 'TCP'
+        path = '/dev/log'
+        server = '127.0.0.1:834'
+        local = '127.0.0.1:342'
+        hostname = 'ohi;afs'
+
+        [logfile_config]
+        format = 'tExT'
+        filepath = '/tmp/test/path'
+        rotation_file_count = 3
+        rotation_file_max_size = 21
+
         "#;
 
         let toml_file = unique_temp_toml_file();
@@ -1114,87 +1184,52 @@ mod test {
         assert_eq!("NodeDiscriminator5462654", pc.node_id);
         assert_eq!(Duration::from_secs(39), pc.flush_timeout);
         assert_eq!(23, pc.flush_event_count);
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(OutputFormat::CEF, sc.format);
+        assert_eq!(SyslogDestination::Tcp, sc.destination);
+        assert_eq!(Some("/dev/log".to_owned()), sc.path);
+        assert_eq!(Some("127.0.0.1:834".to_owned()), sc.server);
+        assert_eq!(Some("127.0.0.1:342".to_owned()), sc.local);
+        assert_eq!(Some("ohi;afs".to_owned()), sc.hostname);
+
+        let lfc = config.logfile_config.unwrap();
+        assert_eq!(OutputFormat::Text, lfc.format);
+        assert_eq!("/tmp/test/path".to_owned(), lfc.filepath);
+        assert_eq!(Some(3), lfc.rotation_file_count);
+        assert_eq!(Some(21), lfc.rotation_file_max_size);
     }
 
     #[test]
-    fn toml_serialize_and_parse_random_values() {
-        let config_expected = ZerotectParams {
-            auto_configure: AutoConfigure {
-                exception_trace: rand::thread_rng().gen_bool(0.5),
-                fatal_signals: rand::thread_rng().gen_bool(0.5),
-                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
-            },
-            monitor_config: MonitorConfig {
-                gobble_old_events: rand::thread_rng().gen_bool(0.5),
-            },
-            console_config: Some(ConsoleConfig {
-                format: match rand::thread_rng().gen_bool(0.5) {
-                    true => OutputFormat::JSON,
-                    false => OutputFormat::Text,
-                },
-            }),
-            polycorder_config: Some(PolycorderConfig {
-                auth_key: format!(
-                    "AuthKeyFromAccountManagerRandom{}",
-                    rand::thread_rng().gen_range(0, 32000)
-                ),
-                node_id: format!(
-                    "NodeDiscriminatorRandom{}",
-                    rand::thread_rng().gen_range(0, 32000)
-                ),
-                flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
-                flush_event_count: rand::thread_rng().gen_range(0, 500),
-            }),
-            syslog_config: None,
-            logfile_config: None,
-            verbosity: rand::thread_rng().gen_range(0, 250),
-        };
+    fn toml_serialize_and_parse_random_values_direct() {
+        for _i in 1..100 {
+            // test this 100 times
+            let config_expected = random_config_format();
 
-        let toml_file = unique_temp_toml_file();
-        let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-        println!("Writing TOML string to file: {}", &toml_file);
-        fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
+            let toml_file = unique_temp_toml_file();
+            let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
+            println!("Writing TOML string to file: {}", &toml_file);
+            fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
-        let maybe_config = parse_config_file(&toml_file);
-        if let Err(e) = &maybe_config {
-            match &e.inner_error {
-                InnerError::ClapError(ce) => ce.exit(),
-                e => assert!(
-                    false,
-                    "Unexpected error when parsing command-line config file flag: {:?}",
-                    e
-                ),
+            let maybe_config = parse_config_file(&toml_file);
+            if let Err(e) = &maybe_config {
+                match &e.inner_error {
+                    InnerError::ClapError(ce) => ce.exit(),
+                    e => assert!(
+                        false,
+                        "Unexpected error when parsing command-line config file flag: {:?}",
+                        e
+                    ),
+                }
             }
+            let config_options_obtained = maybe_config.unwrap();
+
+            assert_eq!(
+                config_expected, config_options_obtained,
+                "The File contents are: \n\n{}",
+                &config_toml_string
+            );
         }
-        let config_options_obtained = maybe_config.unwrap();
-
-        let polycorder_options_config = config_options_obtained.polycorder_config.unwrap();
-        let polycorder_config = PolycorderConfig {
-            auth_key: polycorder_options_config.auth_key,
-            node_id: polycorder_options_config.node_id,
-            flush_timeout: polycorder_options_config.flush_timeout,
-            flush_event_count: polycorder_options_config.flush_event_count,
-        };
-
-        let console_config = ConsoleConfig {
-            format: config_options_obtained.console_config.unwrap().format,
-        };
-
-        let config_obtained = ZerotectParams {
-            verbosity: config_options_obtained.verbosity,
-            auto_configure: config_options_obtained.auto_configure,
-            monitor_config: config_options_obtained.monitor_config,
-            polycorder_config: Some(polycorder_config),
-            console_config: Some(console_config),
-            syslog_config: None,
-            logfile_config: None,
-        };
-
-        assert_eq!(
-            config_expected, config_obtained,
-            "The File contents are: \n\n{}",
-            &config_toml_string
-        );
     }
 
     #[test]
@@ -1217,6 +1252,21 @@ mod test {
         [polycorder_config.flush_timeout]
         secs = 10
         nanos = 0
+
+        [syslog_config]
+        format = 'jsoN'
+        destination = 'uDp'
+        path = '/dev/log/something/else'
+        server = '127.0.0.1:345'
+        local = '127.0.0.1:468'
+        hostname = '.kndv;afs'
+
+        [logfile_config]
+        format = 'JSon'
+        filepath = '/tmp/other/path'
+        rotation_file_count = 92
+        rotation_file_max_size = 107
+
         "#;
 
         let toml_file = unique_temp_toml_file();
@@ -1256,120 +1306,47 @@ mod test {
         assert_eq!("UsefulNodeIdentifierToGroupEvents903439", pc.node_id);
         assert_eq!(Duration::from_secs(10), pc.flush_timeout);
         assert_eq!(10, pc.flush_event_count);
+
+        let sc = config.syslog_config.unwrap();
+        assert_eq!(OutputFormat::JSON, sc.format);
+        assert_eq!(SyslogDestination::Udp, sc.destination);
+        assert_eq!(Some("/dev/log/something/else".to_owned()), sc.path);
+        assert_eq!(Some("127.0.0.1:345".to_owned()), sc.server);
+        assert_eq!(Some("127.0.0.1:468".to_owned()), sc.local);
+        assert_eq!(Some(".kndv;afs".to_owned()), sc.hostname);
+
+        let lfc = config.logfile_config.unwrap();
+        assert_eq!(OutputFormat::JSON, lfc.format);
+        assert_eq!("/tmp/other/path".to_owned(), lfc.filepath);
+        assert_eq!(Some(92), lfc.rotation_file_count);
+        assert_eq!(Some(107), lfc.rotation_file_max_size);
     }
 
     #[test]
     fn toml_serialize_and_parse_random_values_through_args() {
-        let config_expected = ZerotectParams {
-            auto_configure: AutoConfigure {
-                exception_trace: rand::thread_rng().gen_bool(0.5),
-                fatal_signals: rand::thread_rng().gen_bool(0.5),
-                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
-            },
-            monitor_config: MonitorConfig {
-                gobble_old_events: rand::thread_rng().gen_bool(0.5),
-            },
-            console_config: Some(ConsoleConfig {
-                format: match rand::thread_rng().gen_bool(0.5) {
-                    true => OutputFormat::JSON,
-                    false => OutputFormat::Text,
-                },
-            }),
-            polycorder_config: Some(PolycorderConfig {
-                auth_key: format!(
-                    "AuthKeyFromAccountManagerRandom{}",
-                    rand::thread_rng().gen_range(0, 32000)
-                ),
-                node_id: format!(
-                    "NodeDiscriminatorRandom{}",
-                    rand::thread_rng().gen_range(0, 32000)
-                ),
-                flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
-                flush_event_count: rand::thread_rng().gen_range(0, 500),
-            }),
-            syslog_config: None,
-            logfile_config: None,
-            verbosity: rand::thread_rng().gen_range(0, 250),
-        };
+        for _i in 1..100 {
+            // test this 100 times
+            let config_expected = random_config_format();
 
-        let toml_file = unique_temp_toml_file();
-        let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-        println!("Writing TOML string to file: {}", &toml_file);
-        fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
+            let toml_file = unique_temp_toml_file();
+            let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
+            println!("Writing TOML string to file: {}", &toml_file);
+            fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
-        let args: Vec<OsString> = vec![
-            OsString::from("burner program name. Also test words aren't split"),
-            OsString::from("--configfile"),
-            OsString::from(&toml_file),
-        ];
+            let args: Vec<OsString> = vec![
+                OsString::from("burner program name. Also test words aren't split"),
+                OsString::from("--configfile"),
+                OsString::from(&toml_file),
+            ];
 
-        let config_obtained = parse_args(Some(args)).unwrap();
+            let config_obtained = parse_args(Some(args)).unwrap();
 
-        assert_eq!(
-            config_expected, config_obtained,
-            "The File contents are: \n\n{}",
-            &config_toml_string
-        );
-    }
-
-    #[test]
-    fn toml_serialize_and_parse_optional_fields_through_args() {
-        let config_expected = ZerotectParams {
-            auto_configure: AutoConfigure {
-                exception_trace: rand::thread_rng().gen_bool(0.5),
-                fatal_signals: rand::thread_rng().gen_bool(0.5),
-                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
-            },
-            monitor_config: MonitorConfig {
-                gobble_old_events: rand::thread_rng().gen_bool(0.5),
-            },
-            console_config: match rand::thread_rng().gen_bool(0.5) {
-                true => Some(ConsoleConfig {
-                    format: match rand::thread_rng().gen_bool(0.5) {
-                        true => OutputFormat::JSON,
-                        false => OutputFormat::Text,
-                    },
-                }),
-                false => None,
-            },
-            polycorder_config: match rand::thread_rng().gen_bool(0.5) {
-                true => Some(PolycorderConfig {
-                    auth_key: format!(
-                        "AuthKeyFromAccountManagerRandom{}",
-                        rand::thread_rng().gen_range(0, 32000)
-                    ),
-                    node_id: format!(
-                        "NodeDiscriminatorRandom{}",
-                        rand::thread_rng().gen_range(0, 32000)
-                    ),
-                    flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
-                    flush_event_count: rand::thread_rng().gen_range(0, 500),
-                }),
-                false => None,
-            },
-            syslog_config: None,
-            logfile_config: None,
-            verbosity: rand::thread_rng().gen_range(0, 250),
-        };
-
-        let toml_file = unique_temp_toml_file();
-        let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-        println!("Writing TOML string to file: {}", &toml_file);
-        fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
-
-        let args: Vec<OsString> = vec![
-            OsString::from("burner program name. Also test words aren't split"),
-            OsString::from("--configfile"),
-            OsString::from(&toml_file),
-        ];
-
-        let config_obtained = parse_args(Some(args)).unwrap();
-
-        assert_eq!(
-            config_expected, config_obtained,
-            "The File contents are: \n\n{}",
-            &config_toml_string
-        );
+            assert_eq!(
+                config_expected, config_obtained,
+                "The File contents are: \n\n{}",
+                &config_toml_string
+            );
+        }
     }
 
     #[test]
@@ -1591,7 +1568,12 @@ mod test {
                 hostname: Some("# applicable to tcp and udp hostname for long entries".to_owned()),
                 path: Some("# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)".to_owned()),
             }),
-            logfile_config: None,
+            logfile_config: Some(LogFileConfig{
+                filepath: "/test/path".to_owned(),
+                format: OutputFormat::CEF,
+                rotation_file_count: Some(1),
+                rotation_file_max_size: Some(20),
+            }),
             verbosity: 0,
         };
 
@@ -1603,5 +1585,102 @@ mod test {
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
         println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
+    }
+
+    fn random_config_format() -> ZerotectParams {
+        ZerotectParams {
+            auto_configure: AutoConfigure {
+                exception_trace: rand::thread_rng().gen_bool(0.5),
+                fatal_signals: rand::thread_rng().gen_bool(0.5),
+                klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
+            },
+            monitor_config: MonitorConfig {
+                gobble_old_events: rand::thread_rng().gen_bool(0.5),
+            },
+            console_config: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(ConsoleConfig {
+                    format: match rand::thread_rng().gen_bool(0.5) {
+                        true => OutputFormat::JSON,
+                        false => OutputFormat::Text,
+                    },
+                }),
+                false => None,
+            },
+            polycorder_config: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(PolycorderConfig {
+                    auth_key: format!(
+                        "AuthKeyFromAccountManagerRandom{}",
+                        rand::thread_rng().gen_range(0, 32000)
+                    ),
+                    node_id: format!(
+                        "NodeDiscriminatorRandom{}",
+                        rand::thread_rng().gen_range(0, 32000)
+                    ),
+                    flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
+                    flush_event_count: rand::thread_rng().gen_range(0, 500),
+                }),
+                false => None,
+            },
+            syslog_config: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(SyslogConfig {
+                    format: match rand::thread_rng().gen_bool(0.5) {
+                        true => OutputFormat::JSON,
+                        false => OutputFormat::CEF,
+                    },
+                    destination: match rand::thread_rng().gen_bool(0.5) {
+                        true => SyslogDestination::Udp,
+                        false => SyslogDestination::Unix,
+                    },
+                    path: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(format!(
+                            "RandomPath{}",
+                            rand::thread_rng().gen_range(0, 32000)
+                        )),
+                        false => None,
+                    },
+                    server: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(format!(
+                            "RandomServer{}",
+                            rand::thread_rng().gen_range(0, 32000)
+                        )),
+                        false => None,
+                    },
+                    local: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(format!(
+                            "RandomLocal{}",
+                            rand::thread_rng().gen_range(0, 32000)
+                        )),
+                        false => None,
+                    },
+                    hostname: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(format!(
+                            "RandomHostname{}",
+                            rand::thread_rng().gen_range(0, 32000)
+                        )),
+                        false => None,
+                    },
+                }),
+                false => None,
+            },
+            logfile_config: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(LogFileConfig {
+                    format: match rand::thread_rng().gen_bool(0.5) {
+                        true => OutputFormat::JSON,
+                        false => OutputFormat::CEF,
+                    },
+                    filepath: format!("RandomFilePath{}", rand::thread_rng().gen_range(0, 32000)),
+                    rotation_file_count: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(rand::thread_rng().gen_range(0, 32000)),
+                        false => None,
+                    },
+                    rotation_file_max_size: match rand::thread_rng().gen_bool(0.5) {
+                        true => Some(rand::thread_rng().gen_range(0, 32000)),
+                        false => None,
+                    },
+                }),
+                false => None,
+            },
+            verbosity: rand::thread_rng().gen_range(0, 250),
+        }
     }
 }

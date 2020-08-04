@@ -46,6 +46,12 @@ impl From<syslogger::SysLoggerError> for EmitterError {
     }
 }
 
+impl From<filelogger::FileLoggerError> for EmitterError {
+    fn from(err: filelogger::FileLoggerError) -> EmitterError {
+        EmitterError(format!("filelogger::FileLoggerError: {}", err))
+    }
+}
+
 pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
@@ -61,6 +67,10 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), 
     if let Some(sc) = ec.syslog_config {
         eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
         emitters.push(Box::new(syslogger::new(sc)?));
+    }
+    if let Some(lfc) = ec.logfile_config {
+        eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");
+        emitters.push(Box::new(filelogger::new(lfc)?));
     }
 
     if emitters.len() == 0 {

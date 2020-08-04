@@ -4,6 +4,7 @@ use crate::emitter;
 use crate::events;
 use crate::formatter::{new as new_formatter, Formatter as EventFormatter};
 use crate::params::{LogFileConfig, OutputFormat};
+use file_rotate::{FileRotate, RotationMode};
 use std::error;
 use std::fmt::{Display, Formatter as FmtFormatter, Result as FmtResult};
 use std::fs::OpenOptions;
@@ -52,21 +53,31 @@ impl emitter::Emitter for FileLogger {
 pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
     let event_formatter = new_formatter(&lfc.format);
 
-    let file = match OpenOptions::new()
-        .append(true)
-        .create_new(true)
-        .open("foo.txt")
-    {
-        Ok(file) => file,
-        Err(err) => match err.kind() {
-            ErrorKind::AlreadyExists => OpenOptions::new().append(true).open("foo.txt")?,
-            _ => return Err(FileLoggerError::from(err)),
+    let writer: Box<dyn Write> = match lfc.rotation_file_count {
+        Some(rfc) => match lfc.rotation_file_max_size {
+            //wrap file in file-rotation
+            Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::Bytes(rfms), rfc)),
+            None => return Err(FileLoggerError::MissingParameter(format!("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless."))),
+        },
+        None => match lfc.rotation_file_max_size {
+            Some(_) => return Err(FileLoggerError::MissingParameter(format!("File Logger was provided a rotation_file_max_size parameter, but not a rotation_file_count parameter. Without knowing the number of files to rotate over, the max size is meaningless."))),
+            None => match OpenOptions::new()
+                .append(true)
+                .create_new(true)
+                .open("foo.txt")
+            {
+                Ok(file) => Box::new(file),
+                Err(err) => match err.kind() {
+                    ErrorKind::AlreadyExists => Box::new(OpenOptions::new().append(true).open("foo.txt")?),
+                    _ => return Err(FileLoggerError::from(err)),
+                },
+            },
         },
     };
 
     Ok(FileLogger {
         output_format: lfc.format,
         event_formatter,
-        writer: Box::new(file),
+        writer,
     })
 }
