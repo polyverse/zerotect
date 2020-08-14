@@ -5,9 +5,6 @@ This describes how zerotect can be obtained (securely) and configured so you can
 ## Table of Contents
 
 * ["Trust Me" Quickstarts](#trust-me-quickstarts)
-  * [systemd](#systemd)
-  * [OpenRC](#openrc)
-  * [upstart](#upstart)
 * [First-Principles Install](#first-principles-install)
   * [Obtain the zerotect binary](#obtain-the-zerotect-binary)
     * [Download](#download)
@@ -30,31 +27,17 @@ Everything described in this document is encapsulated in scripted recipes for va
 
 As the scripts follow the curl pipe-to bash pattern, the rest of this document details how you can develop your own automation to deploy zerotect, depending on your level of trust (which may be zero trust).
 
-A triaging install script located at the root, can find the specific init system and call the specific script for you. This is particularly useful when you need a uniform command to run across a variety of host types.
-
 To install zerotect:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s <polycorder auth key> [optional nodeid]
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh
 ```
 
 To uninstall zerotect:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s uninstall
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s --uninstall
 ```
-
-### systemd
-
-All systems running [systemd](https://systemd.io/) can use the [systemd quickstart](./systemd/README.md).
-
-### OpenRC
-
-All systems, especially Alpine, running [OpenRC](https://wiki.gentoo.org/wiki/Project:OpenRC) can use the [OpenRC quickstart](./openrc/README.md).
-
-### upstart
-
-All systems, especially CentOS 6, running [upstart](http://upstart.ubuntu.com) can use the [upstart quickstart](./upstart/README.md).
 
 ## First-Principles Install
 

@@ -41,8 +41,8 @@ pub struct SysLogger {
 impl emitter::Emitter for SysLogger {
     fn emit(&mut self, event: &events::Version) {
         match self.event_formatter.format(event) {
-            Ok(formattedstr) => match self.inner_logger.info(formattedstr) {
-                Err(e) => eprintln!("Error writing event to syslog {}", e),
+            Ok(formattedstr) => match self.inner_logger.info(&formattedstr) {
+                Err(e) => eprintln!("Error writing event to syslog due to error {:?}. The event string: {}", e, &formattedstr),
                 Ok(_) => {}
             },
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.output_format, e),
