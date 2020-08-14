@@ -16,11 +16,11 @@ enum-display-derive = "0.1.0"
 num = "0.3.0"
 lazy_static = "1.4.0"
 num-traits = "0.2"
-num-derive = "0.3.0"
+num-derive = "0.3.1"
 timeout-iterator = "0.5.0"
 serde = { version = "1.0.114", features = ["derive"] }
-serde_json = { version = "1.0.56", features = ["arbitrary_precision"]}
-reqwest = { version = "0.10.6", features = ["json", "blocking", "gzip", "brotli"] }
+serde_json = { version = "1.0.57", features = ["arbitrary_precision"]}
+reqwest = { version = "0.10.7", features = ["json", "blocking", "gzip", "brotli"] }
 chrono = { version = "0.4", features = ["serde"] }
 schemars = { version = "0.7.6", features = ["chrono"]}
 pretty_assertions = "0.6.1"
