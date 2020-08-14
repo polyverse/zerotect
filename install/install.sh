@@ -469,6 +469,7 @@ else
     printf "no.\n"
     printf "      This script must be run as root because it needs to reliably detect the init system,\n"
     printf "      and be able to install the zerotect service using the appropriate install script.\n"
+    exit 1
 fi
 
 printf "==> Step 2/6:  Detecting Init System...\n"
