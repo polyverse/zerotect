@@ -20,13 +20,13 @@ ensure_root() {
     # Ensuring we are root
     if [ "$EUID" = "0" ]; then
         # try the EUID method
-        return 1
+        return 0
     elif [ "$EUID" = "" ] && [ "$(id -u)" = "0" ]; then
         # Sometimes EUID is not 0 (and not set), then use the older method
-        return 1
+        return 0
     fi
 
-    return 0
+    return 1
 }
 
 download_latest_zerotect() {
