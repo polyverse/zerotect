@@ -13,6 +13,7 @@ mod formatter;
 mod monitor;
 mod params;
 mod system;
+mod analyzer;
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -41,48 +42,17 @@ fn main() {
         },
     };
 
-    let (monitor_sink, emitter_source): (Sender<events::Version>, Receiver<events::Version>) =
+    let (monitor_sink, analyzer_source): (Sender<events::Version>, Receiver<events::Version>) =
+        mpsc::channel();
+    let (analyzer_sink, emitter_source): (Sender<events::Version>, Receiver<events::Version>) =
         mpsc::channel();
 
-    let env_config_copy = zerotect_config.clone();
+    let auto_configure_env = zerotect_config.auto_configure;
     let config_event_sink = monitor_sink.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let env_thread_result = thread::Builder::new().name("Environment Configuration Thread".to_owned()).spawn(move || {
-        // initialize the system with config
-        if let Err(e) = system::modify_environment(&env_config_copy.auto_configure) {
-            eprintln!(
-                "Error modifying the system settings to enable monitoring (as commanded): {}",
-                e
-            );
-            process::exit(1);
-        }
-
-        // let the first time go from config-mismatch event reporting
-        loop {
-            // reinforce the system with config
-            match system::modify_environment(&env_config_copy.auto_configure) {
-                Err(e) => {
-                    eprintln!("Error modifying the system settings to enable monitoring (as commanded): {}", e);
-                    process::exit(1);
-                }
-                Ok(events) => {
-                    for event in events.into_iter() {
-                        eprintln!(
-                            "System Configuration Thread: Configuration not stable. {}",
-                            &event
-                        );
-                        if let Err(e) = config_event_sink.send(event) {
-                            eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
-                            process::exit(1);
-                        }
-                    }
-                }
-            }
-
-            // ensure configuratione very five minutes.
-            thread::sleep(Duration::from_secs(300));
-        }
-    });
+    let env_thread_result = thread::Builder::new()
+        .name("Environment Configuration Thread".to_owned())
+        .spawn(move || configure_environment(auto_configure_env, config_event_sink));
 
     if let Err(e) = env_thread_result {
         eprintln!("An error occurred spawning the thread to continually ensure configuration settings/flags: {}", e);
@@ -108,6 +78,27 @@ fn main() {
         Ok(mh) => mh,
         Err(e) => {
             eprintln!("An error occurred spawning the monitoring thread: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let averbosity = zerotect_config.verbosity;
+    let analyzer_thread_result = thread::Builder::new()
+        .name("Event Analyzer Thread".to_owned())
+        .spawn(move || {
+            let ac = analyzer::AnalyzerConfig {
+                verbosity: averbosity,
+            };
+            if let Err(e) = analyzer::analyze(ac, analyzer_source, analyzer_sink) {
+                eprintln!("Error launching Analyzer: {}", e);
+                process::exit(1);
+            }
+        });
+
+    let analyzer_handle = match analyzer_thread_result {
+        Ok(ah) => ah,
+        Err(e) => {
+            eprintln!("An error occurred spawning the analyzer thread: {}", e);
             process::exit(1);
         }
     };
@@ -147,7 +138,48 @@ fn main() {
     monitor_handle
         .join()
         .expect("Unable to join on the monitoring thread");
+    analyzer_handle
+        .join()
+        .expect("Unable to join on the analyzer thread");
     emitter_handle
         .join()
         .expect("Unable to join on the emitter thread");
+}
+
+
+fn configure_environment(auto_config: params::AutoConfigure, config_event_sink: Sender<events::Version>) {
+    // initialize the system with config
+    if let Err(e) = system::modify_environment(&auto_config) {
+        eprintln!(
+            "Error modifying the system settings to enable monitoring (as commanded): {}",
+            e
+        );
+        process::exit(1);
+    }
+
+    // let the first time go from config-mismatch event reporting
+    loop {
+        // reinforce the system with config
+        match system::modify_environment(&auto_config) {
+            Err(e) => {
+                eprintln!("Error modifying the system settings to enable monitoring (as commanded): {}", e);
+                process::exit(1);
+            }
+            Ok(events) => {
+                for event in events.into_iter() {
+                    eprintln!(
+                        "System Configuration Thread: Configuration not stable. {}",
+                        &event
+                    );
+                    if let Err(e) = config_event_sink.send(event) {
+                        eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
+                        process::exit(1);
+                    }
+                }
+            }
+        }
+
+        // ensure configuratione very five minutes.
+        thread::sleep(Duration::from_secs(300));
+    }
 }
