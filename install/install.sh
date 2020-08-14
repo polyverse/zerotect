@@ -413,7 +413,7 @@ printf "\n"
 # parse arguments....
 # copied from: https://medium.com/@Drew_Stokes/bash-argument-parsing-54f3b81a6a8f
 PARAMS=""
-while (( "$#" )); do
+while [ "$#" -gt 0 ]; do
   case "$1" in
     -p|--polycorder)
       POLYCORDER_AUTH_KEY=$2
