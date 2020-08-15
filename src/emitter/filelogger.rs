@@ -39,7 +39,7 @@ pub struct FileLogger {
 }
 
 impl emitter::Emitter for FileLogger {
-    fn emit(&mut self, event: &events::Version) {
+    fn emit(&mut self, event: &events::Event) {
         match self.event_formatter.format(event) {
             Ok(formattedstr) => match self.writer.write_fmt(format_args!("{}\n", formattedstr)) {
                 Ok(()) => {}
@@ -64,7 +64,7 @@ pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
             None => match OpenOptions::new()
                 .append(true)
                 .create_new(true)
-                .open(lfc.filepath.clone())
+                .open(&lfc.filepath)
             {
                 Ok(file) => Box::new(file),
                 Err(err) => match err.kind() {

@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use crate::events;
-use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
+use crate::monitor::kmsg::{KMsg, KMsgPtr, KMsgParserError, KMsgParsingError};
 use crate::system;
 use timeout_iterator::TimeoutIterator;
 
@@ -96,7 +96,7 @@ impl RMesgReader {
     // <5>a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
     // OR
     // <5>[   233434.343533] a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
-    fn parse_next_rmesg(&mut self) -> Result<KMsg, KMsgParsingError> {
+    fn parse_next_rmesg(&mut self) -> Result<KMsgPtr, KMsgParsingError> {
         lazy_static! {
             static ref RE_RMESG_WITH_TIMESTAMP: Regex = Regex::new(
                 r"(?x)^
@@ -151,12 +151,12 @@ impl RMesgReader {
 
             let message = rmesgparts["message"].to_owned();
 
-            Ok(KMsg {
+            Ok(Box::new(KMsg {
                 facility,
                 level,
                 timestamp,
                 message,
-            })
+            }))
         } else {
             Err(KMsgParsingError::Generic(format!(
                 "Invalid line: {}",
@@ -197,13 +197,13 @@ impl RMesgReader {
 
 impl Iterator for RMesgReader {
     // we will be counting with usize
-    type Item = KMsg;
+    type Item = KMsgPtr;
 
     // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.parse_next_rmesg() {
-                Ok(km) => return Some(km),
+                Ok(kmptr) => return Some(kmptr),
                 Err(e) => match e {
                     KMsgParsingError::Completed => {
                         eprintln!("Iterator completed. No more messages expected");
@@ -299,22 +299,22 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.984259)).unwrap()),
             message: String::from(" a.out[14685]: segfault at 5556f7707004 ip 00005556f7707004 sp 00007ffec6c34d78 error 15 in a.out[5556f7707000+1000]"),
-        });
+        }));
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.986286)).unwrap()),
             message: String::from(" Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74"),
-        });
+        }));
     }
 
     #[test]
@@ -335,12 +335,12 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Emergency,
             timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(111310.986286)).unwrap()),
             message: String::from(" Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74"),
-        });
+        }));
     }
 
     #[test]
@@ -367,12 +367,12 @@ never open>a.out[26692]: segfault at 70 ip 000000000040059d sp 00007ffe334959e0 
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Emergency,
                 timestamp: iter.system_start_time.add(ChronoDuration::from_std(Duration::from_secs_f64(1310.986286)).unwrap()),
                 message: String::from(" Code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 02 00 <68> 65 6c 6c 6f 20 77 6f 72 6c 64 20 72 61 6e 64 6f 6d 20 64 61 74"),
-            }
+            })
         );
     }
 }

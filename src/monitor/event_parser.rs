@@ -10,6 +10,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 use std::time::Duration;
+use std::sync::Arc;
 
 use timeout_iterator::TimeoutIterator;
 
@@ -31,13 +32,13 @@ impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
 }
 
 pub struct EventParser {
-    timeout_kmsg_iter: TimeoutIterator<kmsg::KMsg>,
+    timeout_kmsg_iter: TimeoutIterator<kmsg::KMsgPtr>,
     verbosity: u8,
 }
 
 impl EventParser {
     pub fn from_kmsg_iterator(
-        kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsg> + Send>,
+        kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsgPtr> + Send>,
         verbosity: u8,
     ) -> Result<EventParser, EventParserError> {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
@@ -150,8 +151,8 @@ impl EventParser {
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
                     event: events::EventType::LinuxKernelTrap {
-                        facility: km.facility.clone(),
-                        level: km.level.clone(),
+                        facility: km.facility,
+                        level: km.level,
                         trap,
                         procname: procname.to_owned(),
                         pid,
@@ -222,8 +223,8 @@ impl EventParser {
                     return Some(events::Version::V1 {
                         timestamp: km.timestamp,
                         event: events::EventType::LinuxFatalSignal {
-                            facility: km.facility.clone(),
-                            level: km.level.clone(),
+                            facility: km.facility,
+                            level: km.level,
                             signal,
                             stack_dump: self.parse_stack_dump(),
                         },
@@ -420,8 +421,8 @@ impl EventParser {
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
                     event: events::EventType::LinuxSuppressedCallback {
-                        facility: km.facility.clone(),
-                        level: km.level.clone(),
+                        facility: km.facility,
+                        level: km.level,
                         function_name: function_name.to_owned(),
                         count,
                     },
@@ -466,12 +467,12 @@ impl EventParser {
 
 impl Iterator for EventParser {
     // we will be counting with usize
-    type Item = events::Version;
+    type Item = events::Event;
 
     // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
         match self.parse_next_event() {
-            Ok(event) => Some(event),
+            Ok(version) => Some(Arc::new(version)),
             Err(err) => {
                 eprintln!(
                     "Monitor: Error iterating over events from the dmesg parser: {}",
@@ -510,27 +511,27 @@ mod test {
     fn can_parse_kernel_trap_segfault() {
         let timestamp = Utc.timestamp_millis(378084605);
         let kmsgs = vec![
-            kmsg::KMsg{
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
-            kmsg::KMsg{
+            }),
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
-            kmsg::KMsg{
+            }),
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
-            },
+            }),
         ];
 
-        let event1 = events::Version::V1 {
+        let event1 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -552,9 +553,9 @@ mod test {
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
             },
-        };
+        });
 
-        let event2 = events::Version::V1 {
+        let event2 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -576,9 +577,9 @@ mod test {
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
             },
-        };
+        });
 
-        let event3 = events::Version::V1 {
+        let event3 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -602,7 +603,7 @@ mod test {
                 vmastart: None,
                 vmasize: None,
             },
-        };
+        });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
@@ -730,21 +731,21 @@ mod test {
         let timestamp = Utc.timestamp_millis(5606197845);
 
         let kmsgs = vec![
-            kmsg::KMsg{
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
-            kmsg::KMsg{
+            }),
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
-            },
+            }),
         ];
 
-        let event1 = events::Version::V1 {
+        let event1 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -766,9 +767,9 @@ mod test {
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
             },
-        };
+        });
 
-        let event2 = events::Version::V1 {
+        let event2 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -790,7 +791,7 @@ mod test {
                 vmastart: None,
                 vmasize: None,
             },
-        };
+        });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
@@ -877,21 +878,21 @@ mod test {
         let timestamp = Utc.timestamp_millis(471804323);
 
         let kmsgs = vec![
-            kmsg::KMsg{
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
-            kmsg::KMsg{
+            }),
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
-            },
+            }),
         ];
 
-        let event1 = events::Version::V1 {
+        let event1 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -915,9 +916,9 @@ mod test {
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
             },
-        };
+        });
 
-        let event2 = events::Version::V1 {
+        let event2 = Arc::new(events::Version::V1 {
             timestamp,
             event: events::EventType::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
@@ -941,7 +942,7 @@ mod test {
                 vmastart: None,
                 vmasize: None,
             },
-        };
+        });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
 
@@ -1029,19 +1030,19 @@ mod test {
     fn can_parse_fatal_signal_optional_dump() {
         let timestamp = Utc.timestamp_millis(376087724);
 
-        let kmsgs = vec![kmsg::KMsg {
+        let kmsgs = vec![Box::new(kmsg::KMsg {
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp,
             message: String::from("potentially unexpected fatal signal 11."),
-        }];
+        })];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
-            events::Version::V1 {
+            Arc::new(events::Version::V1 {
                 timestamp,
                 event: events::EventType::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
@@ -1049,113 +1050,113 @@ mod test {
                     signal: events::FatalSignalType::SIGSEGV,
                     stack_dump: None,
                 }
-            }
+            })
         )
     }
 
     #[test]
     fn can_parse_fatal_signal_11() {
         let kmsgs = vec![
-            kmsg::KMsg {
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 message: String::from("potentially unexpected fatal signal 11."),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372852970),
                 message: String::from(
                     "CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372855970),
                 message: String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372850970),
                 message: String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 message: String::from("RIP: 0033:0x561bc8d8f12e"),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372851970),
                 message: String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372856970),
                 message: String::from(
                     "RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372857970),
                 message: String::from(
                     "RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372855970),
                 message: String::from(
                     "RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372852970),
                 message: String::from(
                     "R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372850970),
                 message: String::from(
                     "R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372856970),
                 message: String::from(
                     "FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
                 ),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372853970),
                 message: String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
-            },
-            kmsg::KMsg {
+            }),
+            Box::new(kmsg::KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: Utc.timestamp_millis(6433742 + 372854970),
                 message: String::from(
                     "CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0",
                 ),
-            },
+            }),
         ];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -1163,7 +1164,7 @@ mod test {
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
-            events::Version::V1 {
+            Arc::new(events::Version::V1 {
                 timestamp: Utc.timestamp_millis(6433742 + 372858970),
                 event: events::EventType::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
@@ -1179,7 +1180,7 @@ mod test {
                         registers: HashMap::new(),
                     })
                 }
-            }
+            })
         )
     }
 
@@ -1187,12 +1188,12 @@ mod test {
     fn is_sendable() {
         let timestamp = Utc.timestamp_millis(57533475 + 372850970);
         let kmsgs = vec![
-            kmsg::KMsg{
+            Box::new(kmsg::KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp,
                 message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
+            }),
         ];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -1203,7 +1204,7 @@ mod test {
             let segfault = maybe_segfault.unwrap();
             assert_eq!(
                 segfault,
-                events::Version::V1 {
+                Arc::new(events::Version::V1 {
                     timestamp,
                     event: events::EventType::LinuxKernelTrap {
                         facility: events::LogFacility::Kern,
@@ -1225,7 +1226,7 @@ mod test {
                         vmastart: Some(0x561bc8d8f000),
                         vmasize: Some(0x1000),
                     }
-                }
+                })
             );
         });
 
@@ -1239,19 +1240,19 @@ mod test {
     fn can_parse_suppressed_callback() {
         let timestamp = Utc.timestamp_millis(803835 + 372850970);
 
-        let kmsgs = vec![kmsg::KMsg {
+        let kmsgs = vec![Box::new(kmsg::KMsg {
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
             timestamp,
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
-        }];
+        })];
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
         assert_eq!(
             suppressed_callback.unwrap(),
-            events::Version::V1 {
+            Arc::new(events::Version::V1 {
                 timestamp,
                 event: events::EventType::LinuxSuppressedCallback {
                     facility: events::LogFacility::Kern,
@@ -1259,7 +1260,7 @@ mod test {
                     function_name: "show_signal_msg".to_owned(),
                     count: 9,
                 }
-            }
+            })
         )
     }
 }

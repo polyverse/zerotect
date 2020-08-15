@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use strum_macros::EnumString;
 use typename::TypeName;
+use std::sync::Arc;
+
+pub type Event = Arc<Version>;
 
 /// Event is the complete structure that Polycorder (Polyverse-hosted
 /// zero-day detection service) understands. This structure is also
@@ -264,8 +267,9 @@ impl Display for EventType {
                     "<log_level: {}, log_facility: {}>Fatal Signal: {}({})",
                     level,
                     facility,
-                    &signal,
-                    signal.clone() as u8
+                    signal,
+                    // https://stackoverflow.com/questions/31358826/how-do-i-convert-an-enum-reference-to-a-number
+                    *signal as u8,
                 );
 
                 if let Some(sd) = &stack_dump {
@@ -299,7 +303,7 @@ impl Display for EventType {
 
 /// Linux kmesg (kernel message buffer) Log Facility.
 #[derive(
-    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize, JsonSchema,
 )]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
@@ -341,7 +345,7 @@ pub enum LogFacility {
 
 /// Linux kmesg (kernel message buffer) Log Level.
 #[derive(
-    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Clone, Serialize, JsonSchema,
+    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize, JsonSchema,
 )]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
@@ -517,7 +521,7 @@ impl Display for SegfaultErrorCode {
 ///
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
-#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Clone, Serialize, JsonSchema)]
+#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, JsonSchema)]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
     SIGHUP = 1,
@@ -661,6 +665,7 @@ mod test {
     use schemars::schema_for;
     use serde_json;
     use std::fs;
+    use std::mem;
 
     #[test]
     fn generate_reference_json_schema_file() {
@@ -669,5 +674,12 @@ mod test {
         let schema_json = serde_json::to_string_pretty(&schema).unwrap();
         eprintln!("Writing latest event schema to file: {}", schema_file);
         fs::write(schema_file, schema_json).expect("Unable to re-generate the event schema file.");
+    }
+
+    #[test]
+    fn measure_size_of_event() {
+        // You can decide when to use Version and when to use Event = Arc'd Version
+        assert_eq!(224, mem::size_of::<Version>());
+        assert_eq!(8, mem::size_of::<Event>());
     }
 }

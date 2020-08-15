@@ -8,13 +8,14 @@ pub mod rmesg_reader;
 use crate::events;
 use crate::monitor::dev_kmsg_reader::{DevKMsgReader, DevKMsgReaderConfig};
 use crate::monitor::event_parser::{EventParser, EventParserError};
-use crate::monitor::kmsg::{KMsg, KMsgParserError};
+use crate::monitor::kmsg::{KMsgPtr, KMsgParserError};
 use crate::monitor::rmesg_reader::{RMesgReader, RMesgReaderConfig};
 
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct MonitorConfig {
@@ -41,7 +42,7 @@ impl From<EventParserError> for MonitorError {
     }
 }
 
-pub fn monitor(mc: MonitorConfig, sink: Sender<events::Version>) -> Result<(), MonitorError> {
+pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), MonitorError> {
     if mc.verbosity > 0 {
         eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
     }
@@ -51,7 +52,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Version>) -> Result<(), M
         gobble_old_events: mc.gobble_old_events,
     };
 
-    let kmsg_iterator: Box<dyn Iterator<Item = KMsg> + Send> = match DevKMsgReader::with_file(
+    let kmsg_iterator: Box<dyn Iterator<Item = KMsgPtr> + Send> = match DevKMsgReader::with_file(
         dev_msg_reader_config,
         mc.verbosity,
     ) {

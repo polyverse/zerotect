@@ -42,9 +42,9 @@ fn main() {
         },
     };
 
-    let (monitor_sink, analyzer_source): (Sender<events::Version>, Receiver<events::Version>) =
+    let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
-    let (analyzer_sink, emitter_source): (Sender<events::Version>, Receiver<events::Version>) =
+    let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
 
     let auto_configure_env = zerotect_config.auto_configure;
@@ -147,7 +147,7 @@ fn main() {
 }
 
 
-fn configure_environment(auto_config: params::AutoConfigure, config_event_sink: Sender<events::Version>) {
+fn configure_environment(auto_config: params::AutoConfigure, config_event_sink: Sender<events::Event>) {
     // initialize the system with config
     if let Err(e) = system::modify_environment(&auto_config) {
         eprintln!(

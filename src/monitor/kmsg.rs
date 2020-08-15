@@ -7,6 +7,8 @@ use rmesg;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+pub type KMsgPtr = Box<KMsg>;
+
 #[derive(PartialEq, Debug)]
 pub struct KMsg {
     pub timestamp: DateTime<Utc>,
@@ -81,5 +83,19 @@ impl Display for KMsgParsingError {
                 KMsgParsingError::Generic(s) => s,
             }
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn measure_size_of_event() {
+        // cost to move Kmsg
+        assert_eq!(40, mem::size_of::<KMsg>());
+        // vs ptr
+        assert_eq!(8, mem::size_of::<KMsgPtr>());
     }
 }

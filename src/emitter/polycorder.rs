@@ -25,20 +25,19 @@ const CONTENT_TYPE_JSON: &str = "application/json";
 const USER_AGENT: &str = "zerotect";
 
 pub struct Polycorder {
-    sender: Sender<events::Version>,
+    sender: Sender<events::Event>,
 }
 
 // The structure to send data to Polycorder in...
 #[derive(Serialize)]
 struct Report<'l> {
     node_id: &'l str,
-    events: &'l Vec<events::Version>,
+    events: &'l Vec<events::Event>,
 }
 
 impl emitter::Emitter for Polycorder {
-    fn emit(&mut self, event: &events::Version) {
-        let movable_copy = (*event).clone();
-        if let Err(e) = self.sender.send(movable_copy) {
+    fn emit(&mut self, event: &events::Event) {
+        if let Err(e) = self.sender.send(event.clone()) {
             eprintln!("Polycorder: Error queing event to Polycorder: {}", e);
         }
     }
@@ -59,7 +58,7 @@ impl From<std::io::Error> for PolycorderError {
 }
 
 pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder, PolycorderError> {
-    let (sender, receiver): (Sender<events::Version>, Receiver<events::Version>) = channel();
+    let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
 
     let bearer_token = match HeaderValue::from_str(format!("Bearer {}", config.auth_key).as_str()) {
         Ok(b) => b,
@@ -104,96 +103,101 @@ pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder
     };
 
     thread::Builder::new().name("Emit to Polycorder Thread".to_owned()).spawn(move || {
-        eprintln!("Polycorder: Emitter to Polycorder initialized.");
-
-        let mut events: Vec<events::Version> = vec![];
-
-        loop {
-            let flush = match receiver.recv_timeout(config.flush_timeout) {
-                Ok(event) => {
-                    events.push(event);
-                    if events.len() >= config.flush_event_count {
-                        true
-                    } else {
-                        false
-                    }
-                }
-                Err(e) => match e {
-                    RecvTimeoutError::Timeout => true,
-                    _ => {
-                        eprintln!("Polycorder: Error receiving message from monitor: {}", e);
-                        false
-                    }
-                },
-            };
-
-            if flush && events.len() > 0 {
-                let report = Report {
-                    node_id: config.node_id.as_str(),
-                    events: &events,
-                };
-                let json_serialized_report = match serde_json::to_vec(&report) {
-                    Ok(serialized_report) => serialized_report,
-                    Err(e) => {
-                        eprintln!("Polycorder: error serializing report to JSON. This shouldn't happen. Clearing buffer so future events can continue being sent. Error: {:?}", e);
-                        events.clear();
-                        continue; // keep going on the loop
-                    }
-                };
-
-                let (body, content_encoding) = encode_payload(json_serialized_report, verbosity);
-
-                let response_result = client
-                    .post(POLYCORDER_PUBLISH_ENDPOINT)
-                    .header(CONTENT_ENCODING, content_encoding)
-                    .body(body)
-                    .send();
-                match response_result {
-                    Ok(response) => {
-                        let status = response.status();
-                        // explain common statuses a bit more...
-                        if status.is_success() {
-                            if status == StatusCode::OK {
-                                eprintln!(
-                                    "Polycorder: Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
-                                    events.len(),
-                                    response
-                                );
-                            } else {
-                                eprintln!("Polycorder: The HTTP request was successful, but returned a non-OK status: {}", status)
-                            }
-                            events.clear();
-                        } else if status.is_server_error() {
-                            eprintln!(
-                                "Polycorder: Unable to publish {} events due to a server-side error. Response from Polycorder: {:?}",
-                                events.len(),
-                                response
-                            );
-                        } else if status == StatusCode::UNAUTHORIZED {
-                            eprintln!(
-                                "Polycorder: Unable to publish {} events due to a failure to authenticate using the polycorder authkey {}. Response from Polycorder: {:?}",
-                                events.len(),
-                                &config.auth_key,
-                                response
-                            );
-                        } else {
-                            eprintln!(
-                                "Polycorder: Failed to publish {} events to Polycorder due to an unexpected error. Response from Polycorder: {:?}",
-                                events.len(),
-                                response
-                            );
-                        }
-                    },
-                    Err(e) => eprintln!(
-                        "Polycorder: error making POST request to Polycorder service {}: {}",
-                        POLYCORDER_PUBLISH_ENDPOINT, e
-                    ),
-                }
-            }
-        }
+        publish_to_polycorder_forever(config, receiver, client, verbosity)
     })?;
 
     Ok(Polycorder { sender })
+}
+
+fn publish_to_polycorder_forever(config: params::PolycorderConfig, receiver: Receiver<events::Event>, client: reqwest::blocking::Client, verbosity: u8) {
+    eprintln!("Polycorder: Emitter to Polycorder initialized.");
+
+    let mut events: Vec<events::Event> = vec![];
+
+    loop {
+        let flush = match receiver.recv_timeout(config.flush_timeout) {
+            Ok(event) => {
+                events.push(event);
+                if events.len() >= config.flush_event_count {
+                    true
+                } else {
+                    false
+                }
+            }
+            Err(e) => match e {
+                RecvTimeoutError::Timeout => true,
+                _ => {
+                    eprintln!("Polycorder: Error receiving message from monitor: {}", e);
+                    false
+                }
+            },
+        };
+
+        if flush && events.len() > 0 {
+            let report = Report {
+                node_id: config.node_id.as_str(),
+                events: &events,
+            };
+            let json_serialized_report = match serde_json::to_vec(&report) {
+                Ok(serialized_report) => serialized_report,
+                Err(e) => {
+                    eprintln!("Polycorder: error serializing report to JSON. This shouldn't happen. Clearing buffer so future events can continue being sent. Error: {:?}", e);
+                    events.clear();
+                    continue; // keep going on the loop
+                }
+            };
+
+            let (body, content_encoding) = encode_payload(json_serialized_report, verbosity);
+
+            let response_result = client
+                .post(POLYCORDER_PUBLISH_ENDPOINT)
+                .header(CONTENT_ENCODING, content_encoding)
+                .body(body)
+                .send();
+            match response_result {
+                Ok(response) => {
+                    let status = response.status();
+                    // explain common statuses a bit more...
+                    if status.is_success() {
+                        if status == StatusCode::OK {
+                            eprintln!(
+                                "Polycorder: Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
+                                events.len(),
+                                response
+                            );
+                        } else {
+                            eprintln!("Polycorder: The HTTP request was successful, but returned a non-OK status: {}", status)
+                        }
+                        events.clear();
+                    } else if status.is_server_error() {
+                        eprintln!(
+                            "Polycorder: Unable to publish {} events due to a server-side error. Response from Polycorder: {:?}",
+                            events.len(),
+                            response
+                        );
+                    } else if status == StatusCode::UNAUTHORIZED {
+                        eprintln!(
+                            "Polycorder: Unable to publish {} events due to a failure to authenticate using the polycorder authkey {}. Response from Polycorder: {:?}",
+                            events.len(),
+                            &config.auth_key,
+                            response
+                        );
+                    } else {
+                        eprintln!(
+                            "Polycorder: Failed to publish {} events to Polycorder due to an unexpected error. Response from Polycorder: {:?}",
+                            events.len(),
+                            response
+                        );
+                    }
+                },
+                Err(e) => eprintln!(
+                    "Polycorder: error making POST request to Polycorder service {}: {}",
+                    POLYCORDER_PUBLISH_ENDPOINT, e
+                ),
+            }
+        }
+    }
+
 }
 
 fn encode_payload(raw_payload: Vec<u8>, verbosity: u8) -> (Vec<u8>, &'static str) {

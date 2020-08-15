@@ -13,6 +13,7 @@ use std::ops::Sub;
 use std::str;
 use sys_info::os_type;
 use sysctl::Sysctl;
+use std::sync::Arc;
 
 pub const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
 pub const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
@@ -114,8 +115,8 @@ pub fn ensure_linux() -> Result<(), OperatingSystemValidationError> {
 
 pub fn modify_environment(
     auto_configure: &params::AutoConfigure,
-) -> Result<Vec<events::Version>, SystemCtlError> {
-    let mut env_events = Vec::<events::Version>::new();
+) -> Result<Vec<events::Event>, SystemCtlError> {
+    let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
     if auto_configure.exception_trace {
@@ -141,14 +142,14 @@ pub fn modify_environment(
     if auto_configure.klog_include_timestamp && !rmesg::kernel_log_timestamps_enabled()? {
         rmesg::kernel_log_timestamps_enable(true)?;
 
-        env_events.push(events::Version::V1 {
+        env_events.push(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
             event: events::EventType::ConfigMismatch {
                 key: rmesg::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
                 expected_value: "Y".to_owned(),
                 observed_value: "N".to_owned(),
             },
-        });
+        }));
     }
 
     Ok(env_events)
@@ -157,7 +158,7 @@ pub fn modify_environment(
 fn ensure_systemctl(
     ctlstr: &str,
     valuestr: &str,
-) -> Result<Option<events::Version>, SystemCtlError> {
+) -> Result<Option<events::Event>, SystemCtlError> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr)?;
@@ -168,14 +169,14 @@ fn ensure_systemctl(
         Ok(None)
     } else {
         ctl.set_value_string(valuestr)?;
-        Ok(Some(events::Version::V1 {
+        Ok(Some(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
             event: events::EventType::ConfigMismatch {
                 key: ctlstr.to_owned(),
                 expected_value: valuestr.to_owned(),
                 observed_value: prev_value_str.to_owned(),
             },
-        }))
+        })))
     }
 }
 

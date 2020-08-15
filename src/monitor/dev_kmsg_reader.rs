@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use crate::events;
-use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError};
+use crate::monitor::kmsg::{KMsg, KMsgPtr, KMsgParserError, KMsgParsingError};
 use crate::system;
 use std::boxed::Box;
 use std::io::BufRead;
@@ -108,7 +108,7 @@ impl DevKMsgReader {
     // Message spec: https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/dev-kmsg
     // Parses a kernel log line that looks like this:
     // 6,550,12175490619,-;a.out[4054]: segfault at 7ffd5503d358 ip 00007ffd5503d358 sp 00007ffd5503d258 error 15
-    fn parse_kmsg(&mut self) -> Result<KMsg, KMsgParsingError> {
+    fn parse_kmsg(&mut self) -> Result<KMsgPtr, KMsgParsingError> {
         let line_str: String = self.next_kmsg_record()?;
 
         if line_str.trim() == "" {
@@ -203,12 +203,12 @@ impl DevKMsgReader {
             }
         }
 
-        Ok(KMsg {
+        Ok(Box::new(KMsg {
             facility,
             level,
             timestamp,
             message: message.to_owned(),
-        })
+        }))
     }
 
     fn next_kmsg_record(&mut self) -> Result<String, KMsgParsingError> {
@@ -266,13 +266,13 @@ impl DevKMsgReader {
 
 impl Iterator for DevKMsgReader {
     // we will be counting with usize
-    type Item = KMsg;
+    type Item = KMsgPtr;
 
     // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.parse_kmsg() {
-                Ok(km) => return Some(km),
+                Ok(kmptr) => return Some(kmptr),
                 Err(e) => match e {
                     KMsgParsingError::Completed => {
                         eprintln!("Iterator completed. No more messages expected");
@@ -331,36 +331,36 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Notice,
             timestamp: iter.system_start_time,
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
-        });
+        }));
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Info,
             timestamp: iter.system_start_time,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
-        });
+        }));
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
                 ),
-            }
+            })
         );
 
         let maybe_entry = iter.next();
@@ -368,12 +368,12 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-            }
+            })
         );
     }
 
@@ -408,12 +408,12 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: event_timestamp,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-            }
+            })
         );
     }
 
@@ -439,24 +439,24 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Info,
             timestamp: iter.system_start_time,
             message: String::from("Command, line: BOOT_IMAGE=/boot/kernel console=ttyS0 console=ttyS1 page_poison=1 vsyscall=emulate panic=1 root=/dev/sr0 text"),
-        });
+        }));
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-            }
+            })
         );
     }
 
@@ -484,19 +484,19 @@ mod test {
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
-        assert_eq!(entry, KMsg{
+        assert_eq!(entry, Box::new(KMsg{
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Notice,
             timestamp: iter.system_start_time,
             message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
-        });
+        }));
 
         let maybe_entry = iter.next();
         assert!(maybe_entry.is_some());
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
@@ -505,7 +505,7 @@ mod test {
  LINE2=foobar
  LINE 3 = foobar ; with semicolon"
                 ),
-            }
+            })
         );
 
         let maybe_entry = iter.next();
@@ -513,14 +513,14 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from(
                     "x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'"
                 ),
-            }
+            })
         );
 
         let maybe_entry = iter.next();
@@ -528,12 +528,12 @@ mod test {
         let entry = maybe_entry.unwrap();
         assert_eq!(
             entry,
-            KMsg {
+            Box::new(KMsg {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Info,
                 timestamp: iter.system_start_time,
                 message: String::from("x86/fpu: Supporting XSAVE; feature 0x002: 'SSE registers'"),
-            }
+            })
         );
     }
 
@@ -560,12 +560,12 @@ mod test {
             let maybe_entry = iter.next();
             assert!(maybe_entry.is_some());
             let entry = maybe_entry.unwrap();
-            assert_eq!(entry, KMsg{
+            assert_eq!(entry, Box::new(KMsg{
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Notice,
                 timestamp: iter.system_start_time,
                 message: String::from("Linux version 4.14.131-linuxkit (root@6d384074ad24) (gcc version 8.3.0 (Alpine 8.3.0)) #1 SMP Fri Jul 19 12:31:17 UTC 2019"),
-            });
+            }));
         });
 
         assert!(

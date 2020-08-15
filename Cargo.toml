@@ -8,8 +8,8 @@ edition = "2018"
 log = "0.4.11"
 sys-info = "0.7.0"
 sysctl = "0.4.0"
-strum = "0.18.0"
-strum_macros = "0.18.0"
+strum = "0.19.2"
+strum_macros = "0.19.2"
 regex = "1"
 typename = "0.1.2"
 enum-display-derive = "0.1.0"
@@ -18,7 +18,7 @@ lazy_static = "1.4.0"
 num-traits = "0.2"
 num-derive = "0.3.1"
 timeout-iterator = "0.5.0"
-serde = { version = "1.0.114", features = ["derive"] }
+serde = { version = "1.0.115", features = ["derive", "rc"] }
 serde_json = { version = "1.0.57", features = ["arbitrary_precision"]}
 reqwest = { version = "0.10.7", features = ["json", "blocking", "gzip", "brotli"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -37,7 +37,7 @@ libc = "0.2.74"
 file-rotate-record-boundary = "0.3.0"
 
 [dependencies.clap]
-version = "2.33.1"
+version = "2.33.3"
 default-features = false
 
 # Cherry-pick the features you'd like to use

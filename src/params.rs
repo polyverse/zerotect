@@ -507,7 +507,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                 PRINT_FATAL_SIGNALS_CTLNAME,
             )?,
             klog_include_timestamp: auto_configure_flag(
-                auto_conf_values.clone(),
+                auto_conf_values,
                 KLOG_INCLUDE_TIMESTAMP,
             )?,
         },

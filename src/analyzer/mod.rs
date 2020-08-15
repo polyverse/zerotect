@@ -26,7 +26,7 @@ impl Display for AnalyzerError {
     }
 }
 
-pub fn analyze(ac: AnalyzerConfig, source: Receiver<events::Version>, sink: Sender<events::Version>) -> Result<(), AnalyzerError> {
+pub fn analyze(ac: AnalyzerConfig, source: Receiver<events::Event>, sink: Sender<events::Event>) -> Result<(), AnalyzerError> {
     eprintln!("Analyzer: Initializing...");
 
     loop {

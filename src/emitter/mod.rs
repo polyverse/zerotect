@@ -15,7 +15,7 @@ mod syslogger;
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
-    fn emit(&mut self, event: &events::Version);
+    fn emit(&mut self, event: &events::Event);
 }
 
 pub struct EmitterConfig {
@@ -52,7 +52,7 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
-pub fn emit(ec: EmitterConfig, source: Receiver<events::Version>) -> Result<(), EmitterError> {
+pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];
