@@ -79,8 +79,6 @@ fn main() {
         }
     };
 
-
-
     // split these up before a move
     let everbosity = zerotect_config.verbosity;
     let console = zerotect_config.console;
@@ -124,18 +122,21 @@ fn main() {
             .join()
             .expect("Unable to join on the analyzer thread");
     }
-
 }
 
-fn optional_analyzer(zc: &params::ZerotectParams) ->
-    (Sender<events::Event>, Receiver<events::Event>, Option<thread::JoinHandle<()>>) {
-
+fn optional_analyzer(
+    zc: &params::ZerotectParams,
+) -> (
+    Sender<events::Event>,
+    Receiver<events::Event>,
+    Option<thread::JoinHandle<()>>,
+) {
     let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
 
     if !zc.analytics.enabled {
         // if analytics is disabled, short-circuit the first channel between monitor and emitter
-        return (monitor_sink, analyzer_source, None)
+        return (monitor_sink, analyzer_source, None);
     }
 
     let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
