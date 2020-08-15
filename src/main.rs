@@ -7,13 +7,13 @@ extern crate lazy_static;
 #[macro_use]
 extern crate rust_cef_derive;
 
+mod analyzer;
 mod emitter;
 mod events;
 mod formatter;
 mod monitor;
 mod params;
 mod system;
-mod analyzer;
 
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -146,8 +146,10 @@ fn main() {
         .expect("Unable to join on the emitter thread");
 }
 
-
-fn configure_environment(auto_config: params::AutoConfigure, config_event_sink: Sender<events::Event>) {
+fn configure_environment(
+    auto_config: params::AutoConfigure,
+    config_event_sink: Sender<events::Event>,
+) {
     // initialize the system with config
     if let Err(e) = system::modify_environment(&auto_config) {
         eprintln!(
@@ -162,7 +164,10 @@ fn configure_environment(auto_config: params::AutoConfigure, config_event_sink: 
         // reinforce the system with config
         match system::modify_environment(&auto_config) {
             Err(e) => {
-                eprintln!("Error modifying the system settings to enable monitoring (as commanded): {}", e);
+                eprintln!(
+                    "Error modifying the system settings to enable monitoring (as commanded): {}",
+                    e
+                );
                 process::exit(1);
             }
             Ok(events) => {

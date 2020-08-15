@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use crate::events;
-use crate::monitor::kmsg::{KMsg, KMsgPtr, KMsgParserError, KMsgParsingError};
+use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError, KMsgPtr};
 use crate::system;
 use timeout_iterator::TimeoutIterator;
 

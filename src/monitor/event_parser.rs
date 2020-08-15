@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 use timeout_iterator::TimeoutIterator;
 

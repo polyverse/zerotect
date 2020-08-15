@@ -6,9 +6,9 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::sync::Arc;
 use strum_macros::EnumString;
 use typename::TypeName;
-use std::sync::Arc;
 
 pub type Event = Arc<Version>;
 
@@ -303,7 +303,16 @@ impl Display for EventType {
 
 /// Linux kmesg (kernel message buffer) Log Facility.
 #[derive(
-    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize, JsonSchema,
+    EnumString,
+    Debug,
+    PartialEq,
+    TypeName,
+    Display,
+    FromPrimitive,
+    Copy,
+    Clone,
+    Serialize,
+    JsonSchema,
 )]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
@@ -345,7 +354,16 @@ pub enum LogFacility {
 
 /// Linux kmesg (kernel message buffer) Log Level.
 #[derive(
-    EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize, JsonSchema,
+    EnumString,
+    Debug,
+    PartialEq,
+    TypeName,
+    Display,
+    FromPrimitive,
+    Copy,
+    Clone,
+    Serialize,
+    JsonSchema,
 )]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
@@ -521,7 +539,9 @@ impl Display for SegfaultErrorCode {
 ///
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
-#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, JsonSchema)]
+#[derive(
+    Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, JsonSchema,
+)]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
     SIGHUP = 1,

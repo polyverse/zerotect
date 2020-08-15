@@ -8,14 +8,14 @@ pub mod rmesg_reader;
 use crate::events;
 use crate::monitor::dev_kmsg_reader::{DevKMsgReader, DevKMsgReaderConfig};
 use crate::monitor::event_parser::{EventParser, EventParserError};
-use crate::monitor::kmsg::{KMsgPtr, KMsgParserError};
+use crate::monitor::kmsg::{KMsgParserError, KMsgPtr};
 use crate::monitor::rmesg_reader::{RMesgReader, RMesgReaderConfig};
 
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct MonitorConfig {

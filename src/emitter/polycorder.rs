@@ -102,14 +102,19 @@ pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder
         return Err(PolycorderError(format!("Polycorder: Aborting. Unable to parse built-in Polycorder URL into a reqwest library url: {}", e)));
     };
 
-    thread::Builder::new().name("Emit to Polycorder Thread".to_owned()).spawn(move || {
-        publish_to_polycorder_forever(config, receiver, client, verbosity)
-    })?;
+    thread::Builder::new()
+        .name("Emit to Polycorder Thread".to_owned())
+        .spawn(move || publish_to_polycorder_forever(config, receiver, client, verbosity))?;
 
     Ok(Polycorder { sender })
 }
 
-fn publish_to_polycorder_forever(config: params::PolycorderConfig, receiver: Receiver<events::Event>, client: reqwest::blocking::Client, verbosity: u8) {
+fn publish_to_polycorder_forever(
+    config: params::PolycorderConfig,
+    receiver: Receiver<events::Event>,
+    client: reqwest::blocking::Client,
+    verbosity: u8,
+) {
     eprintln!("Polycorder: Emitter to Polycorder initialized.");
 
     let mut events: Vec<events::Event> = vec![];
@@ -189,7 +194,7 @@ fn publish_to_polycorder_forever(config: params::PolycorderConfig, receiver: Rec
                             response
                         );
                     }
-                },
+                }
                 Err(e) => eprintln!(
                     "Polycorder: error making POST request to Polycorder service {}: {}",
                     POLYCORDER_PUBLISH_ENDPOINT, e
@@ -197,7 +202,6 @@ fn publish_to_polycorder_forever(config: params::PolycorderConfig, receiver: Rec
             }
         }
     }
-
 }
 
 fn encode_payload(raw_payload: Vec<u8>, verbosity: u8) -> (Vec<u8>, &'static str) {

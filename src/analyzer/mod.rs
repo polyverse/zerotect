@@ -6,7 +6,7 @@ use crate::params;
 use std::convert::From;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Receiver, Sender};
 
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
@@ -26,7 +26,11 @@ impl Display for AnalyzerError {
     }
 }
 
-pub fn analyze(ac: AnalyzerConfig, source: Receiver<events::Event>, sink: Sender<events::Event>) -> Result<(), AnalyzerError> {
+pub fn analyze(
+    ac: AnalyzerConfig,
+    source: Receiver<events::Event>,
+    sink: Sender<events::Event>,
+) -> Result<(), AnalyzerError> {
     eprintln!("Analyzer: Initializing...");
 
     loop {

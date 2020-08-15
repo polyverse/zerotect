@@ -11,9 +11,9 @@ use std::io;
 use std::num;
 use std::ops::Sub;
 use std::str;
+use std::sync::Arc;
 use sys_info::os_type;
 use sysctl::Sysctl;
-use std::sync::Arc;
 
 pub const PRINT_FATAL_SIGNALS_CTLNAME: &str = "kernel.print-fatal-signals";
 pub const EXCEPTION_TRACE_CTLNAME: &str = "debug.exception-trace";
@@ -155,10 +155,7 @@ pub fn modify_environment(
     Ok(env_events)
 }
 
-fn ensure_systemctl(
-    ctlstr: &str,
-    valuestr: &str,
-) -> Result<Option<events::Event>, SystemCtlError> {
+fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event>, SystemCtlError> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr)?;
