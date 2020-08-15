@@ -58,6 +58,9 @@ const LOGFILE_FORMAT_FLAG: &str = "log-file-format";
 const LOGFILE_ROTATION_COUNT_FLAG: &str = "log-file-rotation-count";
 const LOGFILE_ROTATION_SIZE_FLAG: &str = "log-file-rotation-max-size";
 
+// Analytics
+const ANALYTICS_ENABLED_FLAG: &str = "analytics-enabled";
+
 // Defaults
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
 const DEFAULT_POLYCORDER_FLUSH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -146,6 +149,11 @@ pub struct AutoConfigure {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AnalyticsConfig {
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MonitorConfig {
     pub gobble_old_events: bool,
 }
@@ -157,14 +165,17 @@ pub struct ZerotectParams {
     // auto-configure system
     pub auto_configure: AutoConfigure,
 
+    // analytics configuration
+    pub analytics: AnalyticsConfig,
+
     // only one monitor config
-    pub monitor_config: MonitorConfig,
+    pub monitor: MonitorConfig,
 
     // supported emitters
-    pub console_config: Option<ConsoleConfig>,
-    pub polycorder_config: Option<PolycorderConfig>,
-    pub syslog_config: Option<SyslogConfig>,
-    pub logfile_config: Option<LogFileConfig>,
+    pub console: Option<ConsoleConfig>,
+    pub polycorder: Option<PolycorderConfig>,
+    pub syslog: Option<SyslogConfig>,
+    pub logfile: Option<LogFileConfig>,
 }
 
 // A proxy-structure to deserialize into
@@ -182,11 +193,12 @@ pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
-    pub monitor_config: Option<MonitorConfigOptions>,
-    pub console_config: Option<ConsoleConfigOptions>,
-    pub polycorder_config: Option<PolycorderConfigOptions>,
-    pub syslog_config: Option<SyslogConfigOptions>,
-    pub logfile_config: Option<LogFileConfigOptions>,
+    pub analytics: Option<AnalyticsConfigOptions>,
+    pub monitor: Option<MonitorConfigOptions>,
+    pub console: Option<ConsoleConfigOptions>,
+    pub polycorder: Option<PolycorderConfigOptions>,
+    pub syslog: Option<SyslogConfigOptions>,
+    pub logfile: Option<LogFileConfigOptions>,
 }
 
 // A proxy-structure to deserialize into
@@ -200,7 +212,12 @@ pub struct AutoConfigureOptions {
     pub klog_include_timestamp: Option<bool>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Deserialize)]
+pub struct AnalyticsConfigOptions {
+    pub enabled: bool,
+}
+
+#[derive(Deserialize)]
 pub struct MonitorConfigOptions {
     pub gobble_old_events: Option<bool>,
 }
@@ -230,7 +247,7 @@ pub struct ConsoleConfigOptions {
     pub format: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Deserialize, PartialEq)]
 pub struct SyslogConfigOptions {
     pub format: Option<String>,
     pub destination: Option<String>,
@@ -240,7 +257,7 @@ pub struct SyslogConfigOptions {
     pub hostname: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Deserialize, PartialEq)]
 pub struct LogFileConfigOptions {
     pub format: Option<String>,
     pub filepath: Option<String>,
@@ -257,6 +274,7 @@ pub enum InnerError {
     StrumParseError(strum::ParseError),
     TomlDeserializationError(toml::de::Error),
     ParseIntError(std::num::ParseIntError),
+    ParseBoolError(std::str::ParseBoolError),
     TryFromIntError(std::num::TryFromIntError),
 }
 
@@ -268,7 +286,33 @@ pub struct ParsingError {
 impl Error for ParsingError {}
 impl Display for ParsingError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "ParsingError:: {}", self.message)
+        match &self.inner_error {
+            InnerError::None => write!(f, "ParsingError:: {}", self.message),
+            InnerError::IoError(e) => write!(f, "{} (ParsingError::IoError::{})", self.message, e),
+            InnerError::ClapError(e) => {
+                write!(f, "{} (ParsingError::ClapError::{})", self.message, e)
+            }
+            InnerError::Utf8Error(e) => {
+                write!(f, "{} (ParsingError::Utf8Error::{})", self.message, e)
+            }
+            InnerError::StrumParseError(e) => {
+                write!(f, "{} (ParsingError::StrumParseError::{})", self.message, e)
+            }
+            InnerError::TomlDeserializationError(e) => write!(
+                f,
+                "{} (ParsingError::TomlDeserializationError::{})",
+                self.message, e
+            ),
+            InnerError::ParseIntError(e) => {
+                write!(f, "{} (ParsingError::ParseIntError::{})", self.message, e)
+            }
+            InnerError::ParseBoolError(e) => {
+                write!(f, "{} (ParsingError::ParseBoolError::{})", self.message, e)
+            }
+            InnerError::TryFromIntError(e) => {
+                write!(f, "{} (ParsingError::TryFromIntError::{})", self.message, e)
+            }
+        }
     }
 }
 impl From<io::Error> for ParsingError {
@@ -482,6 +526,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .requires_all(&[LOGFILE_PATH_FLAG, LOGFILE_ROTATION_COUNT_FLAG])
                             .help(format!("Setting this enables file rotation. A new file is begin in the rotation sequence when the current file exceeds the size (in bytes) specified by this argument.").as_str()))
 
+                        // Built-in analytics
+                        .arg(Arg::with_name(ANALYTICS_ENABLED_FLAG)
+                            .long(ANALYTICS_ENABLED_FLAG)
+                            .possible_values(&["true", "false"])
+                            .case_insensitive(true)
+                            .default_value("true")
+                            .help(format!("Enable or disable built-in analytics (looks for localized indicators of live attacks)").as_str()))
+
                         // verbose internal logging?
                         .arg(Arg::with_name("verbose")
                             .short("v")
@@ -517,7 +569,25 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
 
-    let monitor_config = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
+    let analytics = match matches.value_of(ANALYTICS_ENABLED_FLAG) {
+        Some(formatstr) => AnalyticsConfig {
+            enabled: match formatstr.trim().to_ascii_lowercase().as_str().parse() {
+                Ok(b) => b,
+                Err(e) => {
+                    return Err(ParsingError {
+                        inner_error: InnerError::ParseBoolError(e),
+                        message: format!(
+                            "Value of {} set as {} could not be parsed into a boolean.",
+                            ANALYTICS_ENABLED_FLAG, formatstr
+                        ),
+                    })
+                }
+            },
+        },
+        None => AnalyticsConfig { enabled: true },
+    };
+
+    let monitor = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
         0 => MonitorConfig {
             gobble_old_events: false,
         },
@@ -526,7 +596,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         },
     };
 
-    let console_config = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
+    let console = match matches.value_of(CONSOLE_OUTPUT_FLAG) {
         Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
             Ok(format) => Some(ConsoleConfig{format}),
             Err(e) => {
@@ -538,7 +608,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     // First we need a polycorder auth key - either from CLI and then the file as
     // the secondary source.
-    let polycorder_config = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
+    let polycorder = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
         None => None,
         Some(key) => {
             // Only construct Polycorder config if an auth key was found,
@@ -569,7 +639,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         }
     };
 
-    let syslog_config = match matches.value_of(SYSLOG_OUTPUT_FLAG) {
+    let syslog = match matches.value_of(SYSLOG_OUTPUT_FLAG) {
         Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
             Ok(format) => match matches.value_of(SYSLOG_DESTINATION_FLAG) {
                 // let's see if syslog destination is set
@@ -629,7 +699,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         None => None,
     };
 
-    let logfile_config = match matches.value_of(LOGFILE_FORMAT_FLAG) {
+    let logfile = match matches.value_of(LOGFILE_FORMAT_FLAG) {
         Some(formatstr) => match OutputFormat::from_str(formatstr.trim().to_ascii_lowercase().as_str()) {
             Ok(format) => match matches.value_of(LOGFILE_PATH_FLAG) {
                 Some(path) => Some(LogFileConfig{
@@ -656,11 +726,12 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
     Ok(ZerotectParams {
         verbosity,
         auto_configure,
-        monitor_config,
-        console_config,
-        polycorder_config,
-        syslog_config,
-        logfile_config,
+        analytics,
+        monitor,
+        console,
+        polycorder,
+        syslog,
+        logfile,
     })
 }
 
@@ -685,7 +756,11 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 klog_include_timestamp: false,
             },
         },
-        monitor_config: match zerotect_param_options.monitor_config {
+        analytics: match zerotect_param_options.analytics {
+            Some(aco) => AnalyticsConfig{enabled: aco.enabled},
+            None => AnalyticsConfig{enabled: true},
+        },
+        monitor: match zerotect_param_options.monitor {
             Some(mc) => MonitorConfig {
                 gobble_old_events: mc.gobble_old_events.unwrap_or(false),
             },
@@ -693,7 +768,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 gobble_old_events: false,
             },
         },
-        console_config: match zerotect_param_options.console_config {
+        console: match zerotect_param_options.console {
             Some(cco) => match cco.format {
                 Some(formatstr) => Some(ConsoleConfig {
                     format: OutputFormat::from_str(formatstr.to_ascii_lowercase().as_str())?,
@@ -702,7 +777,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
             },
             None => None,
         },
-        polycorder_config: match zerotect_param_options.polycorder_config {
+        polycorder: match zerotect_param_options.polycorder {
             None => None,
             Some(pco) => match pco.auth_key {
                 None => return Err(ParsingError{message: "In config file, the polycorder configuration key was specified without an authkey. Please remove polycorder configuration entirely, or provide a valid authkey to publish events with.".to_owned(), inner_error: InnerError::None}),
@@ -718,7 +793,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 }),
             },
         },
-        syslog_config: match zerotect_param_options.syslog_config {
+        syslog: match zerotect_param_options.syslog {
             None => None,
             Some(sco) => Some(SyslogConfig{
                 format: match sco.format {
@@ -735,7 +810,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 path: sco.path,
             }),
         },
-        logfile_config: match zerotect_param_options.logfile_config {
+        logfile: match zerotect_param_options.logfile {
             None => None,
             Some(lfc) => Some(LogFileConfig{
                 format: match lfc.format {
@@ -829,30 +904,33 @@ mod test {
 
         assert_eq!(true, config.auto_configure.exception_trace);
         assert_eq!(true, config.auto_configure.fatal_signals);
-        assert_eq!(true, config.console_config.is_some());
-        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(true, config.console.is_some());
+        assert_eq!(true, config.polycorder.is_some());
         assert_eq!(1, config.verbosity);
 
-        let cc = config.console_config.unwrap();
+        let cc = config.console.unwrap();
         assert_eq!(OutputFormat::Text, cc.format);
 
-        let pc = config.polycorder_config.unwrap();
+        let pc = config.polycorder.unwrap();
         assert_eq!("authkey", pc.auth_key);
         assert_eq!("nodeid34235", pc.node_id);
         assert_eq!(Duration::from_secs(89), pc.flush_timeout);
         assert_eq!(53, pc.flush_event_count);
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Udp, sc.destination);
         assert_eq!(Some("testhost".to_owned()), sc.hostname);
         assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:2".to_owned()), sc.local);
 
-        let lfc = config.logfile_config.unwrap();
+        let lfc = config.logfile.unwrap();
         assert_eq!("/tmp/zerotect/zerotect.log", lfc.filepath);
         assert_eq!(OutputFormat::CEF, lfc.format);
         assert_eq!(Some(1), lfc.rotation_file_count);
         assert_eq!(Some(10), lfc.rotation_file_max_size);
+
+        // analytics should be enabled by default
+        assert_eq!(true, config.analytics.enabled);
     }
 
     #[test]
@@ -913,10 +991,7 @@ mod test {
                 "Error parsing arguments for text: {}",
                 pc.err().unwrap()
             );
-            assert_eq!(
-                OutputFormat::Text,
-                pc.unwrap().console_config.unwrap().format
-            )
+            assert_eq!(OutputFormat::Text, pc.unwrap().console.unwrap().format)
         }
 
         {
@@ -932,10 +1007,7 @@ mod test {
                 "Error parsing arguments for json: {}",
                 pc.err().unwrap()
             );
-            assert_eq!(
-                OutputFormat::JSON,
-                pc.unwrap().console_config.unwrap().format
-            );
+            assert_eq!(OutputFormat::JSON, pc.unwrap().console.unwrap().format);
         }
     }
 
@@ -967,9 +1039,9 @@ mod test {
         assert!(maybe_parsed.is_ok());
 
         let config = maybe_parsed.unwrap();
-        assert!(config.polycorder_config.is_some());
+        assert!(config.polycorder.is_some());
 
-        let pc = config.polycorder_config.unwrap();
+        let pc = config.polycorder.unwrap();
         assert_eq!("authkey97097", pc.auth_key);
         assert_eq!(UNIDENTIFIED_NODE, pc.node_id);
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
@@ -1023,7 +1095,7 @@ mod test {
 
         let config = parse_args(Some(args)).unwrap();
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Tcp, sc.destination);
         assert_eq!(Some("testhost".to_owned()), sc.hostname);
         assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
@@ -1044,7 +1116,7 @@ mod test {
 
         let config = parse_args(Some(args)).unwrap();
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Unix, sc.destination);
         assert_eq!(Some("/some/socket/path".to_owned()), sc.path);
         assert_eq!(None, sc.hostname);
@@ -1063,7 +1135,7 @@ mod test {
 
         let config = parse_args(Some(args)).unwrap();
 
-        let lfc = config.logfile_config.unwrap();
+        let lfc = config.logfile.unwrap();
         assert_eq!(OutputFormat::Text, lfc.format);
         assert_eq!("/tmp/zerotect/zerotect.log", lfc.filepath);
         assert_eq!(None, lfc.rotation_file_count);
@@ -1116,12 +1188,25 @@ mod test {
 
         let config = parse_args(Some(args)).unwrap();
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Default, sc.destination);
         assert_eq!(None, sc.path);
         assert_eq!(None, sc.server);
         assert_eq!(None, sc.hostname);
         assert_eq!(None, sc.local);
+    }
+
+    #[test]
+    fn commandline_args_analytics_disable() {
+        let args: Vec<OsString> = vec![
+            OsString::from("burner program name. First param ignored."),
+            OsString::from("--analytics-enabled"),
+            OsString::from("false"),
+        ];
+
+        let config = parse_args(Some(args)).unwrap();
+
+        assert_eq!(false, config.analytics.enabled);
     }
 
     #[test]
@@ -1133,19 +1218,19 @@ mod test {
         exception_trace = true
         fatal_signals = true
 
-        [console_config]
+        [console]
         format = 'Text'
 
-        [polycorder_config]
+        [polycorder]
         auth_key = 'AuthKeyFromAccountManager3700793'
         node_id = 'NodeDiscriminator5462654'
         flush_event_count = 23
 
-        [polycorder_config.flush_timeout]
+        [polycorder.flush_timeout]
         secs = 39
         nanos = 0
 
-        [syslog_config]
+        [syslog]
         format = 'CeF'
         destination = 'TCP'
         path = '/dev/log'
@@ -1153,7 +1238,7 @@ mod test {
         local = '127.0.0.1:342'
         hostname = 'ohi;afs'
 
-        [logfile_config]
+        [logfile]
         format = 'tExT'
         filepath = '/tmp/test/path'
         rotation_file_count = 3
@@ -1167,22 +1252,26 @@ mod test {
 
         let config = parse_config_file(&toml_file).unwrap();
 
-        assert_eq!(true, config.auto_configure.exception_trace);
-        assert_eq!(true, config.auto_configure.fatal_signals);
-        assert_eq!(true, config.console_config.is_some());
-        assert_eq!(true, config.polycorder_config.is_some());
         assert_eq!(40, config.verbosity);
 
-        let cc = config.console_config.unwrap();
+        //enabled by default always
+        assert!(config.analytics.enabled);
+
+        assert_eq!(true, config.auto_configure.exception_trace);
+        assert_eq!(true, config.auto_configure.fatal_signals);
+
+        assert_eq!(true, config.console.is_some());
+        let cc = config.console.unwrap();
         assert_eq!(OutputFormat::Text, cc.format);
 
-        let pc = config.polycorder_config.unwrap();
+        assert_eq!(true, config.polycorder.is_some());
+        let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromAccountManager3700793", pc.auth_key);
         assert_eq!("NodeDiscriminator5462654", pc.node_id);
         assert_eq!(Duration::from_secs(39), pc.flush_timeout);
         assert_eq!(23, pc.flush_event_count);
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(OutputFormat::CEF, sc.format);
         assert_eq!(SyslogDestination::Tcp, sc.destination);
         assert_eq!(Some("/dev/log".to_owned()), sc.path);
@@ -1190,7 +1279,7 @@ mod test {
         assert_eq!(Some("127.0.0.1:342".to_owned()), sc.local);
         assert_eq!(Some("ohi;afs".to_owned()), sc.hostname);
 
-        let lfc = config.logfile_config.unwrap();
+        let lfc = config.logfile.unwrap();
         assert_eq!(OutputFormat::Text, lfc.format);
         assert_eq!("/tmp/test/path".to_owned(), lfc.filepath);
         assert_eq!(Some(3), lfc.rotation_file_count);
@@ -1238,19 +1327,22 @@ mod test {
         exception_trace = true
         fatal_signals = true
 
-        [console_config]
+        [analytics]
+        enabled = false
+
+        [console]
         format = 'Text'
 
-        [polycorder_config]
+        [polycorder]
         auth_key = 'AuthKeyFromPolyverseAccountManager97439'
         node_id = 'UsefulNodeIdentifierToGroupEvents903439'
         flush_event_count = 10
 
-        [polycorder_config.flush_timeout]
+        [polycorder.flush_timeout]
         secs = 10
         nanos = 0
 
-        [syslog_config]
+        [syslog]
         format = 'jsoN'
         destination = 'uDp'
         path = '/dev/log/something/else'
@@ -1258,7 +1350,7 @@ mod test {
         local = '127.0.0.1:468'
         hostname = '.kndv;afs'
 
-        [logfile_config]
+        [logfile]
         format = 'JSon'
         filepath = '/tmp/other/path'
         rotation_file_count = 92
@@ -1291,20 +1383,20 @@ mod test {
 
         assert_eq!(true, config.auto_configure.exception_trace);
         assert_eq!(true, config.auto_configure.fatal_signals);
-        assert_eq!(true, config.console_config.is_some());
-        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(true, config.console.is_some());
+        assert_eq!(true, config.polycorder.is_some());
         assert_eq!(7, config.verbosity);
 
-        let cc = config.console_config.unwrap();
+        let cc = config.console.unwrap();
         assert_eq!(OutputFormat::Text, cc.format);
 
-        let pc = config.polycorder_config.unwrap();
+        let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromPolyverseAccountManager97439", pc.auth_key);
         assert_eq!("UsefulNodeIdentifierToGroupEvents903439", pc.node_id);
         assert_eq!(Duration::from_secs(10), pc.flush_timeout);
         assert_eq!(10, pc.flush_event_count);
 
-        let sc = config.syslog_config.unwrap();
+        let sc = config.syslog.unwrap();
         assert_eq!(OutputFormat::JSON, sc.format);
         assert_eq!(SyslogDestination::Udp, sc.destination);
         assert_eq!(Some("/dev/log/something/else".to_owned()), sc.path);
@@ -1312,7 +1404,7 @@ mod test {
         assert_eq!(Some("127.0.0.1:468".to_owned()), sc.local);
         assert_eq!(Some(".kndv;afs".to_owned()), sc.hostname);
 
-        let lfc = config.logfile_config.unwrap();
+        let lfc = config.logfile.unwrap();
         assert_eq!(OutputFormat::JSON, lfc.format);
         assert_eq!("/tmp/other/path".to_owned(), lfc.filepath);
         assert_eq!(Some(92), lfc.rotation_file_count);
@@ -1376,8 +1468,8 @@ mod test {
 
         assert_eq!(false, config.auto_configure.exception_trace);
         assert_eq!(false, config.auto_configure.fatal_signals);
-        assert_eq!(false, config.console_config.is_some());
-        assert_eq!(false, config.polycorder_config.is_some());
+        assert_eq!(false, config.console.is_some());
+        assert_eq!(false, config.polycorder.is_some());
         assert_eq!(0, config.verbosity);
     }
 
@@ -1386,10 +1478,10 @@ mod test {
         let tomlcontents = r#"
         verbosity = 5
 
-        [polycorder_config]
+        [polycorder]
         auth_key = "AuthKeyFromAccountManager5323552"
 
-        [polycorder_config.flush_timeout]
+        [polycorder.flush_timeout]
         secs = 10
         nanos = 0
         "#;
@@ -1419,11 +1511,11 @@ mod test {
 
         assert_eq!(false, config.auto_configure.exception_trace);
         assert_eq!(false, config.auto_configure.fatal_signals);
-        assert_eq!(false, config.console_config.is_some());
-        assert_eq!(true, config.polycorder_config.is_some());
+        assert_eq!(false, config.console.is_some());
+        assert_eq!(true, config.polycorder.is_some());
         assert_eq!(5, config.verbosity);
 
-        let pc = config.polycorder_config.unwrap();
+        let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromAccountManager5323552", pc.auth_key);
         assert_eq!(UNIDENTIFIED_NODE, pc.node_id);
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
@@ -1433,7 +1525,7 @@ mod test {
     #[test]
     fn toml_parse_parse_case_insensitive_enums() {
         let tomlcontents = r#"
-        [console_config]
+        [console]
         format = 'tExT'
 
         "#;
@@ -1461,8 +1553,8 @@ mod test {
         }
         let config = maybe_config.unwrap();
 
-        assert!(config.console_config.is_some());
-        assert_eq!(OutputFormat::Text, config.console_config.unwrap().format);
+        assert!(config.console.is_some());
+        assert_eq!(OutputFormat::Text, config.console.unwrap().format);
     }
 
     #[test]
@@ -1474,14 +1566,14 @@ mod test {
         exception_trace = true
         fatal_signals = true
 
-        [console_config]
+        [console]
         format = 'Text'
 
-        [polycorder_config]
+        [polycorder]
         node_id = 'UsefulNodeIdentifierToGroupEvents'
         flush_event_count = 10
 
-        [polycorder_config.flush_timeout]
+        [polycorder.flush_timeout]
         secs = 10
         nanos = 0
         "#;
@@ -1509,14 +1601,14 @@ mod test {
         exception_trace = true
         fatal_signals = true
 
-        [console_config]
+        [console]
         format = 'tExt'
 
-        [polycorder_config]
+        [polycorder]
         node_id = "NodeDiscriminator"
         flush_event_count = 10
 
-        [polycorder_config.flush_timeout]
+        [polycorder.flush_timeout]
         secs = 10
         nanos = 0
         "#;
@@ -1545,19 +1637,22 @@ mod test {
                 fatal_signals: true,
                 klog_include_timestamp: true,
             },
-            monitor_config: MonitorConfig {
+            analytics: AnalyticsConfig{
+                enabled: rand::thread_rng().gen_bool(0.5)
+            },
+            monitor: MonitorConfig {
                 gobble_old_events: false,
             },
-            console_config: Some(ConsoleConfig {
+            console: Some(ConsoleConfig {
                 format: OutputFormat::Text,
             }),
-            polycorder_config: Some(PolycorderConfig {
+            polycorder: Some(PolycorderConfig {
                 auth_key: format!("AuthKeyFromPolyverseAccountManager"),
                 node_id: "UsefulNodeIdentifierToGroupEvents".to_owned(),
                 flush_timeout: DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
             }),
-            syslog_config: Some(SyslogConfig{
+            syslog: Some(SyslogConfig{
                 format: OutputFormat::CEF,
                 destination: SyslogDestination::Udp,
                 local: Some("# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)".to_owned()),
@@ -1565,7 +1660,7 @@ mod test {
                 hostname: Some("# applicable to tcp and udp hostname for long entries".to_owned()),
                 path: Some("# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)".to_owned()),
             }),
-            logfile_config: Some(LogFileConfig{
+            logfile: Some(LogFileConfig{
                 filepath: "/test/path".to_owned(),
                 format: OutputFormat::CEF,
                 rotation_file_count: Some(1),
@@ -1591,10 +1686,13 @@ mod test {
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
-            monitor_config: MonitorConfig {
+            analytics: AnalyticsConfig {
+                enabled: rand::thread_rng().gen_bool(0.5),
+            },
+            monitor: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
             },
-            console_config: match rand::thread_rng().gen_bool(0.5) {
+            console: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(ConsoleConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
                         true => OutputFormat::JSON,
@@ -1603,7 +1701,7 @@ mod test {
                 }),
                 false => None,
             },
-            polycorder_config: match rand::thread_rng().gen_bool(0.5) {
+            polycorder: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(PolycorderConfig {
                     auth_key: format!(
                         "AuthKeyFromAccountManagerRandom{}",
@@ -1618,7 +1716,7 @@ mod test {
                 }),
                 false => None,
             },
-            syslog_config: match rand::thread_rng().gen_bool(0.5) {
+            syslog: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(SyslogConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
                         true => OutputFormat::JSON,
@@ -1659,7 +1757,7 @@ mod test {
                 }),
                 false => None,
             },
-            logfile_config: match rand::thread_rng().gen_bool(0.5) {
+            logfile: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(LogFileConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
                         true => OutputFormat::JSON,

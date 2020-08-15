@@ -20,10 +20,10 @@ pub trait Emitter {
 
 pub struct EmitterConfig {
     pub verbosity: u8,
-    pub console_config: Option<params::ConsoleConfig>,
-    pub polycorder_config: Option<params::PolycorderConfig>,
-    pub syslog_config: Option<params::SyslogConfig>,
-    pub logfile_config: Option<params::LogFileConfig>,
+    pub console: Option<params::ConsoleConfig>,
+    pub polycorder: Option<params::PolycorderConfig>,
+    pub syslog: Option<params::SyslogConfig>,
+    pub logfile: Option<params::LogFileConfig>,
 }
 
 #[derive(Debug)]
@@ -56,19 +56,19 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), Em
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];
-    if let Some(cc) = ec.console_config {
+    if let Some(cc) = ec.console {
         eprintln!("Emitter: Initialized Console emitter. Expect messages to be printed to Standard Output.");
         emitters.push(Box::new(console::new(cc)));
     }
-    if let Some(tc) = ec.polycorder_config {
+    if let Some(tc) = ec.polycorder {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
         emitters.push(Box::new(polycorder::new(tc, ec.verbosity)?));
     }
-    if let Some(sc) = ec.syslog_config {
+    if let Some(sc) = ec.syslog {
         eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
         emitters.push(Box::new(syslogger::new(sc)?));
     }
-    if let Some(lfc) = ec.logfile_config {
+    if let Some(lfc) = ec.logfile {
         eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");
         emitters.push(Box::new(filelogger::new(lfc)?));
     }

@@ -42,10 +42,7 @@ fn main() {
         },
     };
 
-    let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
-        mpsc::channel();
-    let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
-        mpsc::channel();
+    let (monitor_sink, emitter_source, maybe_analyzer_handle) = optional_analyzer(&zerotect_config);
 
     let auto_configure_env = zerotect_config.auto_configure;
     let config_event_sink = monitor_sink.clone();
@@ -60,7 +57,7 @@ fn main() {
     }
 
     let mverbosity = zerotect_config.verbosity;
-    let mc = zerotect_config.monitor_config;
+    let mc = zerotect_config.monitor;
     let monitor_thread_result = thread::Builder::new()
         .name("Event Monitoring Thread".to_owned())
         .spawn(move || {
@@ -82,7 +79,69 @@ fn main() {
         }
     };
 
-    let averbosity = zerotect_config.verbosity;
+
+
+    // split these up before a move
+    let everbosity = zerotect_config.verbosity;
+    let console = zerotect_config.console;
+    let polycorder = zerotect_config.polycorder;
+    let syslog = zerotect_config.syslog;
+    let logfile = zerotect_config.logfile;
+
+    let emitter_thread_result = thread::Builder::new()
+        .name("Event Emitter Thread".to_owned())
+        .spawn(move || {
+            let ec = emitter::EmitterConfig {
+                verbosity: everbosity,
+                console,
+                polycorder,
+                syslog,
+                logfile,
+            };
+            if let Err(e) = emitter::emit(ec, emitter_source) {
+                eprintln!("Error launching Emitter: {}", e);
+                process::exit(1);
+            }
+        });
+
+    let emitter_handle = match emitter_thread_result {
+        Ok(eh) => eh,
+        Err(e) => {
+            eprintln!("An error occurred spawning the emitter thread: {}", e);
+            process::exit(1);
+        }
+    };
+
+    eprintln!("Waiting indefinitely until monitor and emitter exit....");
+    monitor_handle
+        .join()
+        .expect("Unable to join on the monitoring thread");
+    emitter_handle
+        .join()
+        .expect("Unable to join on the emitter thread");
+    if let Some(analyzer_handle) = maybe_analyzer_handle {
+        analyzer_handle
+            .join()
+            .expect("Unable to join on the analyzer thread");
+    }
+
+}
+
+fn optional_analyzer(zc: &params::ZerotectParams) ->
+    (Sender<events::Event>, Receiver<events::Event>, Option<thread::JoinHandle<()>>) {
+
+    let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
+        mpsc::channel();
+
+    if !zc.analytics.enabled {
+        // if analytics is disabled, short-circuit the first channel between monitor and emitter
+        return (monitor_sink, analyzer_source, None)
+    }
+
+    let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
+        mpsc::channel();
+
+    let averbosity = zc.verbosity;
     let analyzer_thread_result = thread::Builder::new()
         .name("Event Analyzer Thread".to_owned())
         .spawn(move || {
@@ -103,47 +162,7 @@ fn main() {
         }
     };
 
-    // split these up before a move
-    let everbosity = zerotect_config.verbosity;
-    let console_config = zerotect_config.console_config;
-    let polycorder_config = zerotect_config.polycorder_config;
-    let syslog_config = zerotect_config.syslog_config;
-    let logfile_config = zerotect_config.logfile_config;
-
-    let emitter_thread_result = thread::Builder::new()
-        .name("Event Emitter Thread".to_owned())
-        .spawn(move || {
-            let ec = emitter::EmitterConfig {
-                verbosity: everbosity,
-                console_config,
-                polycorder_config,
-                syslog_config,
-                logfile_config,
-            };
-            if let Err(e) = emitter::emit(ec, emitter_source) {
-                eprintln!("Error launching Emitter: {}", e);
-                process::exit(1);
-            }
-        });
-
-    let emitter_handle = match emitter_thread_result {
-        Ok(eh) => eh,
-        Err(e) => {
-            eprintln!("An error occurred spawning the emitter thread: {}", e);
-            process::exit(1);
-        }
-    };
-
-    eprintln!("Waiting indefinitely until monitor and emitter exit....");
-    monitor_handle
-        .join()
-        .expect("Unable to join on the monitoring thread");
-    analyzer_handle
-        .join()
-        .expect("Unable to join on the analyzer thread");
-    emitter_handle
-        .join()
-        .expect("Unable to join on the emitter thread");
+    (monitor_sink, emitter_source, Some(analyzer_handle))
 }
 
 fn configure_environment(

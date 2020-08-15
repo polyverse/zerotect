@@ -79,13 +79,13 @@ create_zerotect_conf() {
     tomlcontents=$(printf "${tomlcontents}\nfatal_signals = true")
     tomlcontents=$(printf "${tomlcontents}\nklog_include_timestamp = true")
     tomlcontents=$(printf "${tomlcontents}\n ")
-    tomlcontents=$(printf "${tomlcontents}\n[monitor_config]")
+    tomlcontents=$(printf "${tomlcontents}\n[monitor]")
     tomlcontents=$(printf "${tomlcontents}\ngobble_old_events = false")
     tomlcontents=$(printf "${tomlcontents}\n ")
 
     if [ "$POLYCORDER_AUTH_KEY" != "" ]; then
         printf "   |--> Sending events to polycorder with authkey: $POLYCORDER_AUTH_KEY\n"
-        tomlcontents=$(printf "${tomlcontents}\n[polycorder_config]")
+        tomlcontents=$(printf "${tomlcontents}\n[polycorder]")
         tomlcontents=$(printf "${tomlcontents}\nauth_key = '$POLYCORDER_AUTH_KEY'")
         if [ "$POLYCORDER_NODE_ID" != "" ]; then
             printf "   |--> Assigning polycorder events to nodeid: $POLYCORDER_NODE_ID\n"
@@ -95,14 +95,14 @@ create_zerotect_conf() {
 
     if [ "$SYSLOG_DEFAULT" != "" ]; then
         printf "   |--> Sending events to syslog (in JSON format)\n"
-        tomlcontents=$(printf "${tomlcontents}\n[syslog_config]")
+        tomlcontents=$(printf "${tomlcontents}\n[syslog]")
         tomlcontents=$(printf "${tomlcontents}\ndestination = 'default'")
         tomlcontents=$(printf "${tomlcontents}\nformat = 'JSON'")
     fi
 
     if [ "$LOG_FILE_PATH" != "" ]; then
         printf "   |--> Sending events to log file (in JSON format)\n"
-        tomlcontents=$(printf "${tomlcontents}\n[logfile_config]")
+        tomlcontents=$(printf "${tomlcontents}\n[logfile]")
         tomlcontents=$(printf "${tomlcontents}\nfilepath = '/var/log/zerotect.log'")
         tomlcontents=$(printf "${tomlcontents}\nformat = 'JSON'")
     fi

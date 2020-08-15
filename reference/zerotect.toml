@@ -5,22 +5,25 @@ exception_trace = true
 fatal_signals = true
 klog_include_timestamp = true
 
-[monitor_config]
+[analytics]
+enabled = false
+
+[monitor]
 gobble_old_events = false
 
-[console_config]
+[console]
 format = 'Text'
 
-[polycorder_config]
+[polycorder]
 auth_key = 'AuthKeyFromPolyverseAccountManager'
 node_id = 'UsefulNodeIdentifierToGroupEvents'
 flush_event_count = 10
 
-[polycorder_config.flush_timeout]
+[polycorder.flush_timeout]
 secs = 10
 nanos = 0
 
-[syslog_config]
+[syslog]
 format = 'CEF'
 destination = 'Udp'
 path = '# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)'
@@ -28,7 +31,7 @@ server = '# applicable to tcp and udp - the host:port to send syslog to (i.e. 12
 local = '# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)'
 hostname = '# applicable to tcp and udp hostname for long entries'
 
-[logfile_config]
+[logfile]
 format = 'CEF'
 filepath = '/test/path'
 rotation_file_count = 1
