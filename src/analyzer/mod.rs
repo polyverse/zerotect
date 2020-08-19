@@ -29,13 +29,53 @@ impl From<std::num::TryFromIntError> for AnalyzerError {
 }
 
 /// A Hash(procname)->List(events) so we can look for closely-spaced events in the same procname
-struct HashList {
-    hashlist: HashMap<String, Vec<events::Event>>,
+struct HashList<'h> {
+    verbosity: u8,
+    default_list_capacity: usize,
+
+    // HashMap can store references that don't outlive the hashlist
+    hashlist: HashMap<&'h str, Vec<&'h events::LinuxKernelTrap>>,
 }
 
-impl HashList {
-    fn insert(&mut self, event: events::Event) {
+impl<'h> HashList<'h> {
+    fn new(verbosity: u8, hashmap_capacity: usize, default_list_capacity: usize) -> HashList<'h> {
+        HashList {
+            verbosity,
+            default_list_capacity,
+            hashlist: HashMap::<&'h str, Vec<&'h events::LinuxKernelTrap>>::with_capacity(
+                hashmap_capacity,
+            ),
+        }
+    }
+
+    fn insert(&mut self, lkt: &'h events::LinuxKernelTrap) {
         // what do we hash on? For now procname
+        // does hashlist have a Vec for this procname?
+        match self.hashlist.get_mut(lkt.procname.as_str()) {
+            None => {
+                // new list
+                let mut list =
+                    Vec::<&'h events::LinuxKernelTrap>::with_capacity(self.default_list_capacity);
+                list.push(lkt);
+                self.hashlist.insert(lkt.procname.as_str(), list);
+                if self.verbosity > 1 {
+                    eprintln!(
+                        "Analyzer: HashList: Inserted first event against procname {}.",
+                        lkt.procname
+                    )
+                }
+            }
+            Some(list) => {
+                list.push(lkt);
+                if self.verbosity > 1 {
+                    eprintln!(
+                        "Analyzer: HashList: Inserted event {} against procname {}.",
+                        list.len(),
+                        lkt.procname
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -81,22 +121,37 @@ impl Analyzer {
 
         // What's the oldest event we allow to exist?
         let oldest_allowed_instant = &Utc::now().sub(self.event_lifetime);
+        let mut hashlist =
+            HashList::new(self.verbosity, self.max_event_count, self.max_event_count);
 
         let mut removal_count: usize = 0;
         for event in &self.events_buffer {
             match event.as_ref() {
                 events::Version::V1 {
                     timestamp,
-                    event: _,
+                    event: inner_event,
                 } => {
                     // if event expired, mark it for removal
                     if oldest_allowed_instant > timestamp {
                         // remove this event from buffer - since only front-most events (oldest events)
                         // would end up being removed, we remove the 0th element
-                        removal_count = removal_count + 1;
+                        removal_count += 1;
+                    }
+
+                    // if not analyzed since last event add,
+                    if !self.detected_since_last_add {
+                        // hash all Linux kernel traps
+                        match inner_event {
+                            events::EventType::LinuxKernelTrap(lkt) => hashlist.insert(lkt),
+                            _ => {}
+                        }
                     }
                 }
             }
+        }
+
+        if hashlist.hashlist.len() > 0 {
+            self.detected_since_last_add = true;
         }
 
         // if N elements need to be removed (they had expired)

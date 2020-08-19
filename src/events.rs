@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use num_derive::FromPrimitive;
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
@@ -413,15 +413,22 @@ pub enum LogLevel {
 #[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
-    Generic { description: String },
+    Generic {
+        description: String,
+    },
 
     /// Segfault occurs when an invalid memory access is performed (writing to read-only memory,
     /// executing non-executable memory, etc.)
-    Segfault { location: usize },
+    Segfault {
+        location: usize,
+    },
 
     /// Invalid Opcode occurs when the processor doesn't understand an opcode. This usually occurs
     /// when execution jumps to an otherwise data segment, or in the wrong byte within an instruction.
     InvalidOpcode,
+
+    // General Protection Fault
+    GeneralProtectionFault,
 }
 
 impl Display for KernelTrapType {
@@ -429,6 +436,7 @@ impl Display for KernelTrapType {
         match self {
             KernelTrapType::Segfault { location } => write!(f, "Segfault at location {}", location),
             KernelTrapType::InvalidOpcode => write!(f, "Invalid Opcode"),
+            KernelTrapType::GeneralProtectionFault => write!(f, "General Protection Fault"),
             KernelTrapType::Generic { description } => {
                 write!(f, "Please parse this kernel trap: {}", description)
             }
@@ -676,11 +684,11 @@ pub struct StackDump {
 
     // Arbitrary task key-pairs
     #[cef_ext_gobble_kv_iterator]
-    pub taskinfo: HashMap<String, String>,
+    pub taskinfo: BTreeMap<String, String>,
 
     /// Arbitrary register value key-pairs
     #[cef_ext_gobble_kv_iterator]
-    pub registers: HashMap<String, String>,
+    pub registers: BTreeMap<String, String>,
 }
 
 impl Display for StackDump {
@@ -716,7 +724,7 @@ mod test {
     #[test]
     fn measure_size_of_event() {
         // You can decide when to use Version and when to use Event = Arc'd Version
-        assert_eq!(232, mem::size_of::<Version>());
+        assert_eq!(168, mem::size_of::<Version>());
         assert_eq!(8, mem::size_of::<Event>());
     }
 }

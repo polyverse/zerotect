@@ -5,7 +5,7 @@ use crate::monitor::kmsg;
 
 use num::FromPrimitive;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
@@ -76,23 +76,33 @@ impl EventParser {
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure:
     // ====>> a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4
+    // OR
+    // NOTE: 'traps:' may or may not exist
+    // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n142
+    // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
     fn parse_kernel_trap(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
-                # the procname (may have whitespace around it),
-                [[:space:]]*(?P<procname>[^\[]*)
+                # start with any number of spaces or 'traps:'
+                [[:space:]]*
+                (?:traps:|[[:space:]]*)
+                [[:space:]]*
+                # the procname,
+                (?P<procname>[^\[]*)
                 # followed by a [pid])
-                [\[](?P<pid>[[:xdigit:]]*)[\]][[:space:]]*:
-                # gobble up everything until the word 'ip'
+                [\[](?P<pid>[[:xdigit:]]*)[\]]
+                # after pid either a : and spaces or spaces
+                (:[[:space:]]*|[[:space:]]*)
+                # gobble up any messages everything until the word 'ip'
                 (?P<message>.+?)
-                # ip <ip>
-                [[:space:]]*ip[[:space:]]*(?P<ip>([[:xdigit:]]*|\(null\)))
-                # sp <sp>
-                [[:space:]]*sp[[:space:]]*(?P<sp>([[:xdigit:]]*|\(null\)))
-                # error <errcode>
-                [[:space:]]*error[[:space:]]*(?P<errcode>[[:digit:]]*)
+                # ip <ip> OR ip:<ip>
+                [[:space:]]*ip(?::|[[:space:]]*)(?P<ip>([[:xdigit:]]*|\(null\)))
+                # sp <sp> OR sp:<sp>
+                [[:space:]]*sp(?::|[[:space:]]*)(?P<sp>([[:xdigit:]]*|\(null\)))
+                # error <errcode> OR error:<errcode>
+                [[:space:]]*error(?::|[[:space:]]*)(?P<errcode>[[:digit:]]*)
                 (?P<maybelocation>.*)$").unwrap();
 
             static ref RE_LOCATION: Regex = Regex::new(r"(?x)^
@@ -186,6 +196,8 @@ impl EventParser {
                 r"(?x)^[[:space:]]*trap[[:space:]]*invalid[[:space:]]*opcode[[:space:]]*$"
             )
             .unwrap();
+            static ref RE_GENERAL_PROTECTION: Regex =
+                Regex::new(r"(?x)^[[:space:]]*general[[:space:]]*protection[[:space:]]*$").unwrap();
         }
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
@@ -199,6 +211,8 @@ impl EventParser {
             }
         } else if RE_INVALID_OPCODE.is_match(trap_string) {
             Some(events::KernelTrapType::InvalidOpcode)
+        } else if RE_GENERAL_PROTECTION.is_match(trap_string) {
+            Some(events::KernelTrapType::GeneralProtectionFault)
         } else {
             Some(events::KernelTrapType::Generic {
                 description: trap_string.trim().to_owned(),
@@ -345,7 +359,7 @@ impl EventParser {
 
     // task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000
     // task: ffff880076e1aa00 ti: ffff880079ed4000 task.ti: ffff880079ed4000
-    fn parse_fatal_signal_task_line(&mut self) -> HashMap<String, String> {
+    fn parse_fatal_signal_task_line(&mut self) -> BTreeMap<String, String> {
         lazy_static! {
             static ref RE_HARDWARE_LINE: Regex = Regex::new(
                 r"(?x)[[:space:]]*(?P<key>task[^:]*):[[:space:]]*(?P<value>[[:xdigit:]]*)"
@@ -353,7 +367,7 @@ impl EventParser {
             .unwrap();
         }
 
-        let mut taskinfo = HashMap::<String, String>::new();
+        let mut taskinfo = BTreeMap::<String, String>::new();
         if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1))
         {
             for keyval in RE_HARDWARE_LINE.captures_iter(maybe_hardware_line.message.as_str()) {
@@ -383,9 +397,9 @@ impl EventParser {
     // FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
     // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
-    fn parse_fatal_signal_registers(&mut self) -> HashMap<String, String> {
+    fn parse_fatal_signal_registers(&mut self) -> BTreeMap<String, String> {
         // Not implemented
-        HashMap::<String, String>::new()
+        BTreeMap::<String, String>::new()
     }
 
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
@@ -500,7 +514,7 @@ mod test {
     macro_rules! map(
     { $($key:expr => $value:expr),+ } => {
         {
-            let mut m = ::std::collections::HashMap::new();
+            let mut m = ::std::collections::BTreeMap::new();
             $(
                 m.insert($key.to_owned(), $value.to_owned());
             )+
@@ -1029,6 +1043,131 @@ mod test {
     }
 
     #[test]
+    fn can_parse_kernel_trap_general_protection() {
+        let timestamp = Utc.timestamp_millis(378084605);
+        let kmsgs = vec![
+            Box::new(kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp,
+                message: String::from("traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+            }),
+            Box::new(kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp,
+                message: String::from("  traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+            }),
+            Box::new(kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp,
+                message: String::from(" traps:   nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+            }),
+            Box::new(kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp,
+                message: String::from(" nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+            }),
+            Box::new(kmsg::KMsg{
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                timestamp,
+                message: String::from("nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+            }),
+        ];
+
+        let event1 = Arc::new(events::Version::V1 {
+            timestamp,
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
+                facility: events::LogFacility::Kern,
+                level: events::LogLevel::Warning,
+                trap: events::KernelTrapType::GeneralProtectionFault,
+                procname: String::from("nginx"),
+                pid: 67494,
+                ip: 0x43bbbc,
+                sp: 0x7ffdd4474db0,
+                errcode: events::SegfaultErrorCode {
+                    reason: events::SegfaultReason::NoPageFound,
+                    access_type: events::SegfaultAccessType::Read,
+                    access_mode: events::SegfaultAccessMode::Kernel,
+                    use_of_reserved_bit: false,
+                    instruction_fetch: false,
+                    protection_keys_block_access: false,
+                },
+                file: Some(String::from("nginx")),
+                vmastart: Some(0x400000),
+                vmasize: Some(0x92000),
+            }),
+        });
+
+        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_some());
+        let gpf = maybe_gpf.unwrap();
+        assert_eq!(gpf, event1);
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_some());
+        let gpf = maybe_gpf.unwrap();
+        assert_eq!(gpf, event1);
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_some());
+        let gpf = maybe_gpf.unwrap();
+        assert_eq!(gpf, event1);
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_some());
+        let gpf = maybe_gpf.unwrap();
+        assert_eq!(gpf, event1);
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_some());
+        let gpf = maybe_gpf.unwrap();
+        assert_eq!(gpf, event1);
+
+        let maybe_gpf = parser.next();
+        assert!(maybe_gpf.is_none());
+
+        assert_eq!(
+            to_value(&event1).unwrap(),
+            from_str::<serde_json::Value>(
+                r#"{
+                "version": "V1",
+                "timestamp": "1970-01-05T09:01:24.605Z",
+                "event": {
+                    "type": "LinuxKernelTrap",
+                    "facility": "Kern",
+                    "level": "Warning",
+                    "trap": {
+                        "type": "GeneralProtectionFault"
+                    },
+                    "procname": "nginx",
+                    "pid": 67494,
+                    "ip": 4438972,
+                    "sp": 140728164896176,
+                    "errcode": {
+                        "reason": "NoPageFound",
+                        "access_type": "Read",
+                        "access_mode": "Kernel",
+                        "use_of_reserved_bit": false,
+                        "instruction_fetch": false,
+                        "protection_keys_block_access": false
+                    },
+                    "file": "nginx",
+                    "vmasize": 598016,
+                    "vmastart": 4194304
+                }
+            }"#
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
     fn can_parse_fatal_signal_optional_dump() {
         let timestamp = Utc.timestamp_millis(376087724);
 
@@ -1179,7 +1318,7 @@ mod test {
                         kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
                         hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
                         taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                        registers: HashMap::new(),
+                        registers: BTreeMap::new(),
                     })
                 }),
             })

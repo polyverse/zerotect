@@ -15,12 +15,12 @@ impl Formatter for JsonFormatter {
 mod test {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {
             {
-                let mut m = ::std::collections::HashMap::new();
+                let mut m = ::std::collections::BTreeMap::new();
                 $(
                     m.insert($key.to_owned(), $value.to_owned());
                 )+
@@ -82,7 +82,7 @@ mod test {
                     kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
                     hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
                     taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                    registers: HashMap::new(),
+                    registers: BTreeMap::new(),
                 }),
             }),
         };
