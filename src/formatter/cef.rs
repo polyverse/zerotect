@@ -111,8 +111,7 @@ mod test {
         };
 
         let formatter = CEFFormatter {};
-
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
     }
 
     #[test]
@@ -130,6 +129,6 @@ mod test {
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
     }
 }
