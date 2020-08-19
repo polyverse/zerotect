@@ -42,7 +42,8 @@ fn main() {
         },
     };
 
-    let (monitor_sink, emitter_source, maybe_analyzer_handle) = optional_analyzer(&zerotect_config);
+    let (monitor_sink, emitter_source, maybe_analyzer_handle) =
+        optional_analyzer(zerotect_config.verbosity, zerotect_config.analytics);
 
     let auto_configure_env = zerotect_config.auto_configure;
     let config_event_sink = monitor_sink.clone();
@@ -125,7 +126,8 @@ fn main() {
 }
 
 fn optional_analyzer(
-    zc: &params::ZerotectParams,
+    verbosity: u8,
+    ac: params::AnalyticsConfig,
 ) -> (
     Sender<events::Event>,
     Receiver<events::Event>,
@@ -134,7 +136,7 @@ fn optional_analyzer(
     let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
 
-    if !zc.analytics.enabled {
+    if !ac.enabled {
         // if analytics is disabled, short-circuit the first channel between monitor and emitter
         return (monitor_sink, analyzer_source, None);
     }
@@ -142,14 +144,10 @@ fn optional_analyzer(
     let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
 
-    let averbosity = zc.verbosity;
     let analyzer_thread_result = thread::Builder::new()
         .name("Event Analyzer Thread".to_owned())
         .spawn(move || {
-            let ac = analyzer::AnalyzerConfig {
-                verbosity: averbosity,
-            };
-            if let Err(e) = analyzer::analyze(ac, analyzer_source, analyzer_sink) {
+            if let Err(e) = analyzer::analyze(verbosity, ac, analyzer_source, analyzer_sink) {
                 eprintln!("Error launching Analyzer: {}", e);
                 process::exit(1);
             }

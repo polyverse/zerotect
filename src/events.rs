@@ -97,48 +97,7 @@ pub enum EventType {
         CefHeaderName = "Linux Kernel Trap",
         CefHeaderSeverity = "10"
     )]
-    LinuxKernelTrap {
-        /// The type of kernel trap triggered
-        /// A Log-level for this event - was it critical?
-        level: LogLevel,
-
-        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-        facility: LogFacility,
-
-        trap: KernelTrapType,
-
-        #[cef_ext_field]
-        /// Name of the process in which the trap occurred
-        procname: String,
-
-        #[cef_ext_field]
-        /// Process ID
-        pid: usize,
-
-        #[cef_ext_field]
-        /// Instruction Pointer (what memory address was executing)
-        ip: usize,
-
-        #[cef_ext_field]
-        /// Stack Pointer
-        sp: usize,
-
-        /// The error code for the trap
-        #[cef_ext_gobble]
-        errcode: SegfaultErrorCode,
-
-        /// (Optional) File in which the trap occurred (could be the main executable or library).
-        #[cef_ext_optional_field]
-        file: Option<String>,
-
-        /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
-        #[cef_ext_optional_field]
-        vmastart: Option<usize>,
-
-        /// (Optional) The Virtual Memory Size of this file's mapping.
-        #[cef_ext_optional_field]
-        vmasize: Option<usize>,
-    },
+    LinuxKernelTrap(#[cef_ext_gobble] LinuxKernelTrap),
 
     /// A Fatal Signal from the process because the process did something stupid
     #[cef_values(
@@ -146,21 +105,7 @@ pub enum EventType {
         CefHeaderName = "Linux Fatal Signal",
         CefHeaderSeverity = "10"
     )]
-    LinuxFatalSignal {
-        /// A Log-level for this event - was it critical?
-        level: LogLevel,
-
-        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-        facility: LogFacility,
-
-        /// The type of Fatal triggered
-        #[cef_ext_field]
-        signal: FatalSignalType,
-
-        /// An Optional Stack Dump if one was found and parsable.
-        #[cef_ext_optional_gobble]
-        stack_dump: Option<StackDump>,
-    },
+    LinuxFatalSignal(#[cef_ext_gobble] LinuxFatalSignal),
 
     /// Information about a suppressed callback i.e. when a particular
     /// type of error happens so much it is suppressed 'n' times.
@@ -175,19 +120,7 @@ pub enum EventType {
         CefHeaderName = "Linux kernel suppressed repetitive log entries",
         CefHeaderSeverity = "3"
     )]
-    LinuxSuppressedCallback {
-        /// A Log-level for this event - was it critical?
-        level: LogLevel,
-
-        /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-        facility: LogFacility,
-
-        /// Name of the function being suppressed/folded.
-        function_name: String,
-
-        /// Number of times it was suppressed.
-        count: usize,
-    },
+    LinuxSuppressedCallback(#[cef_ext_gobble] LinuxSuppressedCallback),
 
     /// This is a zerotect-internal event. zerotect can be commanded to set and ensure certain
     /// configuration settings to capture events, such as enabling kernel fatal-signals, or
@@ -203,22 +136,13 @@ pub enum EventType {
         CefHeaderName = "Configuration mismatched what zerotect expected",
         CefHeaderSeverity = "4"
     )]
-    ConfigMismatch {
-        /// The key in question whose values mismatched.
-        key: String,
-
-        /// The value zerotect configured and thus expected.
-        expected_value: String,
-
-        /// The value zerotect observed.
-        observed_value: String,
-    },
+    ConfigMismatch(#[cef_ext_gobble] ConfigMismatch),
 }
 
 impl Display for EventType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            EventType::LinuxKernelTrap {
+            EventType::LinuxKernelTrap(LinuxKernelTrap {
                 level,
                 facility,
                 trap,
@@ -230,7 +154,7 @@ impl Display for EventType {
                 file,
                 vmasize,
                 vmastart,
-            } => {
+            }) => {
                 let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
                     (file.as_ref(), vmastart, vmasize)
                 {
@@ -256,12 +180,12 @@ impl Display for EventType {
                     location.unwrap_or_default()
                 )
             }
-            EventType::LinuxFatalSignal {
+            EventType::LinuxFatalSignal(LinuxFatalSignal {
                 level,
                 facility,
                 signal,
                 stack_dump,
-            } => {
+            }) => {
                 let retval = write!(
                     f,
                     "<log_level: {}, log_facility: {}>Fatal Signal: {}({})",
@@ -278,27 +202,120 @@ impl Display for EventType {
                     retval
                 }
             }
-            EventType::LinuxSuppressedCallback {
+            EventType::LinuxSuppressedCallback(LinuxSuppressedCallback {
                 level,
                 facility,
                 function_name,
                 count,
-            } => write!(
+            }) => write!(
                 f,
                 "<log_level: {}, log_facility: {}>Suppressed {} callbacks to {}",
                 level, facility, count, &function_name,
             ),
-            EventType::ConfigMismatch {
+            EventType::ConfigMismatch(ConfigMismatch {
                 key,
                 expected_value,
                 observed_value,
-            } => write!(
+            }) => write!(
                 f,
                 "Configuration key {} should have been {}, but found to be {}",
                 &key, &expected_value, &observed_value
             ),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+pub struct LinuxKernelTrap {
+    /// The type of kernel trap triggered
+    /// A Log-level for this event - was it critical?
+    pub level: LogLevel,
+
+    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+    pub facility: LogFacility,
+
+    pub trap: KernelTrapType,
+
+    #[cef_ext_field]
+    /// Name of the process in which the trap occurred
+    pub procname: String,
+
+    #[cef_ext_field]
+    /// Process ID
+    pub pid: usize,
+
+    #[cef_ext_field]
+    /// Instruction Pointer (what memory address was executing)
+    pub ip: usize,
+
+    #[cef_ext_field]
+    /// Stack Pointer
+    pub sp: usize,
+
+    /// The error code for the trap
+    #[cef_ext_gobble]
+    pub errcode: SegfaultErrorCode,
+
+    /// (Optional) File in which the trap occurred (could be the main executable or library).
+    #[cef_ext_optional_field]
+    pub file: Option<String>,
+
+    /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
+    #[cef_ext_optional_field]
+    pub vmastart: Option<usize>,
+
+    /// (Optional) The Virtual Memory Size of this file's mapping.
+    #[cef_ext_optional_field]
+    pub vmasize: Option<usize>,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+pub struct LinuxFatalSignal {
+    /// A Log-level for this event - was it critical?
+    pub level: LogLevel,
+
+    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+    pub facility: LogFacility,
+
+    /// The type of Fatal triggered
+    #[cef_ext_field]
+    pub signal: FatalSignalType,
+
+    /// An Optional Stack Dump if one was found and parsable.
+    #[cef_ext_optional_gobble]
+    pub stack_dump: Option<StackDump>,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+pub struct LinuxSuppressedCallback {
+    /// A Log-level for this event - was it critical?
+    pub level: LogLevel,
+
+    /// A Log-facility - most OSes would have one, but this is Linux-specific for now
+    pub facility: LogFacility,
+
+    /// Name of the function being suppressed/folded.
+    #[cef_ext_field]
+    pub function_name: String,
+
+    /// Number of times it was suppressed.
+    #[cef_ext_field]
+    pub count: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+pub struct ConfigMismatch {
+    /// The key in question whose values mismatched.
+    #[cef_ext_field]
+    pub key: String,
+
+    /// The value zerotect configured and thus expected.
+    #[cef_ext_field]
+    pub expected_value: String,
+
+    /// The value zerotect observed.
+    #[cef_ext_field]
+    pub observed_value: String,
 }
 
 /// Linux kmesg (kernel message buffer) Log Facility.
@@ -699,7 +716,7 @@ mod test {
     #[test]
     fn measure_size_of_event() {
         // You can decide when to use Version and when to use Event = Arc'd Version
-        assert_eq!(224, mem::size_of::<Version>());
+        assert_eq!(232, mem::size_of::<Version>());
         assert_eq!(8, mem::size_of::<Event>());
     }
 }

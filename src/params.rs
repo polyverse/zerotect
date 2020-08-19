@@ -11,7 +11,6 @@ use std::fs;
 use std::io;
 use std::str;
 use std::str::FromStr;
-use std::time::Duration;
 use strum_macros::EnumString;
 
 /// All configs may be loaded from a file (and overridden with any CLI flags)
@@ -62,8 +61,19 @@ const LOGFILE_ROTATION_SIZE_FLAG: &str = "log-file-rotation-max-size";
 const ANALYTICS_ENABLED_FLAG: &str = "analytics-enabled";
 
 // Defaults
+// Flush to polycorder when 10 events are collected
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
-const DEFAULT_POLYCORDER_FLUSH_TIMEOUT: Duration = Duration::from_secs(10);
+// Flush to polycorder if no new events arrive for 10 seconds
+const DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS: u64 = 10;
+
+// Perform analytics if no new events arrive for 10 seconds
+const DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS: u64 = 10;
+// Forget events older than 30 seconds
+const DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS: u64 = 30;
+// if we can't tell a BROP from the last 20 segfaults, we never will.
+const DEFAULT_ANALYTICS_MAX_EVENT_COUNT: usize = 20;
+// when all 20 events are full, drop the oldest 5. It's okay.
+const DEFAULT_ANALYTICS_EVENT_DROP_COUNT: usize = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
 pub enum OutputFormat {
@@ -138,7 +148,7 @@ pub struct PolycorderConfig {
     pub flush_event_count: usize,
 
     // Flush all events if none arrive for this interval
-    pub flush_timeout: Duration,
+    pub flush_timeout_seconds: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -151,6 +161,27 @@ pub struct AutoConfigure {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsConfig {
     pub enabled: bool,
+
+    /// How long should analyzer wait for new events to arrive, before
+    /// processing and making a decision on what's buffered.
+    ///
+    /// In the case of a Blind-ROP for instance, a lot of events may arrive
+    /// milliseconds or seconds apart. It makes sense to process when
+    /// no new events arrive for about 10 seconds or so.
+    pub collection_timeout_seconds: u64,
+
+    /// Maximum number of events to store
+    /// Analysis is run when this count is reached, before older events are purged.
+    pub max_event_count: usize,
+
+    /// How long should an event be held -
+    /// even if no new events arrive, older events will be expired
+    /// and dropped when they cross this duration.
+    pub event_lifetime_seconds: u64,
+
+    /// How count of events to drop when buffer is full
+    /// Must be less than max_event_count.
+    pub event_drop_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -215,6 +246,11 @@ pub struct AutoConfigureOptions {
 #[derive(Deserialize)]
 pub struct AnalyticsConfigOptions {
     pub enabled: bool,
+
+    pub collection_timeout_seconds: Option<u64>,
+    pub max_event_count: Option<usize>,
+    pub event_lifetime_seconds: Option<u64>,
+    pub event_drop_count: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -232,7 +268,7 @@ pub struct PolycorderConfigOptions {
     pub node_id: Option<String>,
 
     // Flush all events if none arrive for this interval
-    pub flush_timeout: Option<Duration>,
+    pub flush_timeout_seconds: Option<u64>,
 
     // Flush after this number of items, even if more are arriving...
     pub flush_event_count: Option<usize>,
@@ -583,8 +619,18 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                     })
                 }
             },
+            collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+            max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+            event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+            event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
         },
-        None => AnalyticsConfig { enabled: true },
+        None => AnalyticsConfig {
+            enabled: true,
+            collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+            max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+            event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+            event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
+        },
     };
 
     let monitor = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
@@ -620,9 +666,9 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                 None => UNIDENTIFIED_NODE.to_owned(),
             };
 
-            let flush_timeout = match matches.value_of(FLUSH_TIMEOUT_SECONDS_FLAG) {
-                Some(nstr) => Duration::from_secs(nstr.parse::<u64>()?),
-                None => DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
+            let flush_timeout_seconds = match matches.value_of(FLUSH_TIMEOUT_SECONDS_FLAG) {
+                Some(nstr) => nstr.parse::<u64>()?,
+                None => DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS,
             };
 
             let flush_event_count = match matches.value_of(FLUSH_EVENT_COUNT_FLAG) {
@@ -633,7 +679,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
             Some(PolycorderConfig {
                 auth_key,
                 node_id,
-                flush_timeout,
+                flush_timeout_seconds,
                 flush_event_count,
             })
         }
@@ -757,8 +803,20 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
             },
         },
         analytics: match zerotect_param_options.analytics {
-            Some(aco) => AnalyticsConfig{enabled: aco.enabled},
-            None => AnalyticsConfig{enabled: true},
+            Some(aco) => AnalyticsConfig{
+                enabled: aco.enabled,
+                collection_timeout_seconds: aco.collection_timeout_seconds.unwrap_or(DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS),
+                event_lifetime_seconds: aco.event_lifetime_seconds.unwrap_or(DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS),
+                max_event_count: aco.max_event_count.unwrap_or(DEFAULT_ANALYTICS_MAX_EVENT_COUNT),
+                event_drop_count: aco.event_drop_count.unwrap_or(DEFAULT_ANALYTICS_EVENT_DROP_COUNT),
+            },
+            None => AnalyticsConfig{
+                enabled: true,
+                collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+                event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+                max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+                event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
+            },
         },
         monitor: match zerotect_param_options.monitor {
             Some(mc) => MonitorConfig {
@@ -787,9 +845,9 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                     flush_event_count: pco
                         .flush_event_count
                         .unwrap_or(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT),
-                    flush_timeout: pco
-                        .flush_timeout
-                        .unwrap_or(DEFAULT_POLYCORDER_FLUSH_TIMEOUT),
+                    flush_timeout_seconds: pco
+                        .flush_timeout_seconds
+                        .unwrap_or(DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS),
                 }),
             },
         },
@@ -914,7 +972,7 @@ mod test {
         let pc = config.polycorder.unwrap();
         assert_eq!("authkey", pc.auth_key);
         assert_eq!("nodeid34235", pc.node_id);
-        assert_eq!(Duration::from_secs(89), pc.flush_timeout);
+        assert_eq!(89, pc.flush_timeout_seconds);
         assert_eq!(53, pc.flush_event_count);
 
         let sc = config.syslog.unwrap();
@@ -1044,7 +1102,10 @@ mod test {
         let pc = config.polycorder.unwrap();
         assert_eq!("authkey97097", pc.auth_key);
         assert_eq!(UNIDENTIFIED_NODE, pc.node_id);
-        assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
+        assert_eq!(
+            DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS,
+            pc.flush_timeout_seconds
+        );
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT, pc.flush_event_count);
     }
 
@@ -1225,10 +1286,7 @@ mod test {
         auth_key = 'AuthKeyFromAccountManager3700793'
         node_id = 'NodeDiscriminator5462654'
         flush_event_count = 23
-
-        [polycorder.flush_timeout]
-        secs = 39
-        nanos = 0
+        flush_timeout_seconds = 39
 
         [syslog]
         format = 'CeF'
@@ -1268,7 +1326,7 @@ mod test {
         let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromAccountManager3700793", pc.auth_key);
         assert_eq!("NodeDiscriminator5462654", pc.node_id);
-        assert_eq!(Duration::from_secs(39), pc.flush_timeout);
+        assert_eq!(39, pc.flush_timeout_seconds);
         assert_eq!(23, pc.flush_event_count);
 
         let sc = config.syslog.unwrap();
@@ -1393,7 +1451,7 @@ mod test {
         let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromPolyverseAccountManager97439", pc.auth_key);
         assert_eq!("UsefulNodeIdentifierToGroupEvents903439", pc.node_id);
-        assert_eq!(Duration::from_secs(10), pc.flush_timeout);
+        assert_eq!(10, pc.flush_timeout_seconds);
         assert_eq!(10, pc.flush_event_count);
 
         let sc = config.syslog.unwrap();
@@ -1518,7 +1576,10 @@ mod test {
         let pc = config.polycorder.unwrap();
         assert_eq!("AuthKeyFromAccountManager5323552", pc.auth_key);
         assert_eq!(UNIDENTIFIED_NODE, pc.node_id);
-        assert_eq!(DEFAULT_POLYCORDER_FLUSH_TIMEOUT, pc.flush_timeout);
+        assert_eq!(
+            DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS,
+            pc.flush_timeout_seconds
+        );
         assert_eq!(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT, pc.flush_event_count);
     }
 
@@ -1638,7 +1699,11 @@ mod test {
                 klog_include_timestamp: true,
             },
             analytics: AnalyticsConfig{
-                enabled: rand::thread_rng().gen_bool(0.5)
+                enabled: true,
+                collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+                event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+                max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+                event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
             },
             monitor: MonitorConfig {
                 gobble_old_events: false,
@@ -1649,7 +1714,7 @@ mod test {
             polycorder: Some(PolycorderConfig {
                 auth_key: format!("AuthKeyFromPolyverseAccountManager"),
                 node_id: "UsefulNodeIdentifierToGroupEvents".to_owned(),
-                flush_timeout: DEFAULT_POLYCORDER_FLUSH_TIMEOUT,
+                flush_timeout_seconds: DEFAULT_POLYCORDER_FLUSH_TIMEOUT_SECONDS,
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
             }),
             syslog: Some(SyslogConfig{
@@ -1688,6 +1753,10 @@ mod test {
             },
             analytics: AnalyticsConfig {
                 enabled: rand::thread_rng().gen_bool(0.5),
+                collection_timeout_seconds: rand::thread_rng().gen_range(1, 100),
+                max_event_count: rand::thread_rng().gen_range(1, 100),
+                event_drop_count: rand::thread_rng().gen_range(1, 100),
+                event_lifetime_seconds: rand::thread_rng().gen_range(1, 100),
             },
             monitor: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
@@ -1711,7 +1780,7 @@ mod test {
                         "NodeDiscriminatorRandom{}",
                         rand::thread_rng().gen_range(0, 32000)
                     ),
-                    flush_timeout: Duration::from_secs(rand::thread_rng().gen_range(0, 500)),
+                    flush_timeout_seconds: rand::thread_rng().gen_range(0, 500),
                     flush_event_count: rand::thread_rng().gen_range(0, 500),
                 }),
                 false => None,

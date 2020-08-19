@@ -14,7 +14,6 @@ use crate::monitor::rmesg_reader::{RMesgReader, RMesgReaderConfig};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -44,7 +43,7 @@ impl From<EventParserError> for MonitorError {
 
 pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), MonitorError> {
     if mc.verbosity > 0 {
-        eprintln!("Monitor: Reading dmesg periodically to get kernel messages...");
+        eprintln!("Monitor: Reading and parsing relevant kernel messages...");
     }
 
     let dev_msg_reader_config = DevKMsgReaderConfig {

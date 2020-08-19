@@ -144,11 +144,11 @@ pub fn modify_environment(
 
         env_events.push(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
-            event: events::EventType::ConfigMismatch {
+            event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: rmesg::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
                 expected_value: "Y".to_owned(),
                 observed_value: "N".to_owned(),
-            },
+            }),
         }));
     }
 
@@ -168,11 +168,11 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
         ctl.set_value_string(valuestr)?;
         Ok(Some(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
-            event: events::EventType::ConfigMismatch {
+            event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: ctlstr.to_owned(),
                 expected_value: valuestr.to_owned(),
                 observed_value: prev_value_str.to_owned(),
-            },
+            }),
         })))
     }
 }

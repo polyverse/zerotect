@@ -12,6 +12,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
+use std::time::Duration;
 
 use crate::emitter;
 use crate::events;
@@ -119,8 +120,10 @@ fn publish_to_polycorder_forever(
 
     let mut events: Vec<events::Event> = vec![];
 
+    let timeout_duration = Duration::from_secs(config.flush_timeout_seconds);
+
     loop {
-        let flush = match receiver.recv_timeout(config.flush_timeout) {
+        let flush = match receiver.recv_timeout(timeout_duration) {
             Ok(event) => {
                 events.push(event);
                 if events.len() >= config.flush_event_count {

@@ -150,7 +150,7 @@ impl EventParser {
 
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
-                    event: events::EventType::LinuxKernelTrap {
+                    event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                         facility: km.facility,
                         level: km.level,
                         trap,
@@ -162,7 +162,7 @@ impl EventParser {
                         file,
                         vmastart,
                         vmasize,
-                    },
+                    }),
                 });
             }
         };
@@ -222,12 +222,12 @@ impl EventParser {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Version::V1 {
                         timestamp: km.timestamp,
-                        event: events::EventType::LinuxFatalSignal {
+                        event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                             facility: km.facility,
                             level: km.level,
                             signal,
                             stack_dump: self.parse_stack_dump(),
-                        },
+                        }),
                     });
                 } else {
                     eprintln!(
@@ -420,12 +420,14 @@ impl EventParser {
 
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
-                    event: events::EventType::LinuxSuppressedCallback {
-                        facility: km.facility,
-                        level: km.level,
-                        function_name: function_name.to_owned(),
-                        count,
-                    },
+                    event: events::EventType::LinuxSuppressedCallback(
+                        events::LinuxSuppressedCallback {
+                            facility: km.facility,
+                            level: km.level,
+                            function_name: function_name.to_owned(),
+                            count,
+                        },
+                    ),
                 });
             }
         };
@@ -533,7 +535,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
@@ -552,12 +554,12 @@ mod test {
                 file: Some(String::from("a.out")),
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
-            },
+            }),
         });
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
@@ -576,12 +578,12 @@ mod test {
                 file: Some(String::from("a.out")),
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
-            },
+            }),
         });
 
         let event3 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault {
@@ -602,7 +604,7 @@ mod test {
                 file: None,
                 vmastart: None,
                 vmasize: None,
-            },
+            }),
         });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -747,7 +749,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::InvalidOpcode,
@@ -766,12 +768,12 @@ mod test {
                 file: Some(String::from("a.out")),
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
-            },
+            }),
         });
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::InvalidOpcode,
@@ -790,7 +792,7 @@ mod test {
                 file: None,
                 vmastart: None,
                 vmasize: None,
-            },
+            }),
         });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -894,7 +896,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Generic {
@@ -915,12 +917,12 @@ mod test {
                 file: Some(String::from("a.out")),
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
-            },
+            }),
         });
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Generic {
@@ -941,7 +943,7 @@ mod test {
                 file: None,
                 vmastart: None,
                 vmasize: None,
-            },
+            }),
         });
 
         let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
@@ -1044,12 +1046,12 @@ mod test {
             sig11.unwrap(),
             Arc::new(events::Version::V1 {
                 timestamp,
-                event: events::EventType::LinuxFatalSignal {
+                event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     signal: events::FatalSignalType::SIGSEGV,
                     stack_dump: None,
-                }
+                }),
             })
         )
     }
@@ -1166,7 +1168,7 @@ mod test {
             sig11.unwrap(),
             Arc::new(events::Version::V1 {
                 timestamp: Utc.timestamp_millis(6433742 + 372858970),
-                event: events::EventType::LinuxFatalSignal {
+                event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     signal: events::FatalSignalType::SIGSEGV,
@@ -1179,7 +1181,7 @@ mod test {
                         taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
                         registers: HashMap::new(),
                     })
-                }
+                }),
             })
         )
     }
@@ -1206,7 +1208,7 @@ mod test {
                 segfault,
                 Arc::new(events::Version::V1 {
                     timestamp,
-                    event: events::EventType::LinuxKernelTrap {
+                    event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
                         trap: events::KernelTrapType::Segfault { location: 0 },
@@ -1225,7 +1227,7 @@ mod test {
                         file: Some(String::from("a.out")),
                         vmastart: Some(0x561bc8d8f000),
                         vmasize: Some(0x1000),
-                    }
+                    }),
                 })
             );
         });
@@ -1254,12 +1256,14 @@ mod test {
             suppressed_callback.unwrap(),
             Arc::new(events::Version::V1 {
                 timestamp,
-                event: events::EventType::LinuxSuppressedCallback {
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning,
-                    function_name: "show_signal_msg".to_owned(),
-                    count: 9,
-                }
+                event: events::EventType::LinuxSuppressedCallback(
+                    events::LinuxSuppressedCallback {
+                        facility: events::LogFacility::Kern,
+                        level: events::LogLevel::Warning,
+                        function_name: "show_signal_msg".to_owned(),
+                        count: 9,
+                    }
+                ),
             })
         )
     }

@@ -6,7 +6,11 @@ fatal_signals = true
 klog_include_timestamp = true
 
 [analytics]
-enabled = false
+enabled = true
+collection_timeout_seconds = 10
+max_event_count = 20
+event_lifetime_seconds = 30
+event_drop_count = 5
 
 [monitor]
 gobble_old_events = false
@@ -18,10 +22,7 @@ format = 'Text'
 auth_key = 'AuthKeyFromPolyverseAccountManager'
 node_id = 'UsefulNodeIdentifierToGroupEvents'
 flush_event_count = 10
-
-[polycorder.flush_timeout]
-secs = 10
-nanos = 0
+flush_timeout_seconds = 10
 
 [syslog]
 format = 'CEF'

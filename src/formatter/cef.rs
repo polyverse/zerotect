@@ -36,7 +36,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxKernelTrap {
+            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
@@ -55,7 +55,7 @@ mod test {
                 file: Some(String::from("a.out")),
                 vmastart: Some(0x561bc8d8f000),
                 vmasize: Some(0x1000),
-            },
+            }),
         };
 
         let formatter = CEFFormatter {};
@@ -72,7 +72,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxFatalSignal {
+            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 signal: events::FatalSignalType::SIGSEGV,
@@ -85,7 +85,7 @@ mod test {
                     taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
                     registers: HashMap::new(),
                 }),
-            },
+            }),
         };
 
         let formatter = CEFFormatter {};
@@ -102,17 +102,17 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::LinuxSuppressedCallback {
+            event: events::EventType::LinuxSuppressedCallback(events::LinuxSuppressedCallback {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 function_name: "show_signal_msg".to_owned(),
                 count: 9,
-            },
+            }),
         };
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
     }
 
     #[test]
@@ -121,15 +121,15 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::ConfigMismatch {
+            event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: "/sys/module/printk/parameters/time".to_owned(),
                 expected_value: "Y".to_owned(),
                 observed_value: "N".to_owned(),
-            },
+            }),
         };
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
     }
 }
