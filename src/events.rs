@@ -202,21 +202,16 @@ impl Display for EventType {
                 signal,
                 stack_dump,
             }) => {
-                let retval = write!(
+                write!(
                     f,
-                    "<log_level: {}, log_facility: {}>Fatal Signal: {}({})",
+                    "<log_level: {}, log_facility: {}>Fatal Signal: {}({}, StackDump: {:?})",
                     level,
                     facility,
                     signal,
                     // https://stackoverflow.com/questions/31358826/how-do-i-convert-an-enum-reference-to-a-number
                     *signal as u8,
-                );
-
-                if let Some(sd) = &stack_dump {
-                    write!(f, ":: StackDump: {}", sd)
-                } else {
-                    retval
-                }
+                    stack_dump,
+                )
             }
             EventType::LinuxSuppressedCallback(LinuxSuppressedCallback {
                 level,
@@ -327,8 +322,8 @@ pub struct LinuxFatalSignal {
     pub signal: FatalSignalType,
 
     /// An Optional Stack Dump if one was found and parsable.
-    #[cef_ext_optional_gobble]
-    pub stack_dump: Option<StackDump>,
+    #[cef_ext_gobble_kv_iterator]
+    pub stack_dump: BTreeMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
@@ -713,48 +708,6 @@ pub enum FatalSignalType {
 
     /// Power failure (System V) (synonym: SIGINFO)
     SIGPWR,
-}
-
-/// Stack Dump (when parsed)
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
-pub struct StackDump {
-    /// Which CPU/Core it dumped on
-    #[cef_ext_field]
-    pub cpu: usize,
-
-    /// Process ID
-    #[cef_ext_field]
-    pub pid: usize,
-
-    /// Command (how was the process executed)
-    #[cef_ext_field]
-    pub command: String,
-
-    /// Kernel descriptor
-    #[cef_ext_field]
-    pub kernel: String,
-
-    /// Hardware descriptor
-    #[cef_ext_field]
-    pub hardware: String,
-
-    // Arbitrary task key-pairs
-    #[cef_ext_gobble_kv_iterator]
-    pub taskinfo: BTreeMap<String, String>,
-
-    /// Arbitrary register value key-pairs
-    #[cef_ext_gobble_kv_iterator]
-    pub registers: BTreeMap<String, String>,
-}
-
-impl Display for StackDump {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(
-            f,
-            "CPU: {} PID: {} Comm: {} {}",
-            self.cpu, self.pid, self.command, self.kernel
-        )
-    }
 }
 
 /**********************************************************************************/

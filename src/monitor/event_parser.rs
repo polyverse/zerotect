@@ -10,7 +10,6 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use timeout_iterator::TimeoutIterator;
 
@@ -279,125 +278,7 @@ impl EventParser {
     // FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
     // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
-    fn parse_stack_dump(&mut self) -> Option<events::StackDump> {
-        if let (
-            (Some(cpu), Some(pid), Some(command), Some(kernel)),
-            hardware,
-            taskinfo,
-            registers,
-        ) = (
-            self.parse_fatal_signal_cpu_line(),
-            self.parse_fatal_signal_hardware(),
-            self.parse_fatal_signal_task_line(),
-            self.parse_fatal_signal_registers(),
-        ) {
-            return Some(events::StackDump {
-                cpu,
-                pid,
-                command,
-                kernel,
-                hardware,
-                taskinfo,
-                registers,
-            });
-        }
-
-        None
-    }
-
-    // CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1
-    fn parse_fatal_signal_cpu_line(
-        &mut self,
-    ) -> (Option<usize>, Option<usize>, Option<String>, Option<String>) {
-        lazy_static! {
-            static ref RE_CPU_LINE: Regex = Regex::new(
-                r"(?x)^
-                [[:space:]]*CPU:[[:space:]]*(?P<cpu>[[:digit:]]*)
-                [[:space:]]*PID:[[:space:]]*(?P<pid>[[:digit:]]*)
-                [[:space:]]*Comm:[[:space:]]*(?P<command>[[:^space:]]*)
-                (?P<kernel>.*)$"
-            )
-            .unwrap();
-        }
-        if let Ok(maybe_cpu_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1)) {
-            if let Some(line_parts) = RE_CPU_LINE.captures(maybe_cpu_line.message.as_str()) {
-                let retval = (
-                    EventParser::parse_fragment::<usize>(&line_parts["cpu"]),
-                    EventParser::parse_fragment::<usize>(&line_parts["pid"]),
-                    Some(line_parts["command"].trim().to_owned()),
-                    Some(line_parts["kernel"].trim().to_owned()),
-                );
-                self.timeout_kmsg_iter.next(); //consume the line
-                return retval;
-            }
-        }
-
-        (None, None, None, None)
-    }
-
-    // Hardware name:  BHYVE, BIOS 1.00 03/14/2014
-    fn parse_fatal_signal_hardware(&mut self) -> String {
-        lazy_static! {
-            static ref RE_HARDWARE_LINE: Regex = Regex::new(
-                r"(?x)^[[:space:]]*Hardware[[:space:]]*name:[[:space:]]*(?P<hardware>.*)$"
-            )
-            .unwrap();
-        }
-        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1))
-        {
-            if let Some(line_parts) =
-                RE_HARDWARE_LINE.captures(maybe_hardware_line.message.as_str())
-            {
-                let hardware = line_parts["hardware"].trim().to_owned();
-                self.timeout_kmsg_iter.next(); //consume the line
-                return hardware;
-            }
-        }
-
-        String::new()
-    }
-
-    // task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000
-    // task: ffff880076e1aa00 ti: ffff880079ed4000 task.ti: ffff880079ed4000
-    fn parse_fatal_signal_task_line(&mut self) -> BTreeMap<String, String> {
-        lazy_static! {
-            static ref RE_HARDWARE_LINE: Regex = Regex::new(
-                r"(?x)[[:space:]]*(?P<key>task[^:]*):[[:space:]]*(?P<value>[[:xdigit:]]*)"
-            )
-            .unwrap();
-        }
-
-        let mut taskinfo = BTreeMap::<String, String>::new();
-        if let Ok(maybe_hardware_line) = self.timeout_kmsg_iter.peek_timeout(Duration::from_secs(1))
-        {
-            for keyval in RE_HARDWARE_LINE.captures_iter(maybe_hardware_line.message.as_str()) {
-                println!("{}: {}", &keyval["key"], &keyval["value"]);
-                taskinfo.insert(
-                    keyval["key"].trim().to_owned(),
-                    keyval["value"].trim().to_owned(),
-                );
-            }
-            if taskinfo.len() > 0 {
-                // we let go of the first iterator borrow after we cloned off it, now we can borrow again,
-                // and delete the message
-                self.timeout_kmsg_iter.next(); //consume the message if we like it
-            }
-        }
-        return taskinfo;
-    }
-
-    // This is the tricky part! No way to know when it ends
-    // RIP: 0033:0x561bc8d8f12e
-    // RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246
-    // RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718
-    // RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001
-    // RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80
-    // R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040
-    // R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000
-    // FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
-    // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-    // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
-    fn parse_fatal_signal_registers(&mut self) -> BTreeMap<String, String> {
+    fn parse_stack_dump(&mut self) -> BTreeMap<String, String> {
         // Not implemented
         BTreeMap::<String, String>::new()
     }
@@ -510,18 +391,6 @@ mod test {
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
     use std::thread;
-
-    macro_rules! map(
-    { $($key:expr => $value:expr),+ } => {
-        {
-            let mut m = ::std::collections::BTreeMap::new();
-            $(
-                m.insert($key.to_owned(), $value.to_owned());
-            )+
-            m
-        }
-     };
-    );
 
     #[test]
     fn can_parse_kernel_trap_segfault() {
@@ -1189,7 +1058,7 @@ mod test {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     signal: events::FatalSignalType::SIGSEGV,
-                    stack_dump: None,
+                    stack_dump: BTreeMap::new(),
                 }),
             })
         )
@@ -1311,15 +1180,7 @@ mod test {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
                     signal: events::FatalSignalType::SIGSEGV,
-                    stack_dump: Some(events::StackDump {
-                        cpu: 1,
-                        pid: 36075,
-                        command: "a.out".to_owned(),
-                        kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
-                        hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
-                        taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                        registers: BTreeMap::new(),
-                    })
+                    stack_dump: BTreeMap::new(),
                 }),
             })
         )

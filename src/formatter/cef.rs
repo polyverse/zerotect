@@ -18,18 +18,6 @@ mod test {
     use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
 
-    macro_rules! map(
-        { $($key:expr => $value:expr),+ } => {
-            {
-                let mut m = ::std::collections::BTreeMap::new();
-                $(
-                    m.insert($key.to_owned(), $value.to_owned());
-                )+
-                m
-            }
-         };
-        );
-
     #[test]
     fn test_linux_kernel_trap() {
         let timestamp = Utc.timestamp_millis(471804323);
@@ -76,15 +64,7 @@ mod test {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
                 signal: events::FatalSignalType::SIGSEGV,
-                stack_dump: Some(events::StackDump {
-                    cpu: 1,
-                    pid: 36075,
-                    command: "a.out".to_owned(),
-                    kernel: "Not tainted 4.14.131-linuxkit #1".to_owned(),
-                    hardware: "BHYVE, BIOS 1.00 03/14/2014".to_owned(),
-                    taskinfo: map!("task.stack" => "ffffb493c0e98000", "task" => "ffff9b08f2e1c3c0"),
-                    registers: BTreeMap::new(),
-                }),
+                stack_dump: BTreeMap::new(),
             }),
         };
 
@@ -130,5 +110,21 @@ mod test {
         let formatter = CEFFormatter {};
 
         assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
+    }
+
+    #[test]
+    fn test_zerotect_ip_probe() {
+        let timestamp = Utc.timestamp_millis(471804323);
+
+        let event1 = events::Version::V1 {
+            timestamp,
+            event: events::EventType::InstructionPointerProbe(events::InstructionPointerProbe {
+                justifying_events: vec![],
+            }),
+        };
+
+        let formatter = CEFFormatter {};
+
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|InstructionPointerProbe|Probe using Instruction Pointer Increment|10|number_of_segfaults_with_instruction_pointer_within_word_size=0");
     }
 }
