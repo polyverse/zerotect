@@ -72,7 +72,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|command=a.out cpu=1 hardware=BHYVE, BIOS 1.00 03/14/2014 kernel=Not tainted 4.14.131-linuxkit #1 pid=36075 signal=SIGSEGV task.stack=ffffb493c0e98000 task=ffff9b08f2e1c3c0"
+            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|signal=SIGSEGV"
         );
     }
 

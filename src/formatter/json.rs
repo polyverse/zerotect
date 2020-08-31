@@ -71,7 +71,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"LinuxFatalSignal\",\"level\":\"Warning\",\"facility\":\"Kern\",\"signal\":\"SIGSEGV\",\"stack_dump\":{\"cpu\":1,\"pid\":36075,\"command\":\"a.out\",\"kernel\":\"Not tainted 4.14.131-linuxkit #1\",\"hardware\":\"BHYVE, BIOS 1.00 03/14/2014\",\"taskinfo\":{\"task\":\"ffff9b08f2e1c3c0\",\"task.stack\":\"ffffb493c0e98000\"},\"registers\":{}}}}"
+            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"LinuxFatalSignal\",\"level\":\"Warning\",\"facility\":\"Kern\",\"signal\":\"SIGSEGV\",\"stack_dump\":{}}}"
         );
     }
 

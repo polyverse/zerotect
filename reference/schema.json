@@ -165,6 +165,7 @@
             "facility",
             "level",
             "signal",
+            "stack_dump",
             "type"
           ],
           "properties": {
@@ -194,14 +195,10 @@
             },
             "stack_dump": {
               "description": "An Optional Stack Dump if one was found and parsable.",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/StackDump"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             },
             "type": {
               "type": "string",
@@ -503,58 +500,6 @@
         "NoPageFound",
         "ProtectionFault"
       ]
-    },
-    "StackDump": {
-      "description": "Stack Dump (when parsed)",
-      "type": "object",
-      "required": [
-        "command",
-        "cpu",
-        "hardware",
-        "kernel",
-        "pid",
-        "registers",
-        "taskinfo"
-      ],
-      "properties": {
-        "command": {
-          "description": "Command (how was the process executed)",
-          "type": "string"
-        },
-        "cpu": {
-          "description": "Which CPU/Core it dumped on",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0.0
-        },
-        "hardware": {
-          "description": "Hardware descriptor",
-          "type": "string"
-        },
-        "kernel": {
-          "description": "Kernel descriptor",
-          "type": "string"
-        },
-        "pid": {
-          "description": "Process ID",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0.0
-        },
-        "registers": {
-          "description": "Arbitrary register value key-pairs",
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "taskinfo": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
     },
     "Version": {
       "description": "Event is the complete structure that Polycorder (Polyverse-hosted zero-day detection service) understands. This structure is also the reference schema/format for all detect-efforts.\n\nAs such, it is encouraged to have many detectors that emit data in this structure.\n\nDifferent implementations of the structure may very. Various fields may come or go.\n\nAll parsers are encouraged to first test the \"Version\" field and then parse the correct structure. The field `version` is guaranteed to exist on ALL versions and instances of Event. Any structure/data that does not contain the version field, is considered invalid.",
