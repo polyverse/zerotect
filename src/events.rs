@@ -3,8 +3,8 @@
 use chrono::{DateTime, Utc};
 use num_derive::FromPrimitive;
 use schemars::JsonSchema;
-use serde::Serialize;
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
@@ -32,6 +32,7 @@ pub type Event = Arc<Version>;
     PartialEq,
     Clone,
     Serialize,
+    Deserialize,
     JsonSchema,
     ToCef,
     CefHeaderVersion,
@@ -82,6 +83,7 @@ impl Display for Version {
     PartialEq,
     Clone,
     Serialize,
+    Deserialize,
     JsonSchema,
     CefHeaderDeviceEventClassID,
     CefHeaderName,
@@ -90,6 +92,14 @@ impl Display for Version {
 )]
 #[serde(tag = "type")]
 pub enum EventType {
+    /// An analytics-detected internal event based on other events
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "InstructionPointerProbe",
+        CefHeaderName = "Probe using Instruction Pointer Increment",
+        CefHeaderSeverity = "10"
+    )]
+    InstructionPointerProbe(#[cef_ext_gobble] InstructionPointerProbe),
+
     /// The Linux platform and event details in the Linux context
     /// A Kernel Trap event - the kernel stops process execution for attempting something stupid
     #[cef_values(
@@ -142,6 +152,12 @@ pub enum EventType {
 impl Display for EventType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
+            EventType::InstructionPointerProbe(InstructionPointerProbe {
+                justifying_events,
+            }) => {
+                write!(f,
+                    "Instruction Pointers found close to each other {} times. The set of events that justify this analyzed event are: {:?}", justifying_events.len(), justifying_events)
+            },
             EventType::LinuxKernelTrap(LinuxKernelTrap {
                 level,
                 facility,
@@ -225,7 +241,36 @@ impl Display for EventType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+/// This event represents a probe using the instruction pointer
+/// i.e. someone is exploiting a buffer overflow to visit various random
+/// instruction locations in memory and trying to execute at them.
+///
+/// The goal is to find beneficial or suitable instructions that are
+/// executable and helpful.
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct InstructionPointerProbe {
+    /// How many pairs of kernel events offcurred with an instruction pointer that was
+    /// mutually close. For example if there were 3 segfaults, each with IP:
+    /// 0x1000, 0x1008 and 0x100B, then the first two are 8-bytes apart, the next two
+    /// are 4 bytes apart. This means there were two pairs of close-IPs.
+    /// The events which justify this analytics event.
+    pub justifying_events: Vec<Event>,
+}
+
+impl rust_cef::CefExtensions for InstructionPointerProbe {
+    fn cef_extensions(
+        &self,
+        collector: &mut HashMap<String, String>,
+    ) -> rust_cef::CefExtensionsResult {
+        collector.insert(
+            "number_of_segfaults_with_instruction_pointer_within_word_size".to_owned(),
+            format!("{}", self.justifying_events.len()),
+        );
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
     /// A Log-level for this event - was it critical?
@@ -269,7 +314,7 @@ pub struct LinuxKernelTrap {
     pub vmasize: Option<usize>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct LinuxFatalSignal {
     /// A Log-level for this event - was it critical?
     pub level: LogLevel,
@@ -286,7 +331,7 @@ pub struct LinuxFatalSignal {
     pub stack_dump: Option<StackDump>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
     pub level: LogLevel,
@@ -303,7 +348,7 @@ pub struct LinuxSuppressedCallback {
     pub count: usize,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
     #[cef_ext_field]
@@ -329,6 +374,7 @@ pub struct ConfigMismatch {
     Copy,
     Clone,
     Serialize,
+    Deserialize,
     JsonSchema,
 )]
 pub enum LogFacility {
@@ -380,6 +426,7 @@ pub enum LogFacility {
     Copy,
     Clone,
     Serialize,
+    Deserialize,
     JsonSchema,
 )]
 pub enum LogLevel {
@@ -409,7 +456,7 @@ pub enum LogLevel {
 }
 
 /// The types of kernel traps understood
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
@@ -445,7 +492,7 @@ impl Display for KernelTrapType {
 }
 
 /// The reason for the Segmentation Fault
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub enum SegfaultReason {
     /// The page attempted to access was not found (i.e. in invalid memory address)
     NoPageFound,
@@ -456,7 +503,7 @@ pub enum SegfaultReason {
 }
 
 /// The type of Access that triggered this Segmentation Fault
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub enum SegfaultAccessType {
     /// Attempting to Read
     Read,
@@ -466,7 +513,7 @@ pub enum SegfaultAccessType {
 }
 
 /// The context under which the Segmentation Fault was triggered
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, JsonSchema)]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub enum SegfaultAccessMode {
     /// Process was in kernel mode (during a syscall, context switch, etc.)
     Kernel,
@@ -477,7 +524,7 @@ pub enum SegfaultAccessMode {
 /// Segmentation Fault ErrorCode flags parsed into a structure
 /// See more: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
 /// See more: https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct SegfaultErrorCode {
     /// The reason for the segmentation fault
     #[cef_ext_field]
@@ -565,7 +612,16 @@ impl Display for SegfaultErrorCode {
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
 #[derive(
-    Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, JsonSchema,
+    Debug,
+    PartialEq,
+    EnumString,
+    FromPrimitive,
+    Display,
+    Copy,
+    Clone,
+    Serialize,
+    Deserialize,
+    JsonSchema,
 )]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
@@ -660,7 +716,7 @@ pub enum FatalSignalType {
 }
 
 /// Stack Dump (when parsed)
-#[derive(Debug, PartialEq, Clone, Serialize, JsonSchema, CefExtensions)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema, CefExtensions)]
 pub struct StackDump {
     /// Which CPU/Core it dumped on
     #[cef_ext_field]

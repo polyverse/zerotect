@@ -7,6 +7,10 @@ extern crate lazy_static;
 #[macro_use]
 extern crate rust_cef_derive;
 
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;
+
 mod analyzer;
 mod emitter;
 mod events;

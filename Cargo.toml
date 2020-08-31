@@ -16,11 +16,11 @@ enum-display-derive = "0.1.0"
 num = "0.3.0"
 lazy_static = "1.4.0"
 num-traits = "0.2"
-num-derive = "0.3.1"
+num-derive = "0.3.2"
 timeout-iterator = "0.5.0"
 serde = { version = "1.0.115", features = ["derive", "rc"] }
 serde_json = { version = "1.0.57", features = ["arbitrary_precision"]}
-reqwest = { version = "0.10.7", features = ["json", "blocking", "gzip", "brotli"] }
+reqwest = { version = "0.10.8", features = ["json", "blocking", "gzip", "brotli"] }
 chrono = { version = "0.4", features = ["serde", "std"] }
 schemars = { version = "0.7.6", features = ["chrono"]}
 pretty_assertions = "0.6.1"
@@ -33,7 +33,7 @@ rust-cef-derive = "0.0.8"
 rust-cef = "0.0.5"
 fern = "0.6.0"
 syslog = "5.0.0"
-libc = "0.2.74"
+libc = "0.2.76"
 file-rotate-record-boundary = "0.3.0"
 
 [dependencies.clap]
@@ -42,6 +42,9 @@ default-features = false
 
 # Cherry-pick the features you'd like to use
 features = [ "suggestions", "color", "vec_map", "wrap_help" ]
+
+[dev-dependencies]
+assert_matches = "1.3.0"
 
 # Enable LTO for release (since it only builds in Travis and doesn't block day to day)
 [profile.release]

@@ -1,16 +1,19 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+mod eventbuffer;
+
 use crate::events;
 use crate::params;
 
 use chrono::{Duration as ChronoDuration, Utc};
-use std::collections::{HashMap, VecDeque};
+use eventbuffer::EventBuffer;
 use std::convert::TryInto;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::ops::Sub;
+use std::mem::size_of;
 use std::process;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -28,70 +31,19 @@ impl From<std::num::TryFromIntError> for AnalyzerError {
     }
 }
 
-/// A Hash(procname)->List(events) so we can look for closely-spaced events in the same procname
-struct HashList<'h> {
-    verbosity: u8,
-    default_list_capacity: usize,
-
-    // HashMap can store references that don't outlive the hashlist
-    hashlist: HashMap<&'h str, Vec<&'h events::LinuxKernelTrap>>,
-}
-
-impl<'h> HashList<'h> {
-    fn new(verbosity: u8, hashmap_capacity: usize, default_list_capacity: usize) -> HashList<'h> {
-        HashList {
-            verbosity,
-            default_list_capacity,
-            hashlist: HashMap::<&'h str, Vec<&'h events::LinuxKernelTrap>>::with_capacity(
-                hashmap_capacity,
-            ),
-        }
-    }
-
-    fn insert(&mut self, lkt: &'h events::LinuxKernelTrap) {
-        // what do we hash on? For now procname
-        // does hashlist have a Vec for this procname?
-        match self.hashlist.get_mut(lkt.procname.as_str()) {
-            None => {
-                // new list
-                let mut list =
-                    Vec::<&'h events::LinuxKernelTrap>::with_capacity(self.default_list_capacity);
-                list.push(lkt);
-                self.hashlist.insert(lkt.procname.as_str(), list);
-                if self.verbosity > 1 {
-                    eprintln!(
-                        "Analyzer: HashList: Inserted first event against procname {}.",
-                        lkt.procname
-                    )
-                }
-            }
-            Some(list) => {
-                list.push(lkt);
-                if self.verbosity > 1 {
-                    eprintln!(
-                        "Analyzer: HashList: Inserted event {} against procname {}.",
-                        list.len(),
-                        lkt.procname
-                    )
-                }
-            }
-        }
-    }
-}
-
 /// A struct with fields/associated functions
 /// to perform analysis.
 struct Analyzer {
     verbosity: u8,
 
     collection_timeout: Duration,
-    max_event_count: usize,
-    event_lifetime: ChronoDuration,
-    event_drop_count: usize,
+
+    // how close can the instruction pointer be for it to be an event?
+    ip_max_distance: usize,
 
     event_source: Receiver<events::Event>,
     detected_event_sink: Sender<events::Event>,
-    events_buffer: VecDeque<events::Event>,
+    event_buffer: EventBuffer,
 
     detected_since_last_add: bool,
 }
@@ -112,81 +64,118 @@ impl Analyzer {
         }
 
         // exit on the most trivial case
-        if self.events_buffer.len() == 0 {
+        if self.event_buffer.len() == 0 {
             if self.verbosity > 1 {
                 eprintln!("Analyzer: Skipping detection since event buffer is empty")
             }
             return;
         }
 
-        // What's the oldest event we allow to exist?
-        let oldest_allowed_instant = &Utc::now().sub(self.event_lifetime);
-        let mut hashlist =
-            HashList::new(self.verbosity, self.max_event_count, self.max_event_count);
+        // if not analyzed since last event add,
+        if !self.detected_since_last_add {
+            self.detected_since_last_add = true;
 
-        let mut removal_count: usize = 0;
-        for event in &self.events_buffer {
-            match event.as_ref() {
-                events::Version::V1 {
-                    timestamp,
-                    event: inner_event,
-                } => {
-                    // if event expired, mark it for removal
-                    if oldest_allowed_instant > timestamp {
-                        // remove this event from buffer - since only front-most events (oldest events)
-                        // would end up being removed, we remove the 0th element
-                        removal_count += 1;
-                    }
+            // store events here to send after all detection is complete
+            // this avoids mutabling borrowing self twice in one block
+            let mut detected_events: Vec<events::Event> = vec![];
 
-                    // if not analyzed since last event add,
-                    if !self.detected_since_last_add {
-                        // hash all Linux kernel traps
-                        match inner_event {
-                            events::EventType::LinuxKernelTrap(lkt) => hashlist.insert(lkt),
-                            _ => {}
+            for (_, eventslist) in self.event_buffer.iter_mut() {
+                // do we have at least 2 events?
+                if eventslist.len() <= 1 {
+                    continue; // not enough to do anything reasonable
+                }
+
+                // collect events with close-IPs (Instruction Pointer)
+                let mut close_by_ip: Vec<events::Event> = vec![];
+
+                // go over the event list and calculate ip diffs
+                // a primitive sliding-window for events
+                let mut prev_added: bool = false;
+                let mut maybe_prev_event: Option<&events::Event> = None;
+                for (_, event) in eventslist.iter() {
+                    match event.as_ref() {
+                        events::Version::V1 {
+                            timestamp: _,
+                            event: events::EventType::LinuxKernelTrap(lkt),
+                        } => {
+                            if let Some(events::Version::V1 {
+                                timestamp: _,
+                                event: events::EventType::LinuxKernelTrap(prev_lkt),
+                            }) = maybe_prev_event.map(|x| &(**x))
+                            {
+                                // analytics only works if there is a prevous event
+                                let ad = Analyzer::abs_diff(prev_lkt.ip, lkt.ip);
+
+                                // we have winner events
+                                // ignore when IP is identical across events - it may just be a legit crash.
+                                if ad != 0 && ad <= self.ip_max_distance {
+                                    if !prev_added {
+                                        // if close_by_ip is empty, add the previous event too
+                                        // we can unwrap safely - we're already inside a destructure of it
+                                        close_by_ip.push(maybe_prev_event.unwrap().clone())
+                                    }
+                                    prev_added = true;
+                                    close_by_ip.push(event.clone());
+                                } else {
+                                    prev_added = false;
+                                }
+                            }
+
+                            // Make current event the previous event
+                            maybe_prev_event = Some(event);
                         }
+
+                        // ignore everything else
+                        _ => {}
                     }
                 }
+
+                // retain unused events
+                eventslist.retain(|(_, e)| !Analyzer::used(e, &close_by_ip));
+
+                // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
+                if close_by_ip.len() > 1 {
+                    detected_events.push(Arc::new(events::Version::V1 {
+                        timestamp: Utc::now(),
+                        event: events::EventType::InstructionPointerProbe(
+                            events::InstructionPointerProbe {
+                                justifying_events: close_by_ip,
+                            },
+                        ),
+                    }));
+                }
+            }
+
+            // send all detected events
+            for detected_event in detected_events.into_iter() {
+                self.send_event(detected_event);
             }
         }
 
-        if hashlist.hashlist.len() > 0 {
-            self.detected_since_last_add = true;
-        }
+        self.event_buffer.cleanup();
+    }
 
-        // if N elements need to be removed (they had expired)
-        // drain them
-        if removal_count > 0 {
-            // mutable borrow to modify
-            let buffer: &mut VecDeque<events::Event> = &mut self.events_buffer;
-            // now remove `removal_count` number of events from the front
-            buffer.drain(0..removal_count);
-
-            if self.verbosity > 1 {
-                eprintln!("Analyzer: During detection, {} events had expired past lifetime. Dropped them (after consideration for analytics) and down to {}.", removal_count, self.events_buffer.len())
-            }
+    fn send_event(&mut self, event: events::Event) {
+        // send this event
+        match self.detected_event_sink.send(event) {
+            Err(e) => eprintln!(
+                "Analyzer: Detector unable to send detection event to output channel: {}",
+                e
+            ),
+            _ => {}
         }
     }
 
     fn buffer_event(&mut self, event: events::Event) {
-        // Step 1: Append event to to end of buffer
-        self.events_buffer.push_back(event);
+        // Append event to to end of buffer
+        self.event_buffer.insert(event);
         self.detected_since_last_add = false;
 
         // If we're at max events we can store,
-        if self.events_buffer.len() >= self.max_event_count {
-            // 1. we analyze what we have - see if there's already an event there
-            // if an event is detected, the detect function will clear out the buffer.
+        if self.event_buffer.is_full() {
+            // we analyze what we have - see if there's already an event there
+            // Detect will cleanup events.
             self.detect();
-
-            // 2. if the buffer wasn't cleared out (an attack wasn't detected?)
-            if self.events_buffer.len() >= self.max_event_count {
-                // drop a chunk of older events
-                self.events_buffer.drain(0..self.event_drop_count);
-                if self.verbosity > 1 {
-                    eprintln!("Analyzer: Event buffer was at full capacity of {}. Dropped {} events (after analytics) and down to {}.", self.max_event_count, self.event_drop_count, self.events_buffer.len())
-                }
-            }
         }
     }
 
@@ -196,13 +185,11 @@ impl Analyzer {
                 Ok(event) => match event.as_ref() {
                     events::Version::V1 {
                         timestamp: _,
-                        event: event_type,
-                    } => match event_type {
-                        events::EventType::LinuxKernelTrap(_) => self.buffer_event(event),
+                        event: events::EventType::LinuxKernelTrap(_),
+                    } => self.buffer_event(event),
 
-                        // ignore other event types for detection
-                        _ => {}
-                    },
+                    // ignore other event types for detection
+                    _ => {}
                 },
                 Err(RecvTimeoutError::Timeout) => {
                     self.detect();
@@ -215,6 +202,25 @@ impl Analyzer {
                 }
             }
         }
+    }
+
+    // This will go away after this: https://github.com/rust-lang/rust/issues/62111
+    fn abs_diff(u1: usize, u2: usize) -> usize {
+        if u1 > u2 {
+            u1 - u2
+        } else {
+            u2 - u1
+        }
+    }
+
+    fn used(e: &events::Event, used_events: &Vec<events::Event>) -> bool {
+        for used_event in used_events {
+            if e == used_event {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -255,15 +261,21 @@ pub fn analyze(
                 verbosity,
 
                 collection_timeout,
-                max_event_count,
-                event_lifetime,
-                event_drop_count,
+
+                // if IP is within usize then someone's jumping within the size of an instruction.
+                // segfaults usually don't happen that close to each other.
+                ip_max_distance: size_of::<usize>(),
 
                 event_source: inner_analyzer_source,
                 detected_event_sink: detected_events_sink,
 
                 // let's not make this reallocate
-                events_buffer: VecDeque::with_capacity(config.max_event_count),
+                event_buffer: EventBuffer::new(
+                    verbosity,
+                    max_event_count,
+                    event_drop_count,
+                    event_lifetime,
+                ),
 
                 detected_since_last_add: true,
             };
@@ -293,5 +305,250 @@ pub fn analyze(
                 return Err(AnalyzerError(format!("Analyzer: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e)));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_json::{from_str, from_value};
+    use std::time::Duration;
+
+    #[test]
+    fn test_ip_probe() {
+        let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
+            channel();
+
+        let (analyzer_out, detected_events_in): (Sender<events::Event>, Receiver<events::Event>) =
+            channel();
+
+        thread::spawn(move || {
+            let mut analyzer = Analyzer {
+                verbosity: 0,
+
+                // analyze after 2 seconds of no events
+                collection_timeout: Duration::from_secs(2),
+
+                // if IP is within usize then someone's jumping within the size of an instruction.
+                // segfaults usually don't happen that close to each other.
+                ip_max_distance: size_of::<usize>(),
+
+                event_source: analyzer_in,
+                detected_event_sink: analyzer_out,
+
+                // let's not make this reallocate
+                event_buffer: EventBuffer::new(
+                    0,
+                    20,
+                    5,
+                    ChronoDuration::from_std(Duration::from_secs(5)).unwrap(),
+                ),
+
+                detected_since_last_add: true,
+            };
+
+            // ignore result
+            match analyzer.analyze_forever() {
+                _ => {}
+            }
+        });
+
+        let raw_events = get_close_ip_events();
+        for event in raw_events.iter() {
+            assert!(test_events_out.send(event.clone()).is_ok());
+        }
+
+        // sleep 3 seconds for analytics to happen
+        thread::sleep(Duration::from_secs(3));
+
+        // expect raw_events+1 detected
+        let er = detected_events_in.recv_timeout(Duration::from_secs(1));
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::InstructionPointerProbe(_)});
+    }
+
+    fn get_close_ip_events() -> Vec<events::Event> {
+        vec![
+            Arc::new(
+                from_value(
+                    from_str::<serde_json::Value>(
+                        r#"{
+                    "version":"V1",
+                    "timestamp":"2020-08-31T16:21:34.078978600Z",
+                    "event":{
+                        "type":"LinuxKernelTrap",
+                        "level":"Info",
+                        "facility":"Kern",
+                        "trap":{
+                            "type":"InvalidOpcode"
+                        },
+                        "procname":"nginx",
+                        "pid":38653,
+                        "ip":4392210,
+                        "sp":140732453045232,
+                        "errcode":{
+                            "reason":"NoPageFound",
+                            "access_type":"Read",
+                            "access_mode":"Kernel",
+                            "use_of_reserved_bit":false,
+                            "instruction_fetch":false,
+                            "protection_keys_block_access":false
+                        },
+                        "file":"nginx",
+                        "vmastart":4194304,
+                        "vmasize":774144
+                    }
+                }"#,
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+            Arc::new(
+                from_value(
+                    from_str::<serde_json::Value>(
+                        r#"{
+                    "version":"V1",
+                    "timestamp":"2020-08-31T16:21:34.100803600Z",
+                    "event":{
+                        "type":"LinuxKernelTrap",
+                        "level":"Info",
+                        "facility":"Kern",
+                        "trap":{
+                            "type":"Segfault",
+                            "location":18446744073709551614
+                        },
+                        "procname":"nginx",
+                        "pid":38656,
+                        "ip":4392218,
+                        "sp":140732453045232,
+                        "errcode":{
+                            "reason":"ProtectionFault",
+                            "access_type":"Write",
+                            "access_mode":"User",
+                            "use_of_reserved_bit":false,
+                            "instruction_fetch":false,
+                            "protection_keys_block_access":false
+                        },
+                        "file":"nginx",
+                        "vmastart":4194304,
+                        "vmasize":774144
+                    }
+            }"#,
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+            Arc::new(
+                from_value(
+                    from_str::<serde_json::Value>(
+                        r#"{
+                        "version":"V1",
+                        "timestamp":"2020-08-31T16:21:34.122534600Z",
+                        "event":{
+                            "type":"LinuxKernelTrap",
+                            "level":"Info",
+                            "facility":"Kern",
+                            "trap":{
+                                "type":"InvalidOpcode"
+                            },
+                            "procname":"nginx",
+                            "pid":38659,
+                            "ip":4392224,
+                            "sp":140732453045232,
+                            "errcode":{
+                                "reason":"NoPageFound",
+                                "access_type":"Read",
+                                "access_mode":"Kernel",
+                                "use_of_reserved_bit":false,
+                                "instruction_fetch":false,
+                                "protection_keys_block_access":false
+                            },
+                            "file":"nginx",
+                            "vmastart":4194304,
+                            "vmasize":774144
+                        }
+                }"#,
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+            Arc::new(
+                from_value(
+                    from_str::<serde_json::Value>(
+                        r#"{
+                        "version":"V1",
+                        "timestamp":"2020-08-31T16:21:34.144860600Z",
+                        "event":{
+                            "type":"LinuxKernelTrap",
+                            "level":"Info",
+                            "facility":"Kern",
+                            "trap":{
+                                "type":"Segfault",
+                                "location":18446744073709551614
+                            },
+                            "procname":"nginx",
+                            "pid":38662,
+                            "ip":4392234,
+                            "sp":140732453045232,
+                            "errcode":{
+                                "reason":"ProtectionFault",
+                                "access_type":"Write",
+                                "access_mode":"User",
+                                "use_of_reserved_bit":false,
+                                "instruction_fetch":false,
+                                "protection_keys_block_access":false
+                            },
+                            "file":"nginx",
+                            "vmastart":4194304,
+                            "vmasize":774144
+                        }
+                }"#,
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+            Arc::new(
+                from_value(
+                    from_str::<serde_json::Value>(
+                        r#"{
+                        "version":"V1",
+                        "timestamp":"2020-08-31T16:21:34.166785600Z",
+                        "event":{
+                            "type":"LinuxKernelTrap",
+                            "level":"Info","facility":"Kern",
+                            "trap":{
+                                "type":"Segfault",
+                                "location":4518893
+                            },
+                            "procname":"nginx",
+                            "pid":38665,
+                            "ip":4392240,
+                            "sp":140732453045232,
+                            "errcode":{
+                                "reason":"ProtectionFault",
+                                "access_type":"Write",
+                                "access_mode":"User",
+                                "use_of_reserved_bit":false,
+                                "instruction_fetch":false,
+                                "protection_keys_block_access":false
+                            },
+                            "file":"nginx",
+                            "vmastart":4194304,
+                            "vmasize":774144
+                        }
+                }"#,
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+        ]
     }
 }

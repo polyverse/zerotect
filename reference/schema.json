@@ -39,6 +39,29 @@
       "description": "The Platform this event originated on.",
       "anyOf": [
         {
+          "description": "An analytics-detected internal event based on other events",
+          "type": "object",
+          "required": [
+            "justifying_events",
+            "type"
+          ],
+          "properties": {
+            "justifying_events": {
+              "description": "How many pairs of kernel events offcurred with an instruction pointer that was mutually close. For example if there were 3 segfaults, each with IP: 0x1000, 0x1008 and 0x100B, then the first two are 8-bytes apart, the next two are 4 bytes apart. This means there were two pairs of close-IPs. The events which justify this analytics event.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Version"
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "InstructionPointerProbe"
+              ]
+            }
+          }
+        },
+        {
           "description": "The Linux platform and event details in the Linux context A Kernel Trap event - the kernel stops process execution for attempting something stupid",
           "type": "object",
           "required": [
@@ -532,6 +555,41 @@
           }
         }
       }
+    },
+    "Version": {
+      "description": "Event is the complete structure that Polycorder (Polyverse-hosted zero-day detection service) understands. This structure is also the reference schema/format for all detect-efforts.\n\nAs such, it is encouraged to have many detectors that emit data in this structure.\n\nDifferent implementations of the structure may very. Various fields may come or go.\n\nAll parsers are encouraged to first test the \"Version\" field and then parse the correct structure. The field `version` is guaranteed to exist on ALL versions and instances of Event. Any structure/data that does not contain the version field, is considered invalid.",
+      "anyOf": [
+        {
+          "description": "Version is guaranteed to exist. All other fields may change or not exist, and it is recommended to use a different version when making breaking changes to all other fields. It allows parsers to test on version and determine if they know what to do with the rest. For this particular variant, set DeviceVersion to a fixed value \"V1\"",
+          "type": "object",
+          "required": [
+            "event",
+            "timestamp",
+            "version"
+          ],
+          "properties": {
+            "event": {
+              "description": "Platform records fields specific to a specific mechanism/platform.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/EventType"
+                }
+              ]
+            },
+            "timestamp": {
+              "description": "This is universal and important for all events. They occur at a time.",
+              "type": "string",
+              "format": "date-time"
+            },
+            "version": {
+              "type": "string",
+              "enum": [
+                "V1"
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }
