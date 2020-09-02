@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/polyverse/zerotect.svg?branch=master)](https://travis-ci.org/polyverse/zerotect)
 
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](code_of_conduct.md) 
+
 ## Table of Contents
 
 * [What is Zerotect](#what-is-zerotect)
