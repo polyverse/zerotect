@@ -13,6 +13,7 @@
     * [Understanding the minimal configuration](#understanding-the-minimal-configuration)
   * [All CLI options](#all-cli-options)
 * [Zerotect Log Format](#zerotect-log-format)
+* [Contributing](#contributing)
 
 ## What is Zerotect
 
@@ -106,3 +107,9 @@ OPTIONS:
 [schema.json](./reference/schema.json) is the authoritative log format.
 
 You may use it to generate parsers. The schema contains documentation comments, explanations of fields, and so forth.
+
+## Contributing
+
+We believe that open-source and robust community contributions make everyone safer, therefore we accept pretty much ALL contributions so long as: (a) They don't break an existing use-case or dependant (b) They don't do something that is wildly out of scope of the project.
+
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md), and our [Contribution Guidelines](CONTRIBUTING.md) before starting work on a new feature.

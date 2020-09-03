@@ -30,3 +30,13 @@ Please note we have a [Code of Conduct](CODE_OF_CONDUCT.md), please follow it in
    variables, exposed ports, useful file locations and container parameters.
 3. Once approved, the reviewer will merge your Pull Request.
 
+## Reporting a Bug
+
+1. Install the latest version of Zerotect, and try to reproduce the bug. You can find installation and uninstallation 
+   instructions [here](install/README.md).
+2. Look at our [issue tracker](https://github.com/polyverse/zerotect/issues) to make sure someone else hasn't reported the same bug.
+3. If nobody else has reported the issue, create a bug report! Use the following format:
+   - Hardware, distro, distro version, Zerotect version used
+   - Expected behavior
+   - Actual behavior
+   - Repro steps
