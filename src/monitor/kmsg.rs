@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 pub type KMsgPtr = Box<KMsg>;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct KMsg {
     pub timestamp: DateTime<Utc>,
     pub facility: events::LogFacility,

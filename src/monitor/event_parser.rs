@@ -392,29 +392,27 @@ mod test {
     use serde_json::{from_str, to_value};
     use std::thread;
 
+    macro_rules! map(
+        { $($key:expr => $value:expr),+ } => {
+            {
+                let mut m = ::std::collections::BTreeMap::<String, String>::new();
+                $(
+                    m.insert(String::from($key), String::from($value));
+                )+
+                m
+            }
+         };
+    );
+
     #[test]
     fn can_parse_kernel_trap_segfault() {
         let timestamp = Utc.timestamp_millis(378084605);
-        let kmsgs = vec![
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
-            }),
-        ];
+        let kmsgs = boxed_kmsgs(timestamp,
+                vec![
+                    String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                    String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                    String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
+                ]);
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
@@ -615,20 +613,11 @@ mod test {
     fn can_parse_kernel_trap_invalid_opcode() {
         let timestamp = Utc.timestamp_millis(5606197845);
 
-        let kmsgs = vec![
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
-            }),
-        ];
+        let kmsgs = boxed_kmsgs(timestamp,
+            vec![
+                String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
+                String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
+            ]);
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
@@ -763,18 +752,8 @@ mod test {
         let timestamp = Utc.timestamp_millis(471804323);
 
         let kmsgs = vec![
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
-            }),
+            boxed_kmsg(timestamp, String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]")),
+            boxed_kmsg(timestamp, String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4")),
         ];
 
         let event1 = Arc::new(events::Version::V1 {
@@ -914,38 +893,14 @@ mod test {
     #[test]
     fn can_parse_kernel_trap_general_protection() {
         let timestamp = Utc.timestamp_millis(378084605);
-        let kmsgs = vec![
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from("traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from("  traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" traps:   nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from(" nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
-            }),
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
-                message: String::from("nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
-            }),
-        ];
+        let kmsgs = boxed_kmsgs(timestamp,
+                vec![
+                    String::from("traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+                    String::from("  traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+                    String::from(" traps:   nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+                    String::from(" nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+                    String::from("nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
+                ]);
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
@@ -1066,124 +1021,132 @@ mod test {
 
     #[test]
     fn can_parse_fatal_signal_11() {
-        let kmsgs = vec![
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372858970),
-                message: String::from("potentially unexpected fatal signal 11."),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372852970),
-                message: String::from(
-                    "CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372855970),
-                message: String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372850970),
-                message: String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372858970),
-                message: String::from("RIP: 0033:0x561bc8d8f12e"),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372851970),
-                message: String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372856970),
-                message: String::from(
-                    "RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372857970),
-                message: String::from(
-                    "RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372855970),
-                message: String::from(
-                    "RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372852970),
-                message: String::from(
-                    "R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372850970),
-                message: String::from(
-                    "R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372856970),
-                message: String::from(
-                    "FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
-                ),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372853970),
-                message: String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
-            }),
-            Box::new(kmsg::KMsg {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp: Utc.timestamp_millis(6433742 + 372854970),
-                message: String::from(
-                    "CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0",
-                ),
-            }),
-        ];
+        let timestamp = Utc.timestamp_millis(6433742 + 372858970);
+        let mut kmsgs = boxed_kmsgs(timestamp,
+            vec![
+                String::from("potentially unexpected fatal signal 11."),
+                String::from("CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1"),
+                String::from("Hardware name:  BHYVE, BIOS 1.00 03/14/2014"),
+                String::from("task: ffff9b08f2e1c3c0 task.stack: ffffb493c0e98000"),
+                String::from("RIP: 0033:0x561bc8d8f12e"),
+                String::from("RSP: 002b:00007ffd5833d0c0 EFLAGS: 00010246"),
+                String::from("RAX: 0000000000000000 RBX: 0000000000000000 RCX: 00007fd15e0e0718"),
+                String::from("RDX: 00007ffd5833d1b8 RSI: 00007ffd5833d1a8 RDI: 0000000000000001"),
+                String::from("RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80"),
+                String::from("R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040"),
+                String::from("R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000"),
+                String::from("FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000"),
+                String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
+                String::from("CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0"),
+            ]);
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
-        let sig11 = parser.next();
-        assert!(sig11.is_some());
-        assert_eq!(
-            sig11.unwrap(),
-            Arc::new(events::Version::V1 {
-                timestamp: Utc.timestamp_millis(6433742 + 372858970),
-                event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning,
-                    signal: events::FatalSignalType::SIGSEGV,
-                    stack_dump: BTreeMap::new(),
-                }),
-            })
-        )
+        { // Validate when new kmsg's stop coming in (at timeout).
+            let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.clone().into_iter()), 0).unwrap();
+            let sig11 = parser.next();
+            assert!(sig11.is_some());
+            assert_eq!(
+                sig11.unwrap(),
+                Arc::new(events::Version::V1 {
+                    timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
+                        facility: events::LogFacility::Kern,
+                        level: events::LogLevel::Warning,
+                        signal: events::FatalSignalType::SIGSEGV,
+                        stack_dump: map!{
+                            "CPU" => "1",
+                            "PID" => "36075",
+                            "Comm" => "a.out Not tainted 4.14.131-linuxkit #1",
+                            "Hardware name" => "BHYVE, BIOS 1.00 03/14/2014",
+                            "task" => "ffff9b08f2e1c3c0",
+                            "task.stack" => "ffffb493c0e98000",
+                            "RIP" => "0033:0x561bc8d8f12e",
+                            "RSP" => "002b:00007ffd5833d0c0",
+                            "EFLAGS" => "00010246",
+                            "RBX" => "0000000000000000",
+                            "RAX" => "0000000000000000",
+                            "RCX" => "00007fd15e0e0718",
+                            "RDX" => "00007ffd5833d1b8",
+                            "RSI" => "00007ffd5833d1a8",
+                            "RDI" => "0000000000000001",
+                            "RBP" => "00007ffd5833d0c0",
+                            "R08" => "00007fd15e0e1d80",
+                            "R09" => "00007fd15e0e1d80",
+                            "R10" => "0000000000000000",
+                            "R11" => "0000000000000000",
+                            "R12" => "0000561bc8d8f040",
+                            "R13" => "00007ffd5833d1a0",
+                            "R14" => "0000000000000000",
+                            "R15" => "0000000000000000",
+                            "FS" => "00007fd15e0e7500(0000)",
+                            "GS" => "ffff9b08ffd00000(0000)",
+                            "knlGS" => "0000000000000000",
+                            "CS" => "0010",
+                            "DS" => "0000",
+                            "ES" => "0000",
+                            "CR0" => "0000000080050033",
+                            "CR2" => "0000000000000000",
+                            "CR3" => "0000000132d26005",
+                            "CR4" => "00000000000606a0"
+                        },
+                    }),
+                })
+            )
+        }
+
+        { // Validate when new kmsg's stop bring KV/pairs
+            kmsgs.push(boxed_kmsg(timestamp, String::from("An unrelated message")));
+
+            let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+            let sig11 = parser.next();
+            assert!(sig11.is_some());
+            assert_eq!(
+                sig11.unwrap(),
+                Arc::new(events::Version::V1 {
+                    timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
+                        facility: events::LogFacility::Kern,
+                        level: events::LogLevel::Warning,
+                        signal: events::FatalSignalType::SIGSEGV,
+                        stack_dump: map!{
+                            "CPU" => "1",
+                            "PID" => "36075",
+                            "Comm" => "a.out Not tainted 4.14.131-linuxkit #1",
+                            "Hardware name" => "BHYVE, BIOS 1.00 03/14/2014",
+                            "task" => "ffff9b08f2e1c3c0",
+                            "task.stack" => "ffffb493c0e98000",
+                            "RIP" => "0033:0x561bc8d8f12e",
+                            "RSP" => "002b:00007ffd5833d0c0",
+                            "EFLAGS" => "00010246",
+                            "RBX" => "0000000000000000",
+                            "RAX" => "0000000000000000",
+                            "RCX" => "00007fd15e0e0718",
+                            "RDX" => "00007ffd5833d1b8",
+                            "RSI" => "00007ffd5833d1a8",
+                            "RDI" => "0000000000000001",
+                            "RBP" => "00007ffd5833d0c0",
+                            "R08" => "00007fd15e0e1d80",
+                            "R09" => "00007fd15e0e1d80",
+                            "R10" => "0000000000000000",
+                            "R11" => "0000000000000000",
+                            "R12" => "0000561bc8d8f040",
+                            "R13" => "00007ffd5833d1a0",
+                            "R14" => "0000000000000000",
+                            "R15" => "0000000000000000",
+                            "FS" => "00007fd15e0e7500(0000)",
+                            "GS" => "ffff9b08ffd00000(0000)",
+                            "knlGS" => "0000000000000000",
+                            "CS" => "0010",
+                            "DS" => "0000",
+                            "ES" => "0000",
+                            "CR0" => "0000000080050033",
+                            "CR2" => "0000000000000000",
+                            "CR3" => "0000000132d26005",
+                            "CR4" => "00000000000606a0"
+                        },
+                    }),
+                })
+            )
+        }
     }
 
     #[test]
@@ -1266,5 +1229,21 @@ mod test {
                 ),
             })
         )
+    }
+
+
+    fn boxed_kmsg(timestamp: chrono::DateTime<Utc>, message: String) -> Box<kmsg::KMsg> {
+        Box::new(kmsg::KMsg {
+            facility: events::LogFacility::Kern,
+            level: events::LogLevel::Warning,
+            timestamp,
+            message,
+        })
+    }
+
+    fn boxed_kmsgs(timestamp: chrono::DateTime<Utc>, messages: Vec<String>) -> Vec<Box<kmsg::KMsg>> {
+        messages.into_iter().map(|message|
+            boxed_kmsg(timestamp, message)
+        ).collect()
     }
 }
