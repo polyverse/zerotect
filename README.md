@@ -14,6 +14,7 @@
   * [All CLI options](#all-cli-options)
 * [Zerotect Log Format](#zerotect-log-format)
 * [Contributing](#contributing)
+* [Zero Day Reward Program](#zero-day-reward-program)
 
 ## What is Zerotect
 
@@ -110,6 +111,18 @@ You may use it to generate parsers. The schema contains documentation comments, 
 
 ## Contributing
 
-We believe that open-source and robust community contributions make everyone safer, therefore we accept pretty much ALL contributions so long as: (a) They don't break an existing use-case or dependant (b) They don't do something that is wildly out of scope of the project.
+We believe that open-source and robust community contributions make everyone safer, 
+therefore we accept pretty much ALL contributions so long as: (a) They don't break an 
+existing use-case or dependency and (b) They don't do something that is wildly out of scope of the project.
 
-Please read our [Code of Conduct](CODE_OF_CONDUCT.md), and our [Contribution Guidelines](CONTRIBUTING.md) before starting work on a new feature.
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md), and our [Contribution Guidelines](CONTRIBUTING.md) before starting work on a new feature or bug.
+
+# Zero Day Reward Program
+
+Memory and overflow attacks are very difficult to detect, which is the reason we built Zerotect in the first place.
+In order to encourage security professonals and enthusiasts to look for this class of attacks, we've started the
+Zero Day Reward Program. We're giving $1000 rewards to people and institutions that report evidence of real-world
+memory-based attacks using Zerotect. See the [terms and conditions](https://polyverse.com/zerotect-terms-and-conditions/)
+for more information.
+
+You can report evidence of a real-world atack using our [live attack form](https://info.polyverse.com/zerotect-contest).
