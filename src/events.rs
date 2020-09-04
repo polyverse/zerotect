@@ -100,6 +100,14 @@ pub enum EventType {
     )]
     InstructionPointerProbe(#[cef_ext_gobble] InstructionPointerProbe),
 
+    /// An analytics-detected internal event based on other events
+    #[cef_values(
+        CefHeaderDeviceEventClassID = "RegisterProbe",
+        CefHeaderName = "Probe using Register Increment",
+        CefHeaderSeverity = "10"
+    )]
+    RegisterProbe(#[cef_ext_gobble] RegisterProbe),
+
     /// The Linux platform and event details in the Linux context
     /// A Kernel Trap event - the kernel stops process execution for attempting something stupid
     #[cef_values(
@@ -253,6 +261,38 @@ pub struct InstructionPointerProbe {
 }
 
 impl rust_cef::CefExtensions for InstructionPointerProbe {
+    fn cef_extensions(
+        &self,
+        collector: &mut HashMap<String, String>,
+    ) -> rust_cef::CefExtensionsResult {
+        collector.insert(
+            "number_of_segfaults_with_instruction_pointer_within_word_size".to_owned(),
+            format!("{}", self.justifying_events.len()),
+        );
+        Ok(())
+    }
+}
+
+/// This event represents a probe using a Register
+/// i.e. someone is probing/fuzzing a program with different values of
+/// a particular register.
+///
+/// When probing a stack canary, RDI/RSI increment by one value, for instance.
+///
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RegisterProbe {
+    /// Which register was being probed?
+    pub register: String,
+
+    /// What does this probe mean? What interpretation could this
+    /// particular register probe have?
+    pub message: String,
+
+    /// The raw events which justify this analytics event.
+    pub justifying_events: Vec<Event>,
+}
+
+impl rust_cef::CefExtensions for RegisterProbe {
     fn cef_extensions(
         &self,
         collector: &mut HashMap<String, String>,
