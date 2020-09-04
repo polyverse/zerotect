@@ -1,13 +1,13 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-mod eventbuffer;
 mod close_by_ip_detect;
 mod close_by_register_detect;
+mod eventbuffer;
 
 use crate::events;
 use crate::params;
 
-use chrono::{Duration as ChronoDuration, DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use eventbuffer::EventBuffer;
 use std::convert::TryInto;
 use std::error;
@@ -90,20 +90,35 @@ impl Analyzer {
                     continue; // not enough to do anything reasonable
                 }
 
-                if let Some((detected_event, mut events_used_for_detection)) = close_by_ip_detect(eventslist, self.ip_max_distance, 1) {
-                    detected_events.push(detected_event);
-                    used_events.append(&mut events_used_for_detection)
-                }
-
-
                 if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_register_detect(eventslist, "RDI", 1, 8, "An RDI probe would be an attempt to discover the Stack Canary") {
+                    close_by_ip_detect(eventslist, self.ip_max_distance, 1)
+                {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
 
                 if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_register_detect(eventslist, "RSI", 1, 8, "An RSI probe would be an attempt to discover the Stack Canary") {
+                    close_by_register_detect(
+                        eventslist,
+                        "RDI",
+                        1,
+                        8,
+                        "An RDI probe would be an attempt to discover the Stack Canary",
+                    )
+                {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
+                }
+
+                if let Some((detected_event, mut events_used_for_detection)) =
+                    close_by_register_detect(
+                        eventslist,
+                        "RSI",
+                        1,
+                        8,
+                        "An RSI probe would be an attempt to discover the Stack Canary",
+                    )
+                {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
@@ -160,7 +175,7 @@ impl Analyzer {
                         // comm is process name
                         Some(comm) => self.buffer_event(timestamp.clone(), comm.clone(), event),
                         // Ignore event without a command
-                        None => {},
+                        None => {}
                     },
 
                     // ignore other event types for detection
@@ -277,12 +292,11 @@ pub fn analyze(
 #[cfg(test)]
 mod test {
     use super::*;
-    use serde_json::{from_str, from_value};
-    use std::time::Duration;
-    use std::collections::BTreeMap;
     use chrono::Utc;
+    use serde_json::{from_str, from_value};
+    use std::collections::BTreeMap;
     use std::sync::Arc;
-
+    use std::time::Duration;
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {
@@ -298,7 +312,6 @@ mod test {
 
     #[test]
     fn test_ip_probe() {
-
         let er = run_analytics(get_close_ip_events());
 
         assert!(
@@ -310,11 +323,12 @@ mod test {
 
     #[test]
     fn test_register_probe() {
-
         // give it some very close RDI values - increment by 1
         let mut close_rdi_events = Vec::<events::Event>::new();
         for rdi in 0x0000000000000889..0x0000000000000b65 {
-            close_rdi_events.push(fatal_with_registers(map!{"RDI" => format!("{:016x}", rdi)}));
+            close_rdi_events.push(fatal_with_registers(
+                map! {"RDI" => format!("{:016x}", rdi)},
+            ));
         }
 
         let er = run_analytics(close_rdi_events);
@@ -323,12 +337,12 @@ mod test {
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::InstructionPointerProbe(_)});
+        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::RegisterProbe(_)});
     }
 
     fn run_analytics(events: Vec<events::Event>) -> Result<events::Event, RecvTimeoutError> {
         let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
-        channel();
+            channel();
 
         let (analyzer_out, detected_events_in): (Sender<events::Event>, Receiver<events::Event>) =
             channel();
@@ -593,9 +607,9 @@ mod test {
             stack_dump.insert(k, v);
         }
 
-        Arc::new(events::Version::V1{
+        Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
-            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal{
+            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 level: events::LogLevel::Info,
                 facility: events::LogFacility::Kern,
                 signal: events::FatalSignalType::SIGIOT,

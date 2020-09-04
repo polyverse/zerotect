@@ -10,9 +10,6 @@ pub fn close_by_register_detect(
     justification_count: usize,
     message: &str,
 ) -> Option<(events::Event, Vec<events::Event>)> {
-
-    eprintln!("=====================> Register analyzing {} events.", eventslist.len());
-
     // collect events with close-IPs (Instruction Pointer)
     let mut close_by_register: Vec<events::Event> = vec![];
 
@@ -26,8 +23,6 @@ pub fn close_by_register_detect(
                 timestamp: _,
                 event: events::EventType::LinuxFatalSignal(lfs),
             } => {
-                eprintln!("=====================> Stack Dump: {:?}", lfs.stack_dump);
-
                 if let Some(events::Version::V1 {
                     timestamp: _,
                     event: events::EventType::LinuxFatalSignal(prev_lfs),
@@ -44,7 +39,6 @@ pub fn close_by_register_detect(
                             .map(|v| parse_hex::<usize>(v))
                             .flatten(),
                     ) {
-                        eprintln!("=====================> Comparing RDI: {} and {}.", prev_register_val, register_val);
                         // analytics only works if there is a prevous event
                         let ad = abs_diff(prev_register_val, register_val);
 

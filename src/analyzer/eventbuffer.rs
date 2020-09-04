@@ -205,10 +205,10 @@ impl EventBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand;
     use std::sync::Arc;
     use std::thread::sleep;
     use std::time::Duration;
-    use rand;
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {

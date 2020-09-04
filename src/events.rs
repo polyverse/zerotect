@@ -668,15 +668,7 @@ impl Display for SegfaultErrorCode {
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
 #[derive(
-    Debug,
-    PartialEq,
-    EnumString,
-    FromPrimitive,
-    Display,
-    Copy,
-    Clone,
-    Serialize,
-    Deserialize
+    Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, Deserialize,
 )]
 #[cfg_attr(test, derive(JsonSchema))]
 pub enum FatalSignalType {
