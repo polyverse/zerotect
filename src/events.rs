@@ -160,6 +160,14 @@ pub enum EventType {
 impl Display for EventType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
+            EventType::RegisterProbe(RegisterProbe {
+                register,
+                message,
+                justifying_events,
+            }) => {
+                write!(f,
+                    "Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", register, justifying_events.len(), message, justifying_events)
+            },
             EventType::InstructionPointerProbe(InstructionPointerProbe {
                 justifying_events,
             }) => {
