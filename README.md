@@ -19,13 +19,13 @@
 ## What is Zerotect
 
 Detecting malicious scans can be the first indicator of a potential attack.
-Detecting things like port scans is commonplace in security circles, but how
+Watching for things like port scans is commonplace in security circles, but how
 do you detect a BROP attack, or any other kind of buffer-overflow attack for 
 that matter?
 
 Zerotect is a small open source agent that monitors kernel logs to 
-look for conclusive proof of memory-based exploits from the side-effects of these 
-attacks that appear in the form of process crashes (faults). Zerotect doesn't
+look for conclusive proof of memory-based exploits from the side-effects of memory-based 
+attacks. These appear in the form of process crashes (faults). Zerotect doesn't
 actively intercept network traffic, but instead, passively monitors kernel logs for
 anomalies. This means the attack surface of your servers isn't increased, and the stability
 of Zerotect doesn't affect the stability of anything else on the system.
@@ -65,18 +65,15 @@ The two most common modes for Zerotect are:
     exception_trace = true
     fatal_signals = true
 
-    [polycorder_config]
-    auth_key = 'AuthKeyFromPolyverseAccountManager'
     ```
 
     See [Reference config.toml](./reference/config.toml) for all the options.
 
 #### Understanding the minimal configuration
 
-1. *--auto-configure*: This option commands Zerotect to set a kernel flags on your behalf. This can be very convenient to both configure the right traces, and ensure the traces stay enabled. You can specify this option multiple times with different values to auto-configure:
+- *--auto-configure*: This option commands Zerotect to set a kernel flags on your behalf. This can be very convenient to both configure the right traces, and ensure the traces stay enabled. You can specify this option multiple times with different values to auto-configure:
     * *debug.exception-trace*: enables writing exception traces to `/dev/kmsg`  (the kernel message buffer.)
     * *kernel.print-fatal-signals*: enables writing fatal signals to `/dev/kmsg` (the kernel message buffer.)
-2. *-p, --polycorder \<authkey\>*: Setting this option commands zerotect to set detected events to the online Polycorder endpoint for pre-build detection analytics. It requires an authkey provisioned in the [Polyverse Account Manager](https://polyverse.com).
 
 #### Required access to `/dev/kmsg`
 
@@ -103,7 +100,6 @@ OPTIONS:
         --configfile <filepath>                                Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)
         --auto-configure <sysctl-flag-to-auto-configure>...    Automatically configure the system on the user\'s behalf. [possible values: debug.exception-trace, kernel.print-fatal-signals]
         --console <format>                                     Prints all monitored data to the console in the specified format. [possible values: text, json]
-        --polycorder <authkey>                                 Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.
         --node <node_identifier>                               All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.
 ```
 
