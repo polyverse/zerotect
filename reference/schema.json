@@ -62,6 +62,39 @@
           }
         },
         {
+          "description": "An analytics-detected internal event based on other events",
+          "type": "object",
+          "required": [
+            "justifying_events",
+            "message",
+            "register",
+            "type"
+          ],
+          "properties": {
+            "justifying_events": {
+              "description": "The raw events which justify this analytics event.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Version"
+              }
+            },
+            "message": {
+              "description": "What does this probe mean? What interpretation could this particular register probe have?",
+              "type": "string"
+            },
+            "register": {
+              "description": "Which register was being probed?",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "RegisterProbe"
+              ]
+            }
+          }
+        },
+        {
           "description": "The Linux platform and event details in the Linux context A Kernel Trap event - the kernel stops process execution for attempting something stupid",
           "type": "object",
           "required": [

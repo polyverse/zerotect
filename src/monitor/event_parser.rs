@@ -1214,7 +1214,7 @@ mod test {
             let mut parser = EventParser::from_kmsg_iterator(
                 Box::new(kmsgs.into_iter()),
                 Duration::from_secs(1),
-                2,
+                0,
             )
             .unwrap();
             let sig11 = parser.next();

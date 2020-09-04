@@ -1,13 +1,13 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+mod eventbuffer;
 mod close_by_ip_detect;
 mod close_by_register_detect;
-mod eventbuffer;
 
 use crate::events;
 use crate::params;
 
-use chrono::Duration as ChronoDuration;
+use chrono::{Duration as ChronoDuration, DateTime, Utc};
 use eventbuffer::EventBuffer;
 use std::convert::TryInto;
 use std::error;
@@ -90,35 +90,20 @@ impl Analyzer {
                     continue; // not enough to do anything reasonable
                 }
 
+                if let Some((detected_event, mut events_used_for_detection)) = close_by_ip_detect(eventslist, self.ip_max_distance, 1) {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
+                }
+
+
                 if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_ip_detect(eventslist, self.ip_max_distance, 1)
-                {
+                    close_by_register_detect(eventslist, "RDI", 1, 8, "An RDI probe would be an attempt to discover the Stack Canary") {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
 
                 if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_register_detect(
-                        eventslist,
-                        "RDI",
-                        1,
-                        4,
-                        "An RDI probe would be an attempt to discover the Stack Canary",
-                    )
-                {
-                    detected_events.push(detected_event);
-                    used_events.append(&mut events_used_for_detection)
-                }
-
-                if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_register_detect(
-                        eventslist,
-                        "RSI",
-                        1,
-                        4,
-                        "An RSI probe would be an attempt to discover the Stack Canary",
-                    )
-                {
+                    close_by_register_detect(eventslist, "RSI", 1, 8, "An RSI probe would be an attempt to discover the Stack Canary") {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
@@ -147,9 +132,9 @@ impl Analyzer {
         }
     }
 
-    fn buffer_event(&mut self, event: events::Event) {
+    fn buffer_event(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
         // Append event to to end of buffer
-        self.event_buffer.insert(event);
+        self.event_buffer.insert(timestamp, procname, event);
         self.detected_since_last_add = false;
 
         // If we're at max events we can store,
@@ -165,13 +150,18 @@ impl Analyzer {
             match self.event_source.recv_timeout(self.collection_timeout) {
                 Ok(event) => match event.as_ref() {
                     events::Version::V1 {
-                        timestamp: _,
-                        event: events::EventType::LinuxKernelTrap(_),
-                    }
-                    | events::Version::V1 {
-                        timestamp: _,
-                        event: events::EventType::LinuxFatalSignal(_),
-                    } => self.buffer_event(event),
+                        timestamp,
+                        event: events::EventType::LinuxKernelTrap(lkt),
+                    } => self.buffer_event(timestamp.clone(), lkt.procname.clone(), event),
+                    events::Version::V1 {
+                        timestamp,
+                        event: events::EventType::LinuxFatalSignal(lfs),
+                    } => match lfs.stack_dump.get("Comm") {
+                        // comm is process name
+                        Some(comm) => self.buffer_event(timestamp.clone(), comm.clone(), event),
+                        // Ignore event without a command
+                        None => {},
+                    },
 
                     // ignore other event types for detection
                     _ => {}
@@ -287,11 +277,12 @@ pub fn analyze(
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::Utc;
     use serde_json::{from_str, from_value};
-    use std::collections::BTreeMap;
-    use std::sync::Arc;
     use std::time::Duration;
+    use std::collections::BTreeMap;
+    use chrono::Utc;
+    use std::sync::Arc;
+
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {
@@ -307,6 +298,7 @@ mod test {
 
     #[test]
     fn test_ip_probe() {
+
         let er = run_analytics(get_close_ip_events());
 
         assert!(
@@ -318,12 +310,11 @@ mod test {
 
     #[test]
     fn test_register_probe() {
+
         // give it some very close RDI values - increment by 1
         let mut close_rdi_events = Vec::<events::Event>::new();
         for rdi in 0x0000000000000889..0x0000000000000b65 {
-            close_rdi_events.push(fatal_with_registers(
-                map! {"RDI" => format!("{:016x}", rdi)},
-            ));
+            close_rdi_events.push(fatal_with_registers(map!{"RDI" => format!("{:016x}", rdi)}));
         }
 
         let er = run_analytics(close_rdi_events);
@@ -337,7 +328,7 @@ mod test {
 
     fn run_analytics(events: Vec<events::Event>) -> Result<events::Event, RecvTimeoutError> {
         let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
-            channel();
+        channel();
 
         let (analyzer_out, detected_events_in): (Sender<events::Event>, Receiver<events::Event>) =
             channel();
@@ -602,9 +593,9 @@ mod test {
             stack_dump.insert(k, v);
         }
 
-        Arc::new(events::Version::V1 {
+        Arc::new(events::Version::V1{
             timestamp: Utc::now(),
-            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
+            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal{
                 level: events::LogLevel::Info,
                 facility: events::LogFacility::Kern,
                 signal: events::FatalSignalType::SIGIOT,
