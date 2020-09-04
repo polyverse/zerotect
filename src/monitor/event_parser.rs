@@ -10,6 +10,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use timeout_iterator::TimeoutIterator;
 
@@ -32,18 +33,21 @@ impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
 
 pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsgPtr>,
+    flush_timeout: Duration,
     verbosity: u8,
 }
 
 impl EventParser {
     pub fn from_kmsg_iterator(
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsgPtr> + Send>,
+        flush_timeout: Duration,
         verbosity: u8,
     ) -> Result<EventParser, EventParserError> {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
 
         Ok(EventParser {
             timeout_kmsg_iter,
+            flush_timeout,
             verbosity,
         })
     }
@@ -280,7 +284,98 @@ impl EventParser {
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
     fn parse_stack_dump(&mut self) -> BTreeMap<String, String> {
         // Not implemented
-        BTreeMap::<String, String>::new()
+        let mut sd = BTreeMap::<String, String>::new();
+
+        // the various branches of the loop will terminate...
+        loop {
+            // peek next line, and if it has a colon, take it
+            match self.timeout_kmsg_iter.peek_timeout(self.flush_timeout) {
+                Ok(peek_kmsg) => {
+                    if !peek_kmsg.message.contains(":") {
+                        // if no ":", then this isn't part of all the KV pairs
+                        return sd;
+                    } else {
+                        // take the line - and unwrap because we've peek'd that it exists
+                        let km = self.timeout_kmsg_iter.next().unwrap();
+
+                        // split message parts on whitespace
+                        let parts: Vec<_> = km.message.split(|c| c == ' ').collect();
+
+                        // consume kmsg key->value one by one (don't split all at once)
+                        // maintain state as we iterate
+                        let mut key: Option<String> = None;
+                        let mut value: Option<String> = None;
+                        for part in parts {
+                            // this word is part of the next key,
+                            // first handle any k/vs we already have (if any)
+                            if part.ends_with(":") {
+                                let part_without_colon = &part[..(part.len() - 1)];
+
+                                // if there's a value, let's publish it before transitioning to new key
+                                if let Some(v) = value {
+                                    if let Some(k) = key {
+                                        if self.verbosity > 1 {
+                                            eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                                        }
+                                        sd.insert(k, v);
+                                    } else {
+                                        if self.verbosity > 0 {
+                                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
+                                        }
+                                    }
+
+                                    // Key becomes this part, minus the :
+                                    key = Some(part_without_colon.to_owned());
+                                } else {
+                                    let appended_key = match key {
+                                        Some(mut ks) => {
+                                            if ks != "" {
+                                                ks.push_str(" ")
+                                            };
+                                            ks.push_str(part_without_colon);
+                                            ks
+                                        }
+                                        None => part_without_colon.to_owned(),
+                                    };
+                                    key = Some(appended_key);
+                                }
+
+                                // start a blank value - with the colon, anything that comes after is a value
+                                value = Some(String::new());
+                            } else {
+                                // are we in a value? if so append to it
+                                if let Some(mut v) = value {
+                                    if v != "" {
+                                        v.push_str(" ")
+                                    };
+                                    v.push_str(part);
+                                    value = Some(v);
+                                } else if let Some(mut k) = key {
+                                    if k != "" {
+                                        k.push_str(" ")
+                                    };
+                                    k.push_str(part);
+                                    key = Some(k);
+                                } else if key == None {
+                                    key = Some(part.to_owned());
+                                }
+                            }
+                        }
+
+                        // cleanup last value - if it comes in a pair
+                        if let (Some(k), Some(v)) = (key, value) {
+                            if self.verbosity > 1 {
+                                eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                            }
+                            sd.insert(k, v);
+                        }
+                    }
+                }
+                // if error peeking, return what we have...
+                // error might be a timeout or something else.
+                Err(_) => return sd,
+            }
+        }
     }
 
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
@@ -488,7 +583,9 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -667,7 +764,9 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -808,7 +907,9 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -926,7 +1027,9 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
 
         let maybe_gpf = parser.next();
         assert!(maybe_gpf.is_some());
@@ -1002,7 +1105,9 @@ mod test {
             message: String::from("potentially unexpected fatal signal 11."),
         })];
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
@@ -1022,7 +1127,8 @@ mod test {
     #[test]
     fn can_parse_fatal_signal_11() {
         let timestamp = Utc.timestamp_millis(6433742 + 372858970);
-        let mut kmsgs = boxed_kmsgs(timestamp,
+        let mut kmsgs = boxed_kmsgs(
+            timestamp,
             vec![
                 String::from("potentially unexpected fatal signal 11."),
                 String::from("CPU: 1 PID: 36075 Comm: a.out Not tainted 4.14.131-linuxkit #1"),
@@ -1035,15 +1141,25 @@ mod test {
                 String::from("RBP: 00007ffd5833d0c0 R08: 00007fd15e0e1d80 R09: 00007fd15e0e1d80"),
                 String::from("R10: 0000000000000000 R11: 0000000000000000 R12: 0000561bc8d8f040"),
                 String::from("R13: 00007ffd5833d1a0 R14: 0000000000000000 R15: 0000000000000000"),
-                String::from("FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000"),
+                String::from(
+                    "FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
+                ),
                 String::from("CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033"),
                 String::from("CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0"),
-            ]);
+            ],
+        );
 
-        { // Validate when new kmsg's stop coming in (at timeout).
-            let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.clone().into_iter()), 0).unwrap();
+        {
+            // Validate when new kmsg's stop coming in (at timeout).
+            let mut parser = EventParser::from_kmsg_iterator(
+                Box::new(kmsgs.clone().into_iter()),
+                Duration::from_secs(1),
+                0,
+            )
+            .unwrap();
             let sig11 = parser.next();
             assert!(sig11.is_some());
+            eprintln!("Sig11: {}", sig11.as_ref().unwrap());
             assert_eq!(
                 sig11.unwrap(),
                 Arc::new(events::Version::V1 {
@@ -1052,7 +1168,7 @@ mod test {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
                         signal: events::FatalSignalType::SIGSEGV,
-                        stack_dump: map!{
+                        stack_dump: map! {
                             "CPU" => "1",
                             "PID" => "36075",
                             "Comm" => "a.out Not tainted 4.14.131-linuxkit #1",
@@ -1077,9 +1193,7 @@ mod test {
                             "R13" => "00007ffd5833d1a0",
                             "R14" => "0000000000000000",
                             "R15" => "0000000000000000",
-                            "FS" => "00007fd15e0e7500(0000)",
-                            "GS" => "ffff9b08ffd00000(0000)",
-                            "knlGS" => "0000000000000000",
+                            "FS" => "00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
                             "CS" => "0010",
                             "DS" => "0000",
                             "ES" => "0000",
@@ -1093,10 +1207,16 @@ mod test {
             )
         }
 
-        { // Validate when new kmsg's stop bring KV/pairs
+        {
+            // Validate when new kmsg's stop bring KV/pairs
             kmsgs.push(boxed_kmsg(timestamp, String::from("An unrelated message")));
 
-            let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+            let mut parser = EventParser::from_kmsg_iterator(
+                Box::new(kmsgs.into_iter()),
+                Duration::from_secs(1),
+                2,
+            )
+            .unwrap();
             let sig11 = parser.next();
             assert!(sig11.is_some());
             assert_eq!(
@@ -1107,7 +1227,7 @@ mod test {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
                         signal: events::FatalSignalType::SIGSEGV,
-                        stack_dump: map!{
+                        stack_dump: map! {
                             "CPU" => "1",
                             "PID" => "36075",
                             "Comm" => "a.out Not tainted 4.14.131-linuxkit #1",
@@ -1132,9 +1252,7 @@ mod test {
                             "R13" => "00007ffd5833d1a0",
                             "R14" => "0000000000000000",
                             "R15" => "0000000000000000",
-                            "FS" => "00007fd15e0e7500(0000)",
-                            "GS" => "ffff9b08ffd00000(0000)",
-                            "knlGS" => "0000000000000000",
+                            "FS" => "00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000",
                             "CS" => "0010",
                             "DS" => "0000",
                             "ES" => "0000",
@@ -1161,7 +1279,9 @@ mod test {
             }),
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
 
         thread::spawn(move || {
             let maybe_segfault = parser.next();
@@ -1212,7 +1332,9 @@ mod test {
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
         })];
 
-        let mut parser = EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), 0).unwrap();
+        let mut parser =
+            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
+                .unwrap();
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
         assert_eq!(
@@ -1231,7 +1353,6 @@ mod test {
         )
     }
 
-
     fn boxed_kmsg(timestamp: chrono::DateTime<Utc>, message: String) -> Box<kmsg::KMsg> {
         Box::new(kmsg::KMsg {
             facility: events::LogFacility::Kern,
@@ -1241,9 +1362,13 @@ mod test {
         })
     }
 
-    fn boxed_kmsgs(timestamp: chrono::DateTime<Utc>, messages: Vec<String>) -> Vec<Box<kmsg::KMsg>> {
-        messages.into_iter().map(|message|
-            boxed_kmsg(timestamp, message)
-        ).collect()
+    fn boxed_kmsgs(
+        timestamp: chrono::DateTime<Utc>,
+        messages: Vec<String>,
+    ) -> Vec<Box<kmsg::KMsg>> {
+        messages
+            .into_iter()
+            .map(|message| boxed_kmsg(timestamp, message))
+            .collect()
     }
 }
