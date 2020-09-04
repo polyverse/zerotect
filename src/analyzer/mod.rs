@@ -123,6 +123,19 @@ impl Analyzer {
                     used_events.append(&mut events_used_for_detection)
                 }
 
+                if let Some((detected_event, mut events_used_for_detection)) =
+                close_by_register_detect(
+                    eventslist,
+                    "RIP",
+                    1,
+                    8,
+                    "An InstructionPointer Probe - someone's systematically moving the instruction pointer by a few bytes to find desirable jump locations.",
+                )
+            {
+                detected_events.push(detected_event);
+                used_events.append(&mut events_used_for_detection)
+            }
+
                 // retain unused events
                 eventslist.retain(|(_, e)| !Analyzer::used(e, &used_events));
             }
@@ -275,11 +288,13 @@ pub fn analyze(
 
     loop {
         match source.recv() {
-            Ok(event) => match passthrough_sink.send(event.clone()) {
-                Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e))),
-                Ok(_) => match inner_analyzer_sink.send(event) {
-                    Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
-                    Ok(_) => {},
+            Ok(event) => match inner_analyzer_sink.send(event.clone()) {
+                Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
+                Ok(_) => if config.mode == params::AnalyticsMode::Passthrough {
+                    match passthrough_sink.send(event) {
+                        Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e))),
+                        Ok(_) => {},
+                    }
                 },
             },
             Err(e) => {

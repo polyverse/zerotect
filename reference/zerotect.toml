@@ -6,7 +6,7 @@ fatal_signals = true
 klog_include_timestamp = true
 
 [analytics]
-enabled = true
+mode = 'Passthrough'
 collection_timeout_seconds = 10
 max_event_count = 20
 event_lifetime_seconds = 30

@@ -140,7 +140,7 @@ fn optional_analyzer(
     let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
         mpsc::channel();
 
-    if !ac.enabled {
+    if ac.mode == params::AnalyticsMode::Off {
         // if analytics is disabled, short-circuit the first channel between monitor and emitter
         return (monitor_sink, analyzer_source, None);
     }

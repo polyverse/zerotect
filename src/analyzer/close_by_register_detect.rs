@@ -103,7 +103,14 @@ where
         return Some(N::zero());
     };
 
-    match N::from_str_radix(frag.trim(), 16) {
+    // Some register values look like: 0033:0x7f883e3ad43
+    // only parse the 7f883e3ad43
+    let sanitized_frag = match frag.find(":0x") {
+        Some(idx) => &frag[(idx + ":0x".len())..],
+        None => frag,
+    };
+
+    match N::from_str_radix(sanitized_frag.trim(), 16) {
         Ok(n) => Some(n),
         Err(e) => {
             eprintln!("Unable to parse {} into {}: {}", frag, N::type_name(), e);
