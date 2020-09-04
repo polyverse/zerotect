@@ -58,7 +58,15 @@ const LOGFILE_ROTATION_COUNT_FLAG: &str = "log-file-rotation-count";
 const LOGFILE_ROTATION_SIZE_FLAG: &str = "log-file-rotation-max-size";
 
 // Analytics
-const ANALYTICS_ENABLED_FLAG: &str = "analytics-enabled";
+const ANALYTICS_MODE_FLAG: &str = "analytics-mode";
+const ANALYTICS_MODE_OFF: &str = "off";
+const ANALYTICS_MODE_PASSTHROUGH: &str = "passthrough";
+const ANALYTICS_MODE_DETECTED: &str = "detected";
+const ANALYTICS_POSSIBLE_MODES: &[&str] = &[
+    ANALYTICS_MODE_OFF,
+    ANALYTICS_MODE_PASSTHROUGH,
+    ANALYTICS_MODE_DETECTED,
+];
 
 // Defaults
 // Flush to polycorder when 10 events are collected
@@ -158,9 +166,25 @@ pub struct AutoConfigure {
     pub klog_include_timestamp: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+pub enum AnalyticsMode {
+    /// No analytics
+    #[strum(serialize = "off")]
+    Off,
+
+    /// Passthrough original events to the output stream, along with
+    /// analytics-generated/detected events
+    #[strum(serialize = "passthrough")]
+    Passthrough,
+
+    /// Only emit analyzed and detected events (suppress raw events from the system)
+    #[strum(serialize = "detected")]
+    Detected,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsConfig {
-    pub enabled: bool,
+    pub mode: AnalyticsMode,
 
     /// How long should analyzer wait for new events to arrive, before
     /// processing and making a decision on what's buffered.
@@ -245,7 +269,7 @@ pub struct AutoConfigureOptions {
 
 #[derive(Deserialize)]
 pub struct AnalyticsConfigOptions {
-    pub enabled: bool,
+    pub mode: Option<String>,
 
     pub collection_timeout_seconds: Option<u64>,
     pub max_event_count: Option<usize>,
@@ -310,7 +334,6 @@ pub enum InnerError {
     StrumParseError(strum::ParseError),
     TomlDeserializationError(toml::de::Error),
     ParseIntError(std::num::ParseIntError),
-    ParseBoolError(std::str::ParseBoolError),
     TryFromIntError(std::num::TryFromIntError),
 }
 
@@ -341,9 +364,6 @@ impl Display for ParsingError {
             ),
             InnerError::ParseIntError(e) => {
                 write!(f, "{} (ParsingError::ParseIntError::{})", self.message, e)
-            }
-            InnerError::ParseBoolError(e) => {
-                write!(f, "{} (ParsingError::ParseBoolError::{})", self.message, e)
             }
             InnerError::TryFromIntError(e) => {
                 write!(f, "{} (ParsingError::TryFromIntError::{})", self.message, e)
@@ -563,11 +583,11 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .help(format!("Setting this enables file rotation. A new file is begin in the rotation sequence when the current file exceeds the size (in bytes) specified by this argument.").as_str()))
 
                         // Built-in analytics
-                        .arg(Arg::with_name(ANALYTICS_ENABLED_FLAG)
-                            .long(ANALYTICS_ENABLED_FLAG)
-                            .possible_values(&["true", "false"])
+                        .arg(Arg::with_name(ANALYTICS_MODE_FLAG)
+                            .long(ANALYTICS_MODE_FLAG)
+                            .possible_values(ANALYTICS_POSSIBLE_MODES)
                             .case_insensitive(true)
-                            .default_value("true")
+                            .default_value(ANALYTICS_MODE_PASSTHROUGH)
                             .help(format!("Enable or disable built-in analytics (looks for localized indicators of live attacks)").as_str()))
 
                         // verbose internal logging?
@@ -605,27 +625,19 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
 
-    let analytics = match matches.value_of(ANALYTICS_ENABLED_FLAG) {
-        Some(formatstr) => AnalyticsConfig {
-            enabled: match formatstr.trim().to_ascii_lowercase().as_str().parse() {
-                Ok(b) => b,
-                Err(e) => {
-                    return Err(ParsingError {
-                        inner_error: InnerError::ParseBoolError(e),
-                        message: format!(
-                            "Value of {} set as {} could not be parsed into a boolean.",
-                            ANALYTICS_ENABLED_FLAG, formatstr
-                        ),
-                    })
-                }
+    let analytics = match matches.value_of(ANALYTICS_MODE_FLAG) {
+        Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().as_str()) {
+            Ok(mode) => AnalyticsConfig {
+                mode,
+                collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+                max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+                event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+                event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
             },
-            collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
-            max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
-            event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
-            event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
-        },
+            Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Analytics mode value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", modestr, e)}),
+        }
         None => AnalyticsConfig {
-            enabled: true,
+            mode: AnalyticsMode::Passthrough,
             collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
             max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
             event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
@@ -804,14 +816,20 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
         },
         analytics: match zerotect_param_options.analytics {
             Some(aco) => AnalyticsConfig{
-                enabled: aco.enabled,
+                mode: match aco.mode {
+                    Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().replace("-", "").replace("_", "").as_str()) {
+                        Ok(mode) => mode,
+                        Err(e) => return Err(ParsingError{message: format!("In config file, the analytics mode configuration key {} was not valid: {}. Please set it to one of [{}].", modestr, e, ANALYTICS_POSSIBLE_MODES.join("|")), inner_error: InnerError::None}),
+                    },
+                    None => AnalyticsMode::Passthrough,
+                },
                 collection_timeout_seconds: aco.collection_timeout_seconds.unwrap_or(DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS),
                 event_lifetime_seconds: aco.event_lifetime_seconds.unwrap_or(DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS),
                 max_event_count: aco.max_event_count.unwrap_or(DEFAULT_ANALYTICS_MAX_EVENT_COUNT),
                 event_drop_count: aco.event_drop_count.unwrap_or(DEFAULT_ANALYTICS_EVENT_DROP_COUNT),
             },
             None => AnalyticsConfig{
-                enabled: true,
+                mode: AnalyticsMode::Passthrough,
                 collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
                 event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
                 max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
@@ -988,7 +1006,7 @@ mod test {
         assert_eq!(Some(10), lfc.rotation_file_max_size);
 
         // analytics should be enabled by default
-        assert_eq!(true, config.analytics.enabled);
+        assert_eq!(AnalyticsMode::Passthrough, config.analytics.mode);
     }
 
     #[test]
@@ -1261,13 +1279,13 @@ mod test {
     fn commandline_args_analytics_disable() {
         let args: Vec<OsString> = vec![
             OsString::from("burner program name. First param ignored."),
-            OsString::from("--analytics-enabled"),
-            OsString::from("false"),
+            OsString::from("--analytics-mode"),
+            OsString::from("off"),
         ];
 
         let config = parse_args(Some(args)).unwrap();
 
-        assert_eq!(false, config.analytics.enabled);
+        assert_eq!(AnalyticsMode::Off, config.analytics.mode);
     }
 
     #[test]
@@ -1302,6 +1320,9 @@ mod test {
         rotation_file_count = 3
         rotation_file_max_size = 21
 
+        [analytics]
+        mode = 'detected'
+
         "#;
 
         let toml_file = unique_temp_toml_file();
@@ -1313,7 +1334,7 @@ mod test {
         assert_eq!(40, config.verbosity);
 
         //enabled by default always
-        assert!(config.analytics.enabled);
+        assert_eq!(AnalyticsMode::Detected, config.analytics.mode);
 
         assert_eq!(true, config.auto_configure.exception_trace);
         assert_eq!(true, config.auto_configure.fatal_signals);
@@ -1699,7 +1720,7 @@ mod test {
                 klog_include_timestamp: true,
             },
             analytics: AnalyticsConfig{
-                enabled: true,
+                mode: AnalyticsMode::Passthrough,
                 collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
                 event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
                 max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
@@ -1752,7 +1773,11 @@ mod test {
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
             analytics: AnalyticsConfig {
-                enabled: rand::thread_rng().gen_bool(0.5),
+                mode: match rand::thread_rng().gen_range(0, 3) {
+                    0 => AnalyticsMode::Off,
+                    1 => AnalyticsMode::Passthrough,
+                    _ => AnalyticsMode::Detected,
+                },
                 collection_timeout_seconds: rand::thread_rng().gen_range(1, 100),
                 max_event_count: rand::thread_rng().gen_range(1, 100),
                 event_drop_count: rand::thread_rng().gen_range(1, 100),

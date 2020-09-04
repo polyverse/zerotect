@@ -68,21 +68,12 @@ impl EventBuffer {
         total_len
     }
 
-    pub fn insert(&mut self, event: events::Event) {
-        let (timestamp, procname) = match event.as_ref() {
-            events::Version::V1 {
-                timestamp,
-                event: events::EventType::LinuxKernelTrap(lkt),
-            } => (timestamp, lkt.procname.clone()),
-            // Ignore ALL other events - more can be added later
-            _ => return,
-        };
-
+    pub fn insert(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
         // Do we have a list for this proc?
         self.hashlist
             .entry(procname)
             .or_insert(TimestampedEventList::with_capacity(self.list_capacity))
-            .push_back((*timestamp, event));
+            .push_back((timestamp, event));
 
         self.cached_len += 1;
     }
@@ -214,9 +205,22 @@ impl EventBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rand;
     use std::sync::Arc;
     use std::thread::sleep;
     use std::time::Duration;
+
+    macro_rules! map(
+        { $($key:expr => $value:expr),+ } => {
+            {
+                let mut m = ::std::collections::BTreeMap::<String, String>::new();
+                $(
+                    m.insert(String::from($key), String::from($value));
+                )+
+                m
+            }
+         };
+    );
 
     #[test]
     fn ensure_removal_when_beyond_full_single_proc_all_events() {
@@ -224,14 +228,16 @@ mod test {
 
         // add 10 events
         for _ in 0..10 {
-            eb.insert(create_event("Test".to_owned()));
+            let (ts, procname, event) = create_event("Test".to_owned());
+            eb.insert(ts, procname, event);
         }
         assert_eq!(10, eb.len());
 
         // add one more event, and lenth should be 5 (drop 5 events)
         assert_eq!(5, eb.cleanup());
 
-        eb.insert(create_event("Test".to_owned()));
+        let (ts, procname, event) = create_event("Test".to_owned());
+        eb.insert(ts, procname, event);
         assert_eq!(6, eb.len());
         assert_eq!(6, eb.cleanup());
     }
@@ -242,14 +248,16 @@ mod test {
 
         // add 10 events
         for i in 0..10 {
-            eb.insert(create_event(format!("TestProc{}", i)));
+            let (ts, procname, event) = create_event(format!("TestProc{}", i));
+            eb.insert(ts, procname, event);
         }
         assert_eq!(10, eb.len());
 
         // add one more event, and lenth should be 5 (drop 5 events)
         assert_eq!(5, eb.cleanup());
 
-        eb.insert(create_event(format!("TestProc{}", 10)));
+        let (ts, procname, event) = create_event(format!("TestProc{}", 10));
+        eb.insert(ts, procname, event);
         assert_eq!(6, eb.len());
         assert_eq!(6, eb.cleanup());
     }
@@ -260,8 +268,10 @@ mod test {
 
         // add 10 events
         for i in 0..5 {
-            eb.insert(create_event(format!("TestProc{}", i)));
-            eb.insert(create_event(format!("TestProc{}", i)));
+            let (ts, procname, event) = create_event(format!("TestProc{}", i));
+            eb.insert(ts, procname, event);
+            let (ts, procname, event) = create_event(format!("TestProc{}", i));
+            eb.insert(ts, procname, event);
         }
         assert!(eb.is_full());
         assert_eq!(10, eb.len());
@@ -270,7 +280,8 @@ mod test {
         assert_eq!(5, eb.cleanup());
         assert!(!eb.is_full());
 
-        eb.insert(create_event(format!("TestProc{}", 10)));
+        let (ts, procname, event) = create_event(format!("TestProc{}", 10));
+        eb.insert(ts, procname, event);
         assert_eq!(6, eb.len());
         assert_eq!(6, eb.cleanup());
         assert!(!eb.is_full());
@@ -292,7 +303,8 @@ mod test {
 
         // add 10 events
         for i in 0..9 {
-            eb.insert(create_event(format!("TestProc{}", i)));
+            let (ts, procname, event) = create_event(format!("TestProc{}", i));
+            eb.insert(ts, procname, event);
         }
         assert!(!eb.is_full());
 
@@ -306,22 +318,36 @@ mod test {
         assert_eq!(0, eb.hashlist.len());
     }
 
-    fn create_event(procname: String) -> events::Event {
-        Arc::new(events::Version::V1 {
-            timestamp: Utc::now(),
-            event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::User,
-                level: events::LogLevel::Info,
-                procname,
-                pid: 1800,
-                ip: 0x5000,
-                sp: 0x6000,
-                trap: events::KernelTrapType::GeneralProtectionFault,
-                errcode: events::SegfaultErrorCode::from_error_code(6),
-                file: None,
-                vmasize: None,
-                vmastart: None,
+    fn create_event(procname: String) -> (DateTime<Utc>, String, events::Event) {
+        let timestamp = Utc::now();
+        let event = match rand::random::<bool>() {
+            true => Arc::new(events::Version::V1 {
+                timestamp,
+                event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
+                    facility: events::LogFacility::User,
+                    level: events::LogLevel::Info,
+                    procname: procname.clone(),
+                    pid: 1800,
+                    ip: 0x5000,
+                    sp: 0x6000,
+                    trap: events::KernelTrapType::GeneralProtectionFault,
+                    errcode: events::SegfaultErrorCode::from_error_code(6),
+                    file: None,
+                    vmasize: None,
+                    vmastart: None,
+                }),
             }),
-        })
+            false => Arc::new(events::Version::V1 {
+                timestamp,
+                event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
+                    facility: events::LogFacility::User,
+                    level: events::LogLevel::Info,
+                    signal: events::FatalSignalType::SIGIOT,
+                    stack_dump: map!("Comm" => procname.clone()),
+                }),
+            }),
+        };
+
+        (timestamp, procname, event)
     }
 }

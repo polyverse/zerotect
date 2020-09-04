@@ -1,11 +1,13 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+mod close_by_ip_detect;
+mod close_by_register_detect;
 mod eventbuffer;
 
 use crate::events;
 use crate::params;
 
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use eventbuffer::EventBuffer;
 use std::convert::TryInto;
 use std::error;
@@ -13,9 +15,11 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::mem::size_of;
 use std::process;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+
+use close_by_ip_detect::close_by_ip_detect;
+use close_by_register_detect::close_by_register_detect;
 
 #[derive(Debug)]
 pub struct AnalyzerError(String);
@@ -78,6 +82,7 @@ impl Analyzer {
             // store events here to send after all detection is complete
             // this avoids mutabling borrowing self twice in one block
             let mut detected_events: Vec<events::Event> = vec![];
+            let mut used_events: Vec<events::Event> = vec![];
 
             for (_, eventslist) in self.event_buffer.iter_mut() {
                 // do we have at least 2 events?
@@ -85,65 +90,54 @@ impl Analyzer {
                     continue; // not enough to do anything reasonable
                 }
 
-                // collect events with close-IPs (Instruction Pointer)
-                let mut close_by_ip: Vec<events::Event> = vec![];
-
-                // go over the event list and calculate ip diffs
-                // a primitive sliding-window for events
-                let mut prev_added: bool = false;
-                let mut maybe_prev_event: Option<&events::Event> = None;
-                for (_, event) in eventslist.iter() {
-                    match event.as_ref() {
-                        events::Version::V1 {
-                            timestamp: _,
-                            event: events::EventType::LinuxKernelTrap(lkt),
-                        } => {
-                            if let Some(events::Version::V1 {
-                                timestamp: _,
-                                event: events::EventType::LinuxKernelTrap(prev_lkt),
-                            }) = maybe_prev_event.map(|x| &(**x))
-                            {
-                                // analytics only works if there is a prevous event
-                                let ad = Analyzer::abs_diff(prev_lkt.ip, lkt.ip);
-
-                                // we have winner events
-                                // ignore when IP is identical across events - it may just be a legit crash.
-                                if ad != 0 && ad <= self.ip_max_distance {
-                                    if !prev_added {
-                                        // if close_by_ip is empty, add the previous event too
-                                        // we can unwrap safely - we're already inside a destructure of it
-                                        close_by_ip.push(maybe_prev_event.unwrap().clone())
-                                    }
-                                    prev_added = true;
-                                    close_by_ip.push(event.clone());
-                                } else {
-                                    prev_added = false;
-                                }
-                            }
-
-                            // Make current event the previous event
-                            maybe_prev_event = Some(event);
-                        }
-
-                        // ignore everything else
-                        _ => {}
-                    }
+                if let Some((detected_event, mut events_used_for_detection)) =
+                    close_by_ip_detect(eventslist, self.ip_max_distance, 1)
+                {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
                 }
+
+                if let Some((detected_event, mut events_used_for_detection)) =
+                    close_by_register_detect(
+                        eventslist,
+                        "RDI",
+                        1,
+                        8,
+                        "An RDI probe would be an attempt to discover the Stack Canary",
+                    )
+                {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
+                }
+
+                if let Some((detected_event, mut events_used_for_detection)) =
+                    close_by_register_detect(
+                        eventslist,
+                        "RSI",
+                        1,
+                        8,
+                        "An RSI probe would be an attempt to discover the Stack Canary",
+                    )
+                {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
+                }
+
+                if let Some((detected_event, mut events_used_for_detection)) =
+                close_by_register_detect(
+                    eventslist,
+                    "RIP",
+                    1,
+                    8,
+                    "An InstructionPointer Probe - someone's systematically moving the instruction pointer by a few bytes to find desirable jump locations.",
+                )
+            {
+                detected_events.push(detected_event);
+                used_events.append(&mut events_used_for_detection)
+            }
 
                 // retain unused events
-                eventslist.retain(|(_, e)| !Analyzer::used(e, &close_by_ip));
-
-                // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
-                if close_by_ip.len() > 1 {
-                    detected_events.push(Arc::new(events::Version::V1 {
-                        timestamp: Utc::now(),
-                        event: events::EventType::InstructionPointerProbe(
-                            events::InstructionPointerProbe {
-                                justifying_events: close_by_ip,
-                            },
-                        ),
-                    }));
-                }
+                eventslist.retain(|(_, e)| !Analyzer::used(e, &used_events));
             }
 
             // send all detected events
@@ -166,9 +160,9 @@ impl Analyzer {
         }
     }
 
-    fn buffer_event(&mut self, event: events::Event) {
+    fn buffer_event(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
         // Append event to to end of buffer
-        self.event_buffer.insert(event);
+        self.event_buffer.insert(timestamp, procname, event);
         self.detected_since_last_add = false;
 
         // If we're at max events we can store,
@@ -184,9 +178,18 @@ impl Analyzer {
             match self.event_source.recv_timeout(self.collection_timeout) {
                 Ok(event) => match event.as_ref() {
                     events::Version::V1 {
-                        timestamp: _,
-                        event: events::EventType::LinuxKernelTrap(_),
-                    } => self.buffer_event(event),
+                        timestamp,
+                        event: events::EventType::LinuxKernelTrap(lkt),
+                    } => self.buffer_event(timestamp.clone(), lkt.procname.clone(), event),
+                    events::Version::V1 {
+                        timestamp,
+                        event: events::EventType::LinuxFatalSignal(lfs),
+                    } => match lfs.stack_dump.get("Comm") {
+                        // comm is process name
+                        Some(comm) => self.buffer_event(timestamp.clone(), comm.clone(), event),
+                        // Ignore event without a command
+                        None => {}
+                    },
 
                     // ignore other event types for detection
                     _ => {}
@@ -201,15 +204,6 @@ impl Analyzer {
                     return Err(RecvTimeoutError::Disconnected);
                 }
             }
-        }
-    }
-
-    // This will go away after this: https://github.com/rust-lang/rust/issues/62111
-    fn abs_diff(u1: usize, u2: usize) -> usize {
-        if u1 > u2 {
-            u1 - u2
-        } else {
-            u2 - u1
         }
     }
 
@@ -294,11 +288,13 @@ pub fn analyze(
 
     loop {
         match source.recv() {
-            Ok(event) => match passthrough_sink.send(event.clone()) {
-                Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e))),
-                Ok(_) => match inner_analyzer_sink.send(event) {
-                    Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
-                    Ok(_) => {},
+            Ok(event) => match inner_analyzer_sink.send(event.clone()) {
+                Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
+                Ok(_) => if config.mode == params::AnalyticsMode::Passthrough {
+                    match passthrough_sink.send(event) {
+                        Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e))),
+                        Ok(_) => {},
+                    }
                 },
             },
             Err(e) => {
@@ -311,11 +307,55 @@ pub fn analyze(
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::Utc;
     use serde_json::{from_str, from_value};
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
     use std::time::Duration;
+
+    macro_rules! map(
+        { $($key:expr => $value:expr),+ } => {
+            {
+                let mut m = ::std::collections::BTreeMap::<String, String>::new();
+                $(
+                    m.insert(String::from($key), String::from($value));
+                )+
+                m
+            }
+         };
+    );
 
     #[test]
     fn test_ip_probe() {
+        let er = run_analytics(get_close_ip_events());
+
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::InstructionPointerProbe(_)});
+    }
+
+    #[test]
+    fn test_register_probe() {
+        // give it some very close RDI values - increment by 1
+        let mut close_rdi_events = Vec::<events::Event>::new();
+        for rdi in 0x0000000000000889..0x0000000000000b65 {
+            close_rdi_events.push(fatal_with_registers(
+                map! {"RDI" => format!("{:016x}", rdi)},
+            ));
+        }
+
+        let er = run_analytics(close_rdi_events);
+
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::RegisterProbe(_)});
+    }
+
+    fn run_analytics(events: Vec<events::Event>) -> Result<events::Event, RecvTimeoutError> {
         let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
             channel();
 
@@ -353,8 +393,7 @@ mod test {
             }
         });
 
-        let raw_events = get_close_ip_events();
-        for event in raw_events.iter() {
+        for event in events {
             assert!(test_events_out.send(event.clone()).is_ok());
         }
 
@@ -362,12 +401,7 @@ mod test {
         thread::sleep(Duration::from_secs(3));
 
         // expect raw_events+1 detected
-        let er = detected_events_in.recv_timeout(Duration::from_secs(1));
-        assert!(
-            er.is_ok(),
-            "Reception timed out before a detected events was generated"
-        );
-        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::InstructionPointerProbe(_)});
+        detected_events_in.recv_timeout(Duration::from_secs(1))
     }
 
     fn get_close_ip_events() -> Vec<events::Event> {
@@ -550,5 +584,52 @@ mod test {
                 .unwrap(),
             ),
         ]
+    }
+
+    fn fatal_with_registers(map: BTreeMap<String, String>) -> events::Event {
+        let mut stack_dump: BTreeMap<String,String> = from_value(
+            from_str::<serde_json::Value>(
+            r#"{
+                "CPU":"0",
+                "Code":"00 00 48 63 f0 85 f6 75 31 b8 ba 00 00 00 0f 05 89 c1 64 89 04 25 d0 02 00 00 48 63 f0 48 63 d7 b8 ea 00 00 00 48 63 f9 0f 05 <48> 3d 00 f0 ff ff 77 20 f3 c3 66 0f 1f 44 00 00 85 c9 7f df 89 ca",
+                "Comm":"nginx",
+                "EFLAGS":"00000206",
+                "Hardware name":"BHYVE, BIOS 1.00 03/14/2014",
+                "ORIG_RAX":"00000000000000ea",
+                "PID":"87631",
+                "R08":"737365636f727020",
+                "R09":"0000000000000000",
+                "R10":"0000000000000008",
+                "R11":"0000000000000206",
+                "R12":"0000000000000042",
+                "R13":"00007ffc91444818",
+                "R14":"00007ffc91444818",
+                "R15":"0000000000000001",
+                "RAX":"0000000000000000",
+                "RBP":"00007ffc914449a0",
+                "RBX":"0000000000000042",
+                "RCX":"00007f883e3ad438",
+                "RDI":"0000000000000b66",
+                "RDX":"0000000000000006",
+                "RIP":"0033:0x7f883e3ad438",
+                "RSI":"0000000000000b66",
+                "RSP":"002b:00007ffc91444688",
+                "Tainted":"G                T 4.19.76-linuxkit #1"
+            }"#,
+        ).unwrap()).unwrap();
+
+        for (k, v) in map.into_iter() {
+            stack_dump.insert(k, v);
+        }
+
+        Arc::new(events::Version::V1 {
+            timestamp: Utc::now(),
+            event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
+                level: events::LogLevel::Info,
+                facility: events::LogFacility::Kern,
+                signal: events::FatalSignalType::SIGIOT,
+                stack_dump,
+            }),
+        })
     }
 }
