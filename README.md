@@ -18,17 +18,21 @@
 
 ## What is Zerotect
 
-Zerotect is the reference implementation for Polyverse's zero-day detection
-framework. Its main purpose is to support Polycorder (the Polyverse-hosted
-zero-day attack detection and analytics service), but also serve as the
-template from which ingestion into other metrics and log analytics systems.
+Detecting malicious scans can be the first indicator of a potential attack.
+Detecting things like port scans is commonplace in security circles, but how
+do you detect a BROP attack, or any other kind of buffer-overflow attack for 
+that matter?
 
-Polyverse's Zero-day detection relies on anomaly-detection much like many other
-tools in the cybersecurity landscape. The fundamental difference is in the Polymorphism
-which makes anomalies stand out in a loud and noisy manner in terms of side-effects.
+Zerotect is a small open source agent that monitors kernel logs to 
+look for conclusive proof of memory-based exploits from the side-effects of these 
+attacks that appear in the form of process crashes (faults). Zerotect doesn't
+actively intercept network traffic, but instead, passively monitors kernel logs for
+anomalies. This means the attack surface of your servers isn't increased, and the stability
+of Zerotect doesn't affect the stability of anything else on the system.
 
-Zerotect looks for these side-effects, specifically caused by attacking a Polymorphic system,
-and reports them to analytics tools.
+When anomalies are detected, Zerotect can report these anomalies to a variety of analytics
+tools. Our intent is to support a variety of tools, and integrations with those tools. Please 
+file a Feature Request with examples of how you'd like to configure it and use it.
 
 ## Install Zerotect
 
