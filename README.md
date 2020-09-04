@@ -24,7 +24,7 @@ do you detect a BROP attack, or any other kind of buffer-overflow attack for
 that matter?
 
 Zerotect is a small open source agent that monitors kernel logs to 
-look for conclusive proof of memory-based exploits from the side-effects of memory-based 
+look for conclusive proof of memory-based exploits from the side-effects of those 
 attacks. These appear in the form of process crashes (faults). Zerotect doesn't
 actively intercept network traffic, but instead, passively monitors kernel logs for
 anomalies. This means the attack surface of your servers isn't increased, and the stability
