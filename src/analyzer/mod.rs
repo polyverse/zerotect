@@ -42,8 +42,11 @@ struct Analyzer {
 
     collection_timeout: Duration,
 
-    // how close can the instruction pointer be for it to be an event?
+    /// how close can the instruction pointer be for it to be an event?
     ip_max_distance: usize,
+
+    /// How detailed a justification do we want?
+    justification_kind: params::DetectedEventJustification,
 
     event_source: Receiver<events::Event>,
     detected_event_sink: Sender<events::Event>,
@@ -91,7 +94,7 @@ impl Analyzer {
                 }
 
                 if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_ip_detect(eventslist, self.ip_max_distance, 1)
+                    close_by_ip_detect(eventslist, self.ip_max_distance, 1, self.justification_kind)
                 {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
@@ -103,6 +106,7 @@ impl Analyzer {
                         "RDI",
                         1,
                         8,
+                        self.justification_kind,
                         "An RDI probe would be an attempt to discover the Stack Canary",
                     )
                 {
@@ -116,6 +120,7 @@ impl Analyzer {
                         "RSI",
                         1,
                         8,
+                        self.justification_kind,
                         "An RSI probe would be an attempt to discover the Stack Canary",
                     )
                 {
@@ -129,6 +134,7 @@ impl Analyzer {
                     "RIP",
                     1,
                     8,
+                    self.justification_kind,
                     "An InstructionPointer Probe - someone's systematically moving the instruction pointer by a few bytes to find desirable jump locations.",
                 )
             {
@@ -242,11 +248,12 @@ pub fn analyze(
     ) = channel();
 
     // fork off the analytics thread
-    let detected_events_sink = passthrough_sink.clone();
+    let detected_event_sink = passthrough_sink.clone();
     let collection_timeout = Duration::from_secs(config.collection_timeout_seconds);
     let max_event_count = config.max_event_count;
     let event_drop_count = config.event_drop_count;
     let event_lifetime = ChronoDuration::seconds(config.event_lifetime_seconds.try_into()?);
+    let justification_kind = config.justification;
 
     if let Err(e) = thread::Builder::new()
         .name("Realtime Analytics Thread".to_owned())
@@ -260,8 +267,10 @@ pub fn analyze(
                 // segfaults usually don't happen that close to each other.
                 ip_max_distance: size_of::<usize>(),
 
+                justification_kind,
+
                 event_source: inner_analyzer_source,
-                detected_event_sink: detected_events_sink,
+                detected_event_sink,
 
                 // let's not make this reallocate
                 event_buffer: EventBuffer::new(
@@ -326,18 +335,89 @@ mod test {
     );
 
     #[test]
-    fn test_ip_probe() {
-        let er = run_analytics(get_close_ip_events());
+    fn test_ip_probe_full() {
+        let er = run_analytics(
+            get_close_ip_events(),
+            params::DetectedEventJustification::Full,
+        );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::InstructionPointerProbe(_)});
+        let event = er.unwrap();
+        assert_matches!(event.as_ref(),
+            events::Version::V1{
+                timestamp: _,
+                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                    register: _,
+                    message: _,
+                    justification: events::RegisterProbeJustification::FullEvents(_)
+                })
+            }
+        );
+
+        // get length of events
+        match event.as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::FullEvents(full_events),
+                    }),
+            } => {
+                assert_eq!(register, "ip");
+                assert_eq!(5, full_events.len());
+            }
+            _ => panic!("An unexpected event occurred."),
+        }
     }
 
     #[test]
-    fn test_register_probe() {
+    fn test_ip_probe_summary() {
+        let er = run_analytics(
+            get_close_ip_events(),
+            params::DetectedEventJustification::Summary,
+        );
+
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+        let event = er.unwrap();
+        assert_matches!(event.as_ref(),
+            events::Version::V1{
+                timestamp: _,
+                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                    register: _,
+                    message: _,
+                    justification: events::RegisterProbeJustification::RegisterValues(_)
+                })
+            }
+        );
+
+        // get length of events
+        match event.as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::RegisterValues(values),
+                    }),
+            } => {
+                assert_eq!(register, "ip");
+                assert_eq!(5, values.len());
+            }
+            _ => panic!("An unexpected event occurred."),
+        }
+    }
+
+    #[test]
+    fn test_register_probe_summary() {
         // give it some very close RDI values - increment by 1
         let mut close_rdi_events = Vec::<events::Event>::new();
         for rdi in 0x0000000000000889..0x0000000000000b65 {
@@ -346,16 +426,95 @@ mod test {
             ));
         }
 
-        let er = run_analytics(close_rdi_events);
+        let er = run_analytics(
+            close_rdi_events,
+            params::DetectedEventJustification::Summary,
+        );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        assert_matches!(er.unwrap().as_ref(), events::Version::V1{timestamp: _, event: events::EventType::RegisterProbe(_)});
+        let event = er.unwrap();
+        assert_matches!(event.as_ref(),
+            events::Version::V1{
+                timestamp: _,
+                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                    register: _,
+                    message: _,
+                    justification: events::RegisterProbeJustification::RegisterValues(_)
+                })
+            }
+        );
+
+        // get length of events
+        match event.as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::RegisterValues(values),
+                    }),
+            } => {
+                assert_eq!(register, "RDI");
+                assert_eq!(20, values.len());
+            }
+            _ => panic!("An unexpected event occurred."),
+        }
     }
 
-    fn run_analytics(events: Vec<events::Event>) -> Result<events::Event, RecvTimeoutError> {
+    #[test]
+    fn test_register_probe_none() {
+        // give it some very close RDI values - increment by 1
+        let mut close_rdi_events = Vec::<events::Event>::new();
+        for rdi in 0x0000000000000889..0x0000000000000b65 {
+            close_rdi_events.push(fatal_with_registers(
+                map! {"RSI" => format!("{:016x}", rdi)},
+            ));
+        }
+
+        let er = run_analytics(close_rdi_events, params::DetectedEventJustification::None);
+
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+        let event = er.unwrap();
+        assert_matches!(event.as_ref(),
+            events::Version::V1{
+                timestamp: _,
+                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                    register: _,
+                    message: _,
+                    justification: events::RegisterProbeJustification::EventCount(_)
+                })
+            }
+        );
+
+        // get length of events
+        match event.as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::EventCount(c),
+                    }),
+            } => {
+                assert_eq!(register, "RSI");
+                assert_eq!(&20, c);
+            }
+            _ => panic!("An unexpected event occurred."),
+        }
+    }
+
+    fn run_analytics(
+        events: Vec<events::Event>,
+        justification_kind: params::DetectedEventJustification,
+    ) -> Result<events::Event, RecvTimeoutError> {
         let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
             channel();
 
@@ -372,6 +531,8 @@ mod test {
                 // if IP is within usize then someone's jumping within the size of an instruction.
                 // segfaults usually don't happen that close to each other.
                 ip_max_distance: size_of::<usize>(),
+
+                justification_kind,
 
                 event_source: analyzer_in,
                 detected_event_sink: analyzer_out,

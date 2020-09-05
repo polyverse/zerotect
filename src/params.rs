@@ -68,6 +68,16 @@ const ANALYTICS_POSSIBLE_MODES: &[&str] = &[
     ANALYTICS_MODE_DETECTED,
 ];
 
+const DETECTED_EVENT_JUSTIFICATION_FLAG: &str = "detected-event-details";
+const DETECTED_EVENT_JUSTIFICATION_NONE: &str = "none";
+const DETECTED_EVENT_JUSTIFICATION_SUMMARY: &str = "summary";
+const DETECTED_EVENT_JUSTIFICATION_FULL: &str = "full";
+const DETECTED_EVENT_JUSTIFICATIONS: &[&str] = &[
+    DETECTED_EVENT_JUSTIFICATION_NONE,
+    DETECTED_EVENT_JUSTIFICATION_SUMMARY,
+    DETECTED_EVENT_JUSTIFICATION_FULL,
+];
+
 // Defaults
 // Flush to polycorder when 10 events are collected
 const DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT: usize = 10;
@@ -182,9 +192,30 @@ pub enum AnalyticsMode {
     Detected,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+pub enum DetectedEventJustification {
+    /// No justification. At best a count of the number of events that justify it.
+    #[strum(serialize = "none")]
+    None,
+
+    /// A summarized justification - relevant information from all events is included,
+    /// but not the complete events.
+    #[strum(serialize = "summary")]
+    Summary,
+
+    /// Every event that justifies this detection is included. This is verbose but
+    /// comprehensive and useful for research.
+    #[strum(serialize = "full")]
+    Full,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AnalyticsConfig {
+    /// What mode is the analyzer in?
     pub mode: AnalyticsMode,
+
+    /// How much justification to include when an event is detected?
+    pub justification: DetectedEventJustification,
 
     /// How long should analyzer wait for new events to arrive, before
     /// processing and making a decision on what's buffered.
@@ -270,7 +301,7 @@ pub struct AutoConfigureOptions {
 #[derive(Deserialize)]
 pub struct AnalyticsConfigOptions {
     pub mode: Option<String>,
-
+    pub justification: Option<String>,
     pub collection_timeout_seconds: Option<u64>,
     pub max_event_count: Option<usize>,
     pub event_lifetime_seconds: Option<u64>,
@@ -589,6 +620,13 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .case_insensitive(true)
                             .default_value(ANALYTICS_MODE_PASSTHROUGH)
                             .help(format!("Enable or disable built-in analytics (looks for localized indicators of live attacks)").as_str()))
+                        // How much detail when an event is detected?
+                        .arg(Arg::with_name(DETECTED_EVENT_JUSTIFICATION_FLAG)
+                            .long(DETECTED_EVENT_JUSTIFICATION_FLAG)
+                            .possible_values(DETECTED_EVENT_JUSTIFICATIONS)
+                            .case_insensitive(true)
+                            .default_value(DETECTED_EVENT_JUSTIFICATION_SUMMARY)
+                            .help(format!("When an event is detected, how much justification (i.e. details on exactly why that event was detected) ").as_str()))
 
                         // verbose internal logging?
                         .arg(Arg::with_name("verbose")
@@ -625,24 +663,25 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
 
-    let analytics = match matches.value_of(ANALYTICS_MODE_FLAG) {
-        Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().as_str()) {
-            Ok(mode) => AnalyticsConfig {
-                mode,
-                collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
-                max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
-                event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
-                event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
-            },
-            Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Analytics mode value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", modestr, e)}),
-        }
-        None => AnalyticsConfig {
-            mode: AnalyticsMode::Passthrough,
-            collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
-            max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
-            event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
-            event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
+    let analytics = AnalyticsConfig {
+        mode: match matches.value_of(ANALYTICS_MODE_FLAG) {
+            Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().as_str()) {
+                Ok(mode) => mode,
+                Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Analytics mode value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", modestr, e)}),
+            }
+            None => AnalyticsMode::Passthrough,
         },
+        justification: match matches.value_of(DETECTED_EVENT_JUSTIFICATION_FLAG) {
+            Some(justificationstr) => match DetectedEventJustification::from_str(justificationstr.trim().to_ascii_lowercase().as_str()) {
+                Ok(justification) => justification,
+                Err(e) => return Err(ParsingError{inner_error: InnerError::None, message: format!("Detected event justification value set to {} had a parsing error: {}. Since this is a system-level agent, it does not default to something saner. Aborting program", justificationstr, e)}),
+            }
+            None => DetectedEventJustification::Summary,
+        },
+        collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
+        max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
+        event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
+        event_drop_count: DEFAULT_ANALYTICS_EVENT_DROP_COUNT,
     };
 
     let monitor = match u8::try_from(matches.occurrences_of(GOBBLE_OLD_EVENTS_FLAG))? {
@@ -817,11 +856,18 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
         analytics: match zerotect_param_options.analytics {
             Some(aco) => AnalyticsConfig{
                 mode: match aco.mode {
-                    Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().replace("-", "").replace("_", "").as_str()) {
+                    Some(modestr) => match AnalyticsMode::from_str(modestr.trim().to_ascii_lowercase().as_str()) {
                         Ok(mode) => mode,
                         Err(e) => return Err(ParsingError{message: format!("In config file, the analytics mode configuration key {} was not valid: {}. Please set it to one of [{}].", modestr, e, ANALYTICS_POSSIBLE_MODES.join("|")), inner_error: InnerError::None}),
                     },
                     None => AnalyticsMode::Passthrough,
+                },
+                justification: match aco.justification {
+                    Some(justificationstr) => match DetectedEventJustification::from_str(justificationstr.trim().to_ascii_lowercase().as_str()) {
+                        Ok(mode) => mode,
+                        Err(e) => return Err(ParsingError{message: format!("In config file, the detected event justification configuration key {} was not valid: {}. Please set it to one of [{}].", justificationstr, e, DETECTED_EVENT_JUSTIFICATIONS.join("|")), inner_error: InnerError::None}),
+                    },
+                    None => DetectedEventJustification::Summary,
                 },
                 collection_timeout_seconds: aco.collection_timeout_seconds.unwrap_or(DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS),
                 event_lifetime_seconds: aco.event_lifetime_seconds.unwrap_or(DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS),
@@ -830,6 +876,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
             },
             None => AnalyticsConfig{
                 mode: AnalyticsMode::Passthrough,
+                justification: DetectedEventJustification::Summary,
                 collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
                 event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
                 max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
@@ -1322,6 +1369,7 @@ mod test {
 
         [analytics]
         mode = 'detected'
+        justification = 'full'
 
         "#;
 
@@ -1335,6 +1383,10 @@ mod test {
 
         //enabled by default always
         assert_eq!(AnalyticsMode::Detected, config.analytics.mode);
+        assert_eq!(
+            DetectedEventJustification::Full,
+            config.analytics.justification
+        );
 
         assert_eq!(true, config.auto_configure.exception_trace);
         assert_eq!(true, config.auto_configure.fatal_signals);
@@ -1721,6 +1773,7 @@ mod test {
             },
             analytics: AnalyticsConfig{
                 mode: AnalyticsMode::Passthrough,
+                justification: DetectedEventJustification::Summary,
                 collection_timeout_seconds: DEFAULT_ANALYTICS_COLLECTION_TIMEOUT_SECONDS,
                 event_lifetime_seconds: DEFAULT_ANALYTICS_EVENT_LIFETIME_SECONDS,
                 max_event_count: DEFAULT_ANALYTICS_MAX_EVENT_COUNT,
@@ -1777,6 +1830,11 @@ mod test {
                     0 => AnalyticsMode::Off,
                     1 => AnalyticsMode::Passthrough,
                     _ => AnalyticsMode::Detected,
+                },
+                justification: match rand::thread_rng().gen_range(0, 3) {
+                    0 => DetectedEventJustification::None,
+                    1 => DetectedEventJustification::Summary,
+                    _ => DetectedEventJustification::Full,
                 },
                 collection_timeout_seconds: rand::thread_rng().gen_range(1, 100),
                 max_event_count: rand::thread_rng().gen_range(1, 100),

@@ -113,18 +113,20 @@ mod test {
     }
 
     #[test]
-    fn test_zerotect_ip_probe() {
+    fn test_zerotect_register_probe() {
         let timestamp = Utc.timestamp_millis(471804323);
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::InstructionPointerProbe(events::InstructionPointerProbe {
-                justifying_events: vec![],
+            event: events::EventType::RegisterProbe(events::RegisterProbe {
+                register: "RIP".to_owned(),
+                message: "Instruction pointer".to_owned(),
+                justification: events::RegisterProbeJustification::FullEvents(vec![]),
             }),
         };
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|InstructionPointerProbe|Probe using Instruction Pointer Increment|10|number_of_segfaults_with_instruction_pointer_within_word_size=0");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|RegisterProbe|Probe using Register Increment|10|number_of_segfaults_with_instruction_pointer_within_word_size=0");
     }
 }

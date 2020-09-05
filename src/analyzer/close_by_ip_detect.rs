@@ -1,4 +1,5 @@
 use crate::events;
+use crate::params;
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -6,7 +7,8 @@ use std::sync::Arc;
 pub fn close_by_ip_detect(
     eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
     ip_max_distance: usize,
-    justification_count: usize,
+    justification_threshold: usize,
+    justification_kind: params::DetectedEventJustification,
 ) -> Option<(events::Event, Vec<events::Event>)> {
     // collect events with close-IPs (Instruction Pointer)
     let mut close_by_ip: Vec<events::Event> = vec![];
@@ -54,15 +56,15 @@ pub fn close_by_ip_detect(
     }
 
     // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
-    if close_by_ip.len() > justification_count {
+    if close_by_ip.len() > justification_threshold {
         return Some((
             Arc::new(events::Version::V1 {
                 timestamp: Utc::now(),
-                event: events::EventType::InstructionPointerProbe(
-                    events::InstructionPointerProbe {
-                        justifying_events: close_by_ip.clone(),
-                    },
-                ),
+                event: events::EventType::RegisterProbe(events::RegisterProbe {
+                    register: "ip".to_owned(),
+                    message: "Instruction Pointer probe".to_owned(),
+                    justification: justify(close_by_ip.clone(), justification_kind),
+                }),
             }),
             close_by_ip,
         ));
@@ -77,5 +79,32 @@ fn abs_diff(u1: usize, u2: usize) -> usize {
         u1 - u2
     } else {
         u2 - u1
+    }
+}
+
+fn justify(
+    justifying_events: Vec<events::Event>,
+    justification_kind: params::DetectedEventJustification,
+) -> events::RegisterProbeJustification {
+    match justification_kind {
+        params::DetectedEventJustification::Full => events::RegisterProbeJustification::FullEvents(
+            justifying_events,
+        ),
+        params::DetectedEventJustification::Summary => events::RegisterProbeJustification::RegisterValues(
+            justifying_events.iter().filter_map(|e| {
+                match e.as_ref() {
+                    events::Version::V1 {
+                        timestamp: _,
+                        event: events::EventType::LinuxKernelTrap(lkt),
+                    } => Some(format!("{}", lkt.ip)),
+
+                    _ => {
+                        eprintln!("Analyzer:: close_by_ip_detect::justify: Unsupported event found when summarizing: {}", e);
+                        None
+                    },
+                }
+            }).collect(),
+        ),
+        params::DetectedEventJustification::None => events::RegisterProbeJustification::EventCount(justifying_events.len()),
     }
 }

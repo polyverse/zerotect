@@ -96,14 +96,6 @@ impl Display for Version {
 pub enum EventType {
     /// An analytics-detected internal event based on other events
     #[cef_values(
-        CefHeaderDeviceEventClassID = "InstructionPointerProbe",
-        CefHeaderName = "Probe using Instruction Pointer Increment",
-        CefHeaderSeverity = "10"
-    )]
-    InstructionPointerProbe(#[cef_ext_gobble] InstructionPointerProbe),
-
-    /// An analytics-detected internal event based on other events
-    #[cef_values(
         CefHeaderDeviceEventClassID = "RegisterProbe",
         CefHeaderName = "Probe using Register Increment",
         CefHeaderSeverity = "10"
@@ -165,16 +157,10 @@ impl Display for EventType {
             EventType::RegisterProbe(RegisterProbe {
                 register,
                 message,
-                justifying_events,
+                justification,
             }) => {
                 write!(f,
-                    "Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", register, justifying_events.len(), message, justifying_events)
-            },
-            EventType::InstructionPointerProbe(InstructionPointerProbe {
-                justifying_events,
-            }) => {
-                write!(f,
-                    "Instruction Pointers found close to each other {} times. The set of events that justify this analyzed event are: {:?}", justifying_events.len(), justifying_events)
+                    "Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", register, justification.len(), message, justification)
             },
             EventType::LinuxKernelTrap(LinuxKernelTrap {
                 level,
@@ -301,7 +287,7 @@ pub struct RegisterProbe {
     pub message: String,
 
     /// The raw events which justify this analytics event.
-    pub justifying_events: Vec<Event>,
+    pub justification: RegisterProbeJustification,
 }
 
 impl rust_cef::CefExtensions for RegisterProbe {
@@ -311,9 +297,27 @@ impl rust_cef::CefExtensions for RegisterProbe {
     ) -> rust_cef::CefExtensionsResult {
         collector.insert(
             "number_of_segfaults_with_instruction_pointer_within_word_size".to_owned(),
-            format!("{}", self.justifying_events.len()),
+            format!("{}", self.justification.len()),
         );
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(JsonSchema))]
+pub enum RegisterProbeJustification {
+    FullEvents(Vec<Event>),
+    RegisterValues(Vec<String>),
+    EventCount(usize),
+}
+
+impl RegisterProbeJustification {
+    pub fn len(&self) -> usize {
+        match self {
+            RegisterProbeJustification::FullEvents(events) => events.len(),
+            RegisterProbeJustification::RegisterValues(values) => values.len(),
+            RegisterProbeJustification::EventCount(count) => *count,
+        }
     }
 }
 

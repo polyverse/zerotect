@@ -42,41 +42,19 @@
           "description": "An analytics-detected internal event based on other events",
           "type": "object",
           "required": [
-            "justifying_events",
-            "type"
-          ],
-          "properties": {
-            "justifying_events": {
-              "description": "How many pairs of kernel events offcurred with an instruction pointer that was mutually close. For example if there were 3 segfaults, each with IP: 0x1000, 0x1008 and 0x100B, then the first two are 8-bytes apart, the next two are 4 bytes apart. This means there were two pairs of close-IPs. The events which justify this analytics event.",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Version"
-              }
-            },
-            "type": {
-              "type": "string",
-              "enum": [
-                "InstructionPointerProbe"
-              ]
-            }
-          }
-        },
-        {
-          "description": "An analytics-detected internal event based on other events",
-          "type": "object",
-          "required": [
-            "justifying_events",
+            "justification",
             "message",
             "register",
             "type"
           ],
           "properties": {
-            "justifying_events": {
+            "justification": {
               "description": "The raw events which justify this analytics event.",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/Version"
-              }
+              "allOf": [
+                {
+                  "$ref": "#/definitions/RegisterProbeJustification"
+                }
+              ]
             },
             "message": {
               "description": "What does this probe mean? What interpretation could this particular register probe have?",
@@ -458,6 +436,51 @@
         "Notice",
         "Info",
         "Debug"
+      ]
+    },
+    "RegisterProbeJustification": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "FullEvents"
+          ],
+          "properties": {
+            "FullEvents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Version"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "RegisterValues"
+          ],
+          "properties": {
+            "RegisterValues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "EventCount"
+          ],
+          "properties": {
+            "EventCount": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          }
+        }
       ]
     },
     "SegfaultAccessMode": {

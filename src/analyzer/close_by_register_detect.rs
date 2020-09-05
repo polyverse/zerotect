@@ -1,4 +1,5 @@
 use crate::events;
+use crate::params;
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -7,7 +8,8 @@ pub fn close_by_register_detect(
     eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
     register: &str,
     register_max_distance: usize,
-    justification_count: usize,
+    justification_threshold: usize,
+    justification_kind: params::DetectedEventJustification,
     message: &str,
 ) -> Option<(events::Event, Vec<events::Event>)> {
     // collect events with close-IPs (Instruction Pointer)
@@ -68,14 +70,14 @@ pub fn close_by_register_detect(
     }
 
     // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
-    if close_by_register.len() > justification_count {
+    if close_by_register.len() > justification_threshold {
         return Some((
             Arc::new(events::Version::V1 {
                 timestamp: Utc::now(),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: register.to_owned(),
                     message: message.to_owned(),
-                    justifying_events: close_by_register.clone(),
+                    justification: justify(close_by_register.clone(), register, justification_kind),
                 }),
             }),
             close_by_register,
@@ -116,5 +118,33 @@ where
             eprintln!("Unable to parse {} into {}: {}", frag, N::type_name(), e);
             None
         }
+    }
+}
+
+fn justify(
+    justifying_events: Vec<events::Event>,
+    register: &str,
+    justification_kind: params::DetectedEventJustification,
+) -> events::RegisterProbeJustification {
+    match justification_kind {
+        params::DetectedEventJustification::Full => events::RegisterProbeJustification::FullEvents(
+            justifying_events,
+        ),
+        params::DetectedEventJustification::Summary => events::RegisterProbeJustification::RegisterValues(
+            justifying_events.iter().filter_map(|e| {
+                match e.as_ref() {
+                    events::Version::V1 {
+                        timestamp: _,
+                        event: events::EventType::LinuxFatalSignal(lfs),
+                    } => lfs.stack_dump.get(register).map(|s| s.clone()),
+
+                    _ => {
+                        eprintln!("Analyzer:: close_by_register_detect::justify: Unsupported event found when summarizing: {}", e);
+                        None
+                    },
+                }
+            }).collect(),
+        ),
+        params::DetectedEventJustification::None => events::RegisterProbeJustification::EventCount(justifying_events.len()),
     }
 }

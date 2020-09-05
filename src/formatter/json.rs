@@ -113,18 +113,20 @@ mod test {
     }
 
     #[test]
-    fn test_zerotect_ip_probe() {
+    fn test_zerotect_register_probe() {
         let timestamp = Utc.timestamp_millis(471804323);
 
         let event1 = events::Version::V1 {
             timestamp,
-            event: events::EventType::InstructionPointerProbe(events::InstructionPointerProbe {
-                justifying_events: vec![],
+            event: events::EventType::RegisterProbe(events::RegisterProbe {
+                register: "RIP".to_owned(),
+                message: "Instruction pointer".to_owned(),
+                justification: events::RegisterProbeJustification::FullEvents(vec![]),
             }),
         };
 
         let formatter = JsonFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"InstructionPointerProbe\",\"justifying_events\":[]}}");
+        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"RegisterProbe\",\"register\":\"RIP\",\"message\":\"Instruction pointer\",\"justification\":{\"FullEvents\":[]}}}");
     }
 }
