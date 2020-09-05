@@ -384,6 +384,12 @@ pub struct LinuxFatalSignal {
     pub stack_dump: BTreeMap<String, String>,
 }
 
+impl Display for LinuxFatalSignal {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "LinuxFataSignal {} with level {} from facility {} and dump: {:?}", self.signal, self.level, self.facility, self.stack_dump)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
 #[cfg_attr(test, derive(JsonSchema))]
 pub struct LinuxSuppressedCallback {

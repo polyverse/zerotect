@@ -34,11 +34,11 @@ pub fn close_by_register_detect(
                         prev_lfs
                             .stack_dump
                             .get(register)
-                            .map(|v| parse_hex::<usize>(v, register))
+                            .map(|v| parse_hex::<usize>(v, register, prev_lfs))
                             .flatten(),
                         lfs.stack_dump
                             .get(register)
-                            .map(|v| parse_hex::<usize>(v, register))
+                            .map(|v| parse_hex::<usize>(v, register, lfs))
                             .flatten(),
                     ) {
                         // analytics only works if there is a prevous event
@@ -96,12 +96,12 @@ fn abs_diff(u1: usize, u2: usize) -> usize {
     }
 }
 
-fn parse_hex<N: num::Num + typename::TypeName>(frag: &str, register: &str) -> Option<N>
+fn parse_hex<N: num::Num + typename::TypeName>(frag: &str, register: &str, lfs: &events::LinuxFatalSignal) -> Option<N>
 where
     <N as num::Num>::FromStrRadixErr: std::fmt::Display,
 {
     // special case
-    if frag == "(null)" {
+    if frag == "(null)" || frag == "" {
         return Some(N::zero());
     };
 
@@ -116,11 +116,12 @@ where
         Ok(n) => Some(n),
         Err(e) => {
             eprintln!(
-                "Unable to parse register {} value {} into type {}: {}",
+                "Unable to parse register {} value {} into type {}: {}. The complete event: {}",
                 register,
                 frag,
                 N::type_name(),
-                e
+                e,
+                lfs
             );
             None
         }

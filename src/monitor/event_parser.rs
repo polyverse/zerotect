@@ -443,7 +443,7 @@ impl EventParser {
         <N as num::Num>::FromStrRadixErr: std::fmt::Display,
     {
         // special case
-        if frag == "(null)" {
+        if frag == "(null)" || frag == "" {
             return Some(N::zero());
         };
 
