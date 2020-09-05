@@ -317,6 +317,7 @@ pub fn analyze(
 mod test {
     use super::*;
     use chrono::Utc;
+    use rand::Rng;
     use serde_json::{from_str, from_value};
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -339,13 +340,15 @@ mod test {
         let er = run_analytics(
             get_close_ip_events(),
             params::DetectedEventJustification::Full,
+            1,
         );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        let event = er.unwrap();
+        let events = er.unwrap();
+        let event = events.first().unwrap();
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
@@ -380,13 +383,15 @@ mod test {
         let er = run_analytics(
             get_close_ip_events(),
             params::DetectedEventJustification::Summary,
+            1,
         );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        let event = er.unwrap();
+        let events = er.unwrap();
+        let event = events.first().unwrap();
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
@@ -429,13 +434,15 @@ mod test {
         let er = run_analytics(
             close_rdi_events,
             params::DetectedEventJustification::Summary,
+            1,
         );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        let event = er.unwrap();
+        let events = er.unwrap();
+        let event = events.first().unwrap();
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
@@ -466,6 +473,76 @@ mod test {
     }
 
     #[test]
+    fn test_multiple_detections_from_interleaved_raw_events() {
+        // give it some very close RDI values - increment by 1
+        let mut raw_events = Vec::<events::Event>::new();
+        for rdi in 0x0000000000000889..0x0000000000000899 {
+            raw_events.push(fatal_with_registers(map! {
+                "RDI" => format!("{:016x}", rdi),
+                "RSI" => format!("{:016x}", rdi)
+            }));
+        }
+
+        // interleave some close_ip_events
+        interleave(&mut raw_events, get_close_ip_events());
+
+        let er = run_analytics(raw_events, params::DetectedEventJustification::Summary, 3);
+
+        assert!(
+            er.is_ok(),
+            "Reception timed out before a detected events was generated"
+        );
+
+        let events = er.unwrap();
+        let mut events_iter = events.iter();
+
+        // Get register for event1
+        let register1 = match events_iter.next().unwrap().as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::RegisterValues(_),
+                    }),
+            } => register,
+            _ => panic!("An unexpected event occurred."),
+        };
+        assert_eq!(register1, "ip");
+
+        // get register for event2
+        let register2 = match events_iter.next().unwrap().as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::RegisterValues(_),
+                    }),
+            } => register,
+            _ => panic!("An unexpected event occurred."),
+        };
+        assert_eq!(register2, "RDI");
+
+        // get register for event2
+        let register3 = match events_iter.next().unwrap().as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                event:
+                    events::EventType::RegisterProbe(events::RegisterProbe {
+                        register,
+                        message: _,
+                        justification: events::RegisterProbeJustification::RegisterValues(_),
+                    }),
+            } => register,
+            _ => panic!("An unexpected event occurred."),
+        };
+        assert_eq!(register3, "RSI");
+    }
+
+    #[test]
     fn test_register_probe_none() {
         // give it some very close RDI values - increment by 1
         let mut close_rdi_events = Vec::<events::Event>::new();
@@ -475,13 +552,18 @@ mod test {
             ));
         }
 
-        let er = run_analytics(close_rdi_events, params::DetectedEventJustification::None);
+        let er = run_analytics(
+            close_rdi_events,
+            params::DetectedEventJustification::None,
+            1,
+        );
 
         assert!(
             er.is_ok(),
             "Reception timed out before a detected events was generated"
         );
-        let event = er.unwrap();
+        let events = er.unwrap();
+        let event = events.first().unwrap();
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
@@ -514,7 +596,8 @@ mod test {
     fn run_analytics(
         events: Vec<events::Event>,
         justification_kind: params::DetectedEventJustification,
-    ) -> Result<events::Event, RecvTimeoutError> {
+        num_detections: usize,
+    ) -> Result<Vec<events::Event>, RecvTimeoutError> {
         let (test_events_out, analyzer_in): (Sender<events::Event>, Receiver<events::Event>) =
             channel();
 
@@ -562,7 +645,40 @@ mod test {
         thread::sleep(Duration::from_secs(3));
 
         // expect raw_events+1 detected
-        detected_events_in.recv_timeout(Duration::from_secs(1))
+        let mut detections = vec![];
+        for _ in 0..num_detections {
+            match detected_events_in.recv_timeout(Duration::from_secs(1)) {
+                Ok(e) => detections.push(e),
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(detections)
+    }
+
+    fn interleave(accumulator: &mut Vec<events::Event>, mut events_to_insert: Vec<events::Event>) {
+        // go highest to lowest (so we can interleave)
+        events_to_insert.reverse();
+
+        //first generate locations in range
+        let mut locations = vec![];
+        for _ in 0..events_to_insert.len() {
+            // pick a random locations within range
+            locations.push(rand::thread_rng().gen_range(0, accumulator.len()));
+        }
+
+        // then sort them
+        locations.sort();
+        // in descending order...
+        locations.reverse();
+
+        let mut lociter = locations.into_iter();
+
+        // by inserting them from highest location to back, we insert at the proper
+        // locations since all locations higher than insertion point will change/move
+        for event_to_insert in events_to_insert.into_iter() {
+            accumulator.insert(lociter.next().unwrap(), event_to_insert)
+        }
     }
 
     fn get_close_ip_events() -> Vec<events::Event> {
