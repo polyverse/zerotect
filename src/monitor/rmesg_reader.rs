@@ -118,7 +118,7 @@ impl RMesgReader {
         }
 
         if let Some(rmesgparts) = RE_RMESG_WITH_TIMESTAMP.captures(&line_str) {
-            let (facility, level) = match RMesgReader::parse_fragment::<u32>(&rmesgparts["faclevstr"]) {
+            let (facility, level) = match RMesgReader::parse_fragment::<u32>(&rmesgparts["faclevstr"], "u32") {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev >> 3)) {
@@ -129,7 +129,7 @@ impl RMesgReader {
                 None => return Err(KMsgParsingError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", &rmesgparts["faclevstr"], line_str)))
             };
 
-            let timestamp = match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"]) {
+            let timestamp = match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"], "f64") {
                 Some(timesecs) => match ChronoDuration::from_std(Duration::from_secs_f64(timesecs))
                 {
                     Ok(d) => self.system_start_time.add(d),
@@ -183,14 +183,14 @@ impl RMesgReader {
         }
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
+    fn parse_fragment<F: FromStr>(frag: &str, typename: &str) -> Option<F>
     where
         <F as std::str::FromStr>::Err: std::fmt::Display,
     {
         match frag.trim().parse::<F>() {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, F::type_name(), e);
+                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
                 None
             }
         }

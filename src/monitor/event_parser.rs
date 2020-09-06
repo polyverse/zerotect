@@ -125,19 +125,19 @@ impl EventParser {
                 maybelocation,
             ) = (
                 &dmesg_parts["procname"],
-                EventParser::parse_fragment::<usize>(&dmesg_parts["pid"]),
+                EventParser::parse_fragment::<usize>(&dmesg_parts["pid"], "usize"),
                 EventParser::parse_kernel_trap_type(&dmesg_parts["message"]),
-                EventParser::parse_hex::<usize>(&dmesg_parts["ip"]),
-                EventParser::parse_hex::<usize>(&dmesg_parts["sp"]),
-                EventParser::parse_hex::<u8>(&dmesg_parts["errcode"]),
+                EventParser::parse_hex::<usize>(&dmesg_parts["ip"], "usize"),
+                EventParser::parse_hex::<usize>(&dmesg_parts["sp"], "usize"),
+                EventParser::parse_hex::<u8>(&dmesg_parts["errcode"], "u8"),
                 &dmesg_parts["maybelocation"],
             ) {
                 let (file, vmastart, vmasize) =
                     if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
                         (
                             Some((&location_parts["file"]).to_owned()),
-                            EventParser::parse_hex::<usize>(&location_parts["vmastart"]),
-                            EventParser::parse_hex::<usize>(&location_parts["vmasize"]),
+                            EventParser::parse_hex::<usize>(&location_parts["vmastart"], "usize"),
+                            EventParser::parse_hex::<usize>(&location_parts["vmasize"], "usize"),
                         )
                     } else {
                         (None, None, None)
@@ -186,7 +186,7 @@ impl EventParser {
         }
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
-            if let Some(location) = EventParser::parse_hex::<usize>(&segfault_parts["location"]) {
+            if let Some(location) = EventParser::parse_hex::<usize>(&segfault_parts["location"], "usize") {
                 Some(events::KernelTrapType::Segfault { location })
             } else {
                 eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);
@@ -216,7 +216,7 @@ impl EventParser {
         }
         if let Some(fatal_signal_parts) = RE_FATAL_SIGNAL.captures(km.message.as_str()) {
             if let Some(signalnum) =
-                EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
+                EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"], "u8")
             {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Version::V1 {
@@ -387,7 +387,7 @@ impl EventParser {
         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
             if let (function_name, Some(count)) = (
                 &dmesg_parts["function"],
-                EventParser::parse_fragment::<usize>(&dmesg_parts["count"]),
+                EventParser::parse_fragment::<usize>(&dmesg_parts["count"], "usize"),
             ) {
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
@@ -406,20 +406,20 @@ impl EventParser {
         None
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
+    fn parse_fragment<F: FromStr>(frag: &str, typename: &str) -> Option<F>
     where
         <F as std::str::FromStr>::Err: std::fmt::Display,
     {
         match frag.trim().parse::<F>() {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, F::type_name(), e);
+                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
                 None
             }
         }
     }
 
-    fn parse_hex<N: num::Num + typename::TypeName>(frag: &str) -> Option<N>
+    fn parse_hex<N: num::Num>(frag: &str, typename: &str) -> Option<N>
     where
         <N as num::Num>::FromStrRadixErr: std::fmt::Display,
     {
@@ -431,7 +431,7 @@ impl EventParser {
         match N::from_str_radix(frag.trim(), 16) {
             Ok(n) => Some(n),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, N::type_name(), e);
+                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
                 None
             }
         }

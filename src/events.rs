@@ -7,7 +7,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
-use typename::TypeName;
 
 #[cfg(test)]
 use schemars::JsonSchema;
@@ -429,7 +428,7 @@ pub struct ConfigMismatch {
 }
 
 /// Linux kmesg (kernel message buffer) Log Facility.
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize)]
+#[derive(EnumString, Debug, PartialEq, Display, FromPrimitive, Copy, Clone, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
@@ -470,7 +469,7 @@ pub enum LogFacility {
 }
 
 /// Linux kmesg (kernel message buffer) Log Level.
-#[derive(EnumString, Debug, PartialEq, TypeName, Display, FromPrimitive, Copy, Clone, Serialize)]
+#[derive(EnumString, Debug, PartialEq, Display, FromPrimitive, Copy, Clone, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]

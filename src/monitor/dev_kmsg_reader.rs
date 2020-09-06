@@ -155,7 +155,7 @@ impl DevKMsgReader {
 
         let mut meta_parts = meta.splitn(4, ',');
         let (facility, level) = match meta_parts.next() {
-            Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
+            Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr, "u32") {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (
@@ -188,7 +188,7 @@ impl DevKMsgReader {
         meta_parts.next();
 
         let timestamp = match meta_parts.next() {
-            Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr) {
+            Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr, "i64") {
                 Some(t) => self.system_start_time.add(ChronoDuration::microseconds(t)),
                 None => {
                     return Err(KMsgParsingError::Generic(format!(
@@ -260,14 +260,14 @@ impl DevKMsgReader {
         Ok(line_str)
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
+    fn parse_fragment<F: FromStr>(frag: &str, typename: &str) -> Option<F>
     where
         <F as std::str::FromStr>::Err: std::fmt::Display,
     {
         match frag.trim().parse::<F>() {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, F::type_name(), e);
+                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
                 None
             }
         }
