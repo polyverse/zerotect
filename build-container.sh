@@ -2,4 +2,7 @@
 
 #docker run --rm -it -v $PWD:/zerotect --privileged rust bash
 
-docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -it --privileged clux/muslrust
+docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -it --privileged clux/muslrust \
+	rustup component add clippy && \
+	cargo install cargo-bloat && \
+	bash
