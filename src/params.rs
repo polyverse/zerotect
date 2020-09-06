@@ -95,11 +95,14 @@ const DEFAULT_ANALYTICS_EVENT_DROP_COUNT: usize = 5;
 
 #[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
 pub enum OutputFormat {
+    #[strum(serialize = "text")]
     Text,
 
+    #[strum(serialize = "json")]
     JSON,
 
     // Microfocus ArcSight Common Event Format
+    #[strum(serialize = "cef")]
     CEF,
 }
 
@@ -130,10 +133,13 @@ pub struct SyslogConfig {
 pub enum SyslogDestination {
     Default,
 
+    #[strum(serialize = "unix")]
     Unix,
 
+    #[strum(serialize = "tcp")]
     Tcp,
 
+    #[strum(serialize = "udp")]
     Udp,
 }
 
