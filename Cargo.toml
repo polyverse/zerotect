@@ -13,14 +13,13 @@ strum_macros = "0.19.2"
 regex = "1"
 typename = "0.1.2"
 enum-display-derive = "0.1.0"
-num = "0.1.40"
+num = "0.3.0"
 lazy_static = "1.4.0"
 num-traits = "0.2"
 num-derive = "0.3.2"
 timeout-iterator = "0.5.0"
 serde = { version = "1.0.115", features = ["derive", "rc"] }
 serde_json = { version = "1.0.57", features = ["arbitrary_precision"]}
-reqwest = { version = "0.10.8", features = ["json", "blocking", "gzip", "brotli"] }
 chrono = { version = "0.4", features = ["serde", "std"] }
 toml = "0.5.6"
 http = "0.2.1"
@@ -31,6 +30,7 @@ rust-cef = "0.0.5"
 syslog = "5.0.0"
 libc = "0.2.76"
 file-rotate-record-boundary = "0.3.0"
+ureq = "1.4.0"
 
 [dependencies.clap]
 version = "2.33.3"
