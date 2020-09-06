@@ -34,11 +34,11 @@ pub fn close_by_register_detect(
                     prev_lfs
                         .stack_dump
                         .get(register)
-                        .map(|v| parse_hex::<usize>(v, register, prev_lfs, "usize"))
+                        .map(|v| parse_hex(v, register, prev_lfs))
                         .flatten(),
                     lfs.stack_dump
                         .get(register)
-                        .map(|v| parse_hex::<usize>(v, register, lfs, "usize"))
+                        .map(|v| parse_hex(v, register, lfs))
                         .flatten(),
                 ) {
                     // analytics only works if there is a prevous event
@@ -92,18 +92,10 @@ fn abs_diff(u1: usize, u2: usize) -> usize {
     }
 }
 
-fn parse_hex<N: num::Num>(
-    frag: &str,
-    register: &str,
-    lfs: &events::LinuxFatalSignal,
-    typename: &str,
-) -> Option<N>
-where
-    <N as num::Num>::FromStrRadixErr: std::fmt::Display,
-{
+fn parse_hex(frag: &str, register: &str, lfs: &events::LinuxFatalSignal) -> Option<usize> {
     // special case
     if frag == "(null)" || frag == "" {
-        return Some(N::zero());
+        return Some(0);
     };
 
     // Some register values look like: 0033:0x7f883e3ad43
@@ -113,14 +105,13 @@ where
         None => frag,
     };
 
-    match N::from_str_radix(sanitized_frag.trim(), 16) {
+    match usize::from_str_radix(sanitized_frag.trim(), 16) {
         Ok(n) => Some(n),
         Err(e) => {
             eprintln!(
-                "Unable to parse register {} value {} into type {}: {}. The complete event: {}",
+                "Unable to parse register {} value {} into type 'usize': {}. The complete event: {}",
                 register,
                 frag,
-                typename,
                 e,
                 lfs
             );

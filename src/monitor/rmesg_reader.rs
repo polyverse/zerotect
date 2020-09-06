@@ -129,24 +129,26 @@ impl RMesgReader {
                 None => return Err(KMsgParsingError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", &rmesgparts["faclevstr"], line_str)))
             };
 
-            let timestamp = match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"], "f64") {
-                Some(timesecs) => match ChronoDuration::from_std(Duration::from_secs_f64(timesecs))
-                {
-                    Ok(d) => self.system_start_time.add(d),
-                    Err(e) => {
+            let timestamp =
+                match RMesgReader::parse_fragment::<f64>(&rmesgparts["timestampstr"], "f64") {
+                    Some(timesecs) => {
+                        match ChronoDuration::from_std(Duration::from_secs_f64(timesecs)) {
+                            Ok(d) => self.system_start_time.add(d),
+                            Err(e) => {
+                                return Err(KMsgParsingError::Generic(format!(
+                                    "Unable to parse {} into a time duration: {:?}",
+                                    timesecs, e
+                                )))
+                            }
+                        }
+                    }
+                    None => {
                         return Err(KMsgParsingError::Generic(format!(
-                            "Unable to parse {} into a time duration: {:?}",
-                            timesecs, e
+                            "Unable to parse {} into a floating point number.",
+                            &rmesgparts["timestampstr"]
                         )))
                     }
-                },
-                None => {
-                    return Err(KMsgParsingError::Generic(format!(
-                        "Unable to parse {} into a floating point number.",
-                        &rmesgparts["timestampstr"]
-                    )))
-                }
-            };
+                };
 
             // exit if timestamp is less than event stream start time
             if timestamp < self.event_stream_start_time {

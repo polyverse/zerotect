@@ -8,7 +8,6 @@ use regex::Regex;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -125,19 +124,19 @@ impl EventParser {
                 maybelocation,
             ) = (
                 &dmesg_parts["procname"],
-                EventParser::parse_fragment::<usize>(&dmesg_parts["pid"], "usize"),
+                EventParser::parse_fragment_usize(&dmesg_parts["pid"]),
                 EventParser::parse_kernel_trap_type(&dmesg_parts["message"]),
-                EventParser::parse_hex::<usize>(&dmesg_parts["ip"], "usize"),
-                EventParser::parse_hex::<usize>(&dmesg_parts["sp"], "usize"),
-                EventParser::parse_hex::<u8>(&dmesg_parts["errcode"], "u8"),
+                EventParser::parse_hex_usize(&dmesg_parts["ip"]),
+                EventParser::parse_hex_usize(&dmesg_parts["sp"]),
+                EventParser::parse_hex_u8(&dmesg_parts["errcode"]),
                 &dmesg_parts["maybelocation"],
             ) {
                 let (file, vmastart, vmasize) =
                     if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
                         (
                             Some((&location_parts["file"]).to_owned()),
-                            EventParser::parse_hex::<usize>(&location_parts["vmastart"], "usize"),
-                            EventParser::parse_hex::<usize>(&location_parts["vmasize"], "usize"),
+                            EventParser::parse_hex_usize(&location_parts["vmastart"]),
+                            EventParser::parse_hex_usize(&location_parts["vmasize"]),
                         )
                     } else {
                         (None, None, None)
@@ -186,7 +185,7 @@ impl EventParser {
         }
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
-            if let Some(location) = EventParser::parse_hex::<usize>(&segfault_parts["location"], "usize") {
+            if let Some(location) = EventParser::parse_hex_usize(&segfault_parts["location"]) {
                 Some(events::KernelTrapType::Segfault { location })
             } else {
                 eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);
@@ -216,7 +215,7 @@ impl EventParser {
         }
         if let Some(fatal_signal_parts) = RE_FATAL_SIGNAL.captures(km.message.as_str()) {
             if let Some(signalnum) =
-                EventParser::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"], "u8")
+                EventParser::parse_fragment_u8(&fatal_signal_parts["signalnumstr"])
             {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Version::V1 {
@@ -387,7 +386,7 @@ impl EventParser {
         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
             if let (function_name, Some(count)) = (
                 &dmesg_parts["function"],
-                EventParser::parse_fragment::<usize>(&dmesg_parts["count"], "usize"),
+                EventParser::parse_fragment_usize(&dmesg_parts["count"]),
             ) {
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
@@ -406,32 +405,51 @@ impl EventParser {
         None
     }
 
-    fn parse_fragment<F: FromStr>(frag: &str, typename: &str) -> Option<F>
-    where
-        <F as std::str::FromStr>::Err: std::fmt::Display,
-    {
-        match frag.trim().parse::<F>() {
+    fn parse_fragment_usize(frag: &str) -> Option<usize> {
+        match frag.trim().parse() {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
+                eprintln!("Unable to parse {} into usize: {}", frag, e);
                 None
             }
         }
     }
 
-    fn parse_hex<N: num::Num>(frag: &str, typename: &str) -> Option<N>
-    where
-        <N as num::Num>::FromStrRadixErr: std::fmt::Display,
-    {
+    fn parse_fragment_u8(frag: &str) -> Option<u8> {
+        match frag.trim().parse() {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("Unable to parse {} into usize: {}", frag, e);
+                None
+            }
+        }
+    }
+
+    fn parse_hex_usize(frag: &str) -> Option<usize> {
         // special case
         if frag == "(null)" || frag == "" {
-            return Some(N::zero());
+            return Some(0);
         };
 
-        match N::from_str_radix(frag.trim(), 16) {
+        match usize::from_str_radix(frag.trim(), 16) {
             Ok(n) => Some(n),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, typename, e);
+                eprintln!("Unable to parse {} into usize: {}", frag, e);
+                None
+            }
+        }
+    }
+
+    fn parse_hex_u8(frag: &str) -> Option<u8> {
+        // special case
+        if frag == "(null)" || frag == "" {
+            return Some(0);
+        };
+
+        match u8::from_str_radix(frag.trim(), 16) {
+            Ok(n) => Some(n),
+            Err(e) => {
+                eprintln!("Unable to parse {} into usize: {}", frag, e);
                 None
             }
         }
