@@ -93,20 +93,17 @@ const DEFAULT_ANALYTICS_MAX_EVENT_COUNT: usize = 20;
 // when all 20 events are full, drop the oldest 5. It's okay.
 const DEFAULT_ANALYTICS_EVENT_DROP_COUNT: usize = 5;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
+#[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
 pub enum OutputFormat {
-    #[strum(serialize = "text")]
     Text,
 
-    #[strum(serialize = "json")]
     JSON,
 
     // Microfocus ArcSight Common Event Format
-    #[strum(serialize = "cef")]
     CEF,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConsoleConfig {
     pub format: OutputFormat,
 }
@@ -119,7 +116,7 @@ pub struct ConsoleConfig {
 /// > Serialization can fail if T's implementation of Serialize decides to fail, if T contains a map with
 /// > non-string keys, or if T attempts to serialize an unsupported datatype such as an enum, tuple, or tuple struct.
 ///
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SyslogConfig {
     pub format: OutputFormat,
     pub destination: SyslogDestination,
@@ -129,22 +126,18 @@ pub struct SyslogConfig {
     pub hostname: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
+#[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
 pub enum SyslogDestination {
-    #[strum(serialize = "default")]
     Default,
 
-    #[strum(serialize = "unix")]
     Unix,
 
-    #[strum(serialize = "tcp")]
     Tcp,
 
-    #[strum(serialize = "udp")]
     Udp,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct LogFileConfig {
     pub format: OutputFormat,
     pub filepath: String,
@@ -157,7 +150,7 @@ pub struct LogFileConfig {
     pub rotation_file_max_size: Option<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PolycorderConfig {
     pub auth_key: String,
     pub node_id: String,
@@ -169,14 +162,14 @@ pub struct PolycorderConfig {
     pub flush_timeout_seconds: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AutoConfigure {
     pub exception_trace: bool,
     pub fatal_signals: bool,
     pub klog_include_timestamp: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Clone, Debug, PartialEq, Serialize, EnumString)]
 pub enum AnalyticsMode {
     /// No analytics
     #[strum(serialize = "off")]
@@ -192,7 +185,7 @@ pub enum AnalyticsMode {
     Detected,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, EnumString)]
 pub enum DetectedEventJustification {
     /// No justification. At best a count of the number of events that justify it.
     #[strum(serialize = "none")]
@@ -209,7 +202,7 @@ pub enum DetectedEventJustification {
     Full,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AnalyticsConfig {
     /// What mode is the analyzer in?
     pub mode: AnalyticsMode,
@@ -239,12 +232,12 @@ pub struct AnalyticsConfig {
     pub event_drop_count: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MonitorConfig {
     pub gobble_old_events: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ZerotectParams {
     pub verbosity: u8,
 

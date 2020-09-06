@@ -34,7 +34,6 @@ pub type Event = Arc<Version>;
     PartialEq,
     Clone,
     Serialize,
-    Deserialize,
     ToCef,
     CefHeaderVersion,
     CefHeaderDeviceVendor,
@@ -45,7 +44,7 @@ pub type Event = Arc<Version>;
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema))]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 #[cef_values(
     CefHeaderVersion = "0",
     CefHeaderDeviceVendor = "polyverse",
@@ -85,13 +84,12 @@ impl Display for Version {
     PartialEq,
     Clone,
     Serialize,
-    Deserialize,
     CefHeaderDeviceEventClassID,
     CefHeaderName,
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema))]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 #[serde(tag = "type")]
 pub enum EventType {
     /// An analytics-detected internal event based on other events
@@ -246,8 +244,8 @@ impl Display for EventType {
 ///
 /// The goal is to find beneficial or suitable instructions that are
 /// executable and helpful.
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct InstructionPointerProbe {
     /// How many pairs of kernel events offcurred with an instruction pointer that was
     /// mutually close. For example if there were 3 segfaults, each with IP:
@@ -276,8 +274,8 @@ impl rust_cef::CefExtensions for InstructionPointerProbe {
 ///
 /// When probing a stack canary, RDI/RSI increment by one value, for instance.
 ///
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct RegisterProbe {
     /// Which register was being probed?
     pub register: String,
@@ -303,8 +301,8 @@ impl rust_cef::CefExtensions for RegisterProbe {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum RegisterProbeJustification {
     FullEvents(Vec<Event>),
     RegisterValues(Vec<String>),
@@ -321,8 +319,8 @@ impl RegisterProbeJustification {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
     /// A Log-level for this event - was it critical?
@@ -366,8 +364,8 @@ pub struct LinuxKernelTrap {
     pub vmasize: Option<usize>,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxFatalSignal {
     /// A Log-level for this event - was it critical?
     pub level: LogLevel,
@@ -394,8 +392,8 @@ impl Display for LinuxFatalSignal {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
     pub level: LogLevel,
@@ -412,8 +410,8 @@ pub struct LinuxSuppressedCallback {
     pub count: usize,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
     #[cef_ext_field]
@@ -439,9 +437,8 @@ pub struct ConfigMismatch {
     Copy,
     Clone,
     Serialize,
-    Deserialize,
 )]
-#[cfg_attr(test, derive(JsonSchema))]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
     Kern = 0,
@@ -491,9 +488,8 @@ pub enum LogFacility {
     Copy,
     Clone,
     Serialize,
-    Deserialize,
 )]
-#[cfg_attr(test, derive(JsonSchema))]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
     Emergency = 0,
@@ -521,8 +517,8 @@ pub enum LogLevel {
 }
 
 /// The types of kernel traps understood
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 #[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
@@ -558,8 +554,8 @@ impl Display for KernelTrapType {
 }
 
 /// The reason for the Segmentation Fault
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum SegfaultReason {
     /// The page attempted to access was not found (i.e. in invalid memory address)
     NoPageFound,
@@ -570,8 +566,8 @@ pub enum SegfaultReason {
 }
 
 /// The type of Access that triggered this Segmentation Fault
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum SegfaultAccessType {
     /// Attempting to Read
     Read,
@@ -581,8 +577,8 @@ pub enum SegfaultAccessType {
 }
 
 /// The context under which the Segmentation Fault was triggered
-#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum SegfaultAccessMode {
     /// Process was in kernel mode (during a syscall, context switch, etc.)
     Kernel,
@@ -593,8 +589,8 @@ pub enum SegfaultAccessMode {
 /// Segmentation Fault ErrorCode flags parsed into a structure
 /// See more: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/traps.h#n167
 /// See more: https://utcc.utoronto.ca/~cks/space/blog/linux/KernelSegfaultMessageMeaning
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema))]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct SegfaultErrorCode {
     /// The reason for the segmentation fault
     #[cef_ext_field]
@@ -682,9 +678,9 @@ impl Display for SegfaultErrorCode {
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
 #[derive(
-    Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize, Deserialize,
+    Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize,
 )]
-#[cfg_attr(test, derive(JsonSchema))]
+#[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
     SIGHUP = 1,
