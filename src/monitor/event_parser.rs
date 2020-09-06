@@ -325,7 +325,7 @@ impl EventParser {
                         let appended_key = match key {
                             Some(mut ks) => {
                                 if ks != "" {
-                                    ks.push_str(" ")
+                                    ks.push(' ')
                                 };
                                 ks.push_str(part_without_colon);
                                 ks
@@ -341,13 +341,13 @@ impl EventParser {
                     // are we in a value? if so append to it
                     if let Some(mut v) = value {
                         if v != "" {
-                            v.push_str(" ")
+                            v.push(' ')
                         };
                         v.push_str(part);
                         value = Some(v);
                     } else if let Some(mut k) = key {
                         if k != "" {
-                            k.push_str(" ")
+                            k.push(' ')
                         };
                         k.push_str(part);
                         key = Some(k);
