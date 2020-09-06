@@ -171,7 +171,7 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: ctlstr.to_owned(),
                 expected_value: valuestr.to_owned(),
-                observed_value: prev_value_str.to_owned(),
+                observed_value: prev_value_str,
             }),
         })))
     }

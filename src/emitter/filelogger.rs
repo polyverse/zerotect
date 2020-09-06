@@ -57,10 +57,10 @@ pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
         Some(rfc) => match lfc.rotation_file_max_size {
             //wrap file in file-rotation
             Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::BytesSurpassed(rfms), rfc)),
-            None => return Err(FileLoggerError::MissingParameter(format!("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless."))),
+            None => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless.".to_owned())),
         },
         None => match lfc.rotation_file_max_size {
-            Some(_) => return Err(FileLoggerError::MissingParameter(format!("File Logger was provided a rotation_file_max_size parameter, but not a rotation_file_count parameter. Without knowing the number of files to rotate over, the max size is meaningless."))),
+            Some(_) => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_max_size parameter, but not a rotation_file_count parameter. Without knowing the number of files to rotate over, the max size is meaningless.".to_owned())),
             None => match OpenOptions::new()
                 .append(true)
                 .create_new(true)

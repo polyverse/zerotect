@@ -93,7 +93,7 @@ const DEFAULT_ANALYTICS_MAX_EVENT_COUNT: usize = 20;
 // when all 20 events are full, drop the oldest 5. It's okay.
 const DEFAULT_ANALYTICS_EVENT_DROP_COUNT: usize = 5;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
+#[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
 pub enum OutputFormat {
     #[strum(serialize = "text")]
     Text,
@@ -106,7 +106,7 @@ pub enum OutputFormat {
     CEF,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConsoleConfig {
     pub format: OutputFormat,
 }
@@ -119,7 +119,7 @@ pub struct ConsoleConfig {
 /// > Serialization can fail if T's implementation of Serialize decides to fail, if T contains a map with
 /// > non-string keys, or if T attempts to serialize an unsupported datatype such as an enum, tuple, or tuple struct.
 ///
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct SyslogConfig {
     pub format: OutputFormat,
     pub destination: SyslogDestination,
@@ -129,9 +129,8 @@ pub struct SyslogConfig {
     pub hostname: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, EnumString)]
+#[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
 pub enum SyslogDestination {
-    #[strum(serialize = "default")]
     Default,
 
     #[strum(serialize = "unix")]
@@ -144,7 +143,7 @@ pub enum SyslogDestination {
     Udp,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct LogFileConfig {
     pub format: OutputFormat,
     pub filepath: String,
@@ -157,7 +156,7 @@ pub struct LogFileConfig {
     pub rotation_file_max_size: Option<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PolycorderConfig {
     pub auth_key: String,
     pub node_id: String,
@@ -169,14 +168,14 @@ pub struct PolycorderConfig {
     pub flush_timeout_seconds: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AutoConfigure {
     pub exception_trace: bool,
     pub fatal_signals: bool,
     pub klog_include_timestamp: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Clone, Debug, PartialEq, Serialize, EnumString)]
 pub enum AnalyticsMode {
     /// No analytics
     #[strum(serialize = "off")]
@@ -192,7 +191,7 @@ pub enum AnalyticsMode {
     Detected,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, EnumString)]
 pub enum DetectedEventJustification {
     /// No justification. At best a count of the number of events that justify it.
     #[strum(serialize = "none")]
@@ -209,7 +208,7 @@ pub enum DetectedEventJustification {
     Full,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AnalyticsConfig {
     /// What mode is the analyzer in?
     pub mode: AnalyticsMode,
@@ -239,12 +238,12 @@ pub struct AnalyticsConfig {
     pub event_drop_count: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MonitorConfig {
     pub gobble_old_events: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ZerotectParams {
     pub verbosity: u8,
 
@@ -486,7 +485,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("filepath")
                             .takes_value(true)
                             .conflicts_with_all(&[AUTO_CONFIGURE, CONSOLE_OUTPUT_FLAG, POLYCORDER_OUTPUT_FLAG, NODE_ID_FLAG, "verbose"])
-                            .help(format!("Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)").as_str()))
+                            .help("Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)"))
 
                         // configure automatically
                         .arg(Arg::with_name(AUTO_CONFIGURE)
@@ -495,12 +494,12 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .takes_value(true)
                             .possible_values(&[EXCEPTION_TRACE_CTLNAME, PRINT_FATAL_SIGNALS_CTLNAME, KLOG_INCLUDE_TIMESTAMP])
                             .multiple(true)
-                            .help(format!("Automatically configure the system on the user's behalf.").as_str()))
+                            .help("Automatically configure the system on the user's behalf."))
 
                         // Start monitoring events right now or from the past?
                         .arg(Arg::with_name(GOBBLE_OLD_EVENTS_FLAG)
                             .long(GOBBLE_OLD_EVENTS_FLAG)
-                            .help(format!("When enabled, gobbles events from the past (if found) in logs. By default zerotect only captures events after it has started.").as_str()))
+                            .help("When enabled, gobbles events from the past (if found) in logs. By default zerotect only captures events after it has started."))
 
                         // console output
                         .arg(Arg::with_name(CONSOLE_OUTPUT_FLAG)
@@ -508,7 +507,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("format")
                             .possible_values(POSSIBLE_FORMATS)
                             .case_insensitive(true)
-                            .help(format!("Prints all monitored data to the console in the specified format.").as_str()))
+                            .help("Prints all monitored data to the console in the specified format."))
 
                         // polycorder output
                         .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
@@ -516,25 +515,25 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("authkey")
                             .takes_value(true)
                             .empty_values(false)
-                            .help(format!("Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse.").as_str()))
+                            .help("Sends all monitored data to the polycorder service. When specified, must provide a Polyverse Account AuthKey which has an authorized scope to publish to Polyverse."))
                         .arg(Arg::with_name(NODE_ID_FLAG)
                             .long(NODE_ID_FLAG)
                             .value_name("node_identifier")
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
-                            .help(format!("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.").as_str()))
+                            .help("All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more."))
                         .arg(Arg::with_name(FLUSH_TIMEOUT_SECONDS_FLAG)
                             .long(FLUSH_TIMEOUT_SECONDS_FLAG)
                             .value_name("seconds")
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
-                            .help(format!("After how many seconds should events be flushed to Polycorder, if no new events occur. This avoids chatty communication with Polycorder.").as_str()))
+                            .help("After how many seconds should events be flushed to Polycorder, if no new events occur. This avoids chatty communication with Polycorder."))
                         .arg(Arg::with_name(FLUSH_EVENT_COUNT_FLAG)
                             .long(FLUSH_EVENT_COUNT_FLAG)
                             .value_name("count")
                             .empty_values(false)
                             .requires(POLYCORDER_OUTPUT_FLAG)
-                            .help(format!("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty.").as_str()))
+                            .help("The number of events, when buffered, are flushed to Polycorder. This allows batching of events. Make this too high, and upon failure, a large number of events may be lost. Make it too low, and connections will be chatty."))
 
                         // syslog output
                         .arg(Arg::with_name(SYSLOG_OUTPUT_FLAG)
@@ -542,7 +541,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .value_name("format")
                             .possible_values(POSSIBLE_FORMATS)
                             .case_insensitive(true)
-                            .help(format!("Sends all monitored data to syslog in the specified format. Unless a destination is selected, tries to send to standard syslog destinations when in order of unix socket, tcp and udp. Since the UDP destination will almost never fail, if there is no listener, logs will be lost.").as_str()))
+                            .help("Sends all monitored data to syslog in the specified format. Unless a destination is selected, tries to send to standard syslog destinations when in order of unix socket, tcp and udp. Since the UDP destination will almost never fail, if there is no listener, logs will be lost."))
                         // syslog destinations
                         .arg(Arg::with_name(SYSLOG_DESTINATION_FLAG)
                             .long(SYSLOG_DESTINATION_FLAG)
@@ -550,13 +549,13 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .possible_values(SYSLOG_POSSIBLE_DESTINATIONS)
                             .case_insensitive(true)
                             .requires(SYSLOG_OUTPUT_FLAG)
-                            .help(format!("The syslog destination type. If a destination is selected, the destination configuration flags are explicitly required and defaults are not used.").as_str()))
+                            .help("The syslog destination type. If a destination is selected, the destination configuration flags are explicitly required and defaults are not used."))
                         //syslog hostname (optional)
                         .arg(Arg::with_name(SYSLOG_HOSTNAME)
                             .long(SYSLOG_HOSTNAME)
                             .value_name("hostname")
                             .requires(SYSLOG_DESTINATION_FLAG)
-                            .help(format!("The syslog tcp server addr to send to. (usually ip:port)").as_str()))
+                            .help("The syslog tcp server addr to send to. (usually ip:port)"))
                         // syslog tcp options
                         .arg(Arg::with_name(SYSLOG_SERVER_ADDR)
                             .long(SYSLOG_SERVER_ADDR)
@@ -566,7 +565,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_TCP),
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP)
                             ])
-                            .help(format!("The syslog udp server addr to send to. (usually ip:port)").as_str()))
+                            .help("The syslog udp server addr to send to. (usually ip:port)"))
                         // syslog udp options
                         .arg(Arg::with_name(SYSLOG_LOCAL_ADDR)
                             .long(SYSLOG_LOCAL_ADDR)
@@ -575,7 +574,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .required_ifs(&[
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP)
                             ])
-                            .help(format!("The syslog udp local addr to bind to. (usually ip:port)").as_str()))
+                            .help("The syslog udp local addr to bind to. (usually ip:port)"))
                         //syslog unix socket path
                         .arg(Arg::with_name(SYSLOG_UNIX_SOCKET_PATH)
                             .long(SYSLOG_UNIX_SOCKET_PATH)
@@ -584,7 +583,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .required_ifs(&[
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UNIX)
                             ])
-                            .help(format!("The unix socket to send to. (usually /dev/log or /var/run/syslog)").as_str()))
+                            .help("The unix socket to send to. (usually /dev/log or /var/run/syslog)"))
 
                         // logfile output format
                         .arg(Arg::with_name(LOGFILE_FORMAT_FLAG)
@@ -593,25 +592,25 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .possible_values(POSSIBLE_FORMATS)
                             .case_insensitive(true)
                             .requires(LOGFILE_PATH_FLAG)
-                            .help(format!("Sends all monitored data to the log file in the specified format.").as_str()))
+                            .help("Sends all monitored data to the log file in the specified format."))
                         // logfile path
                         .arg(Arg::with_name(LOGFILE_PATH_FLAG)
                             .long(LOGFILE_PATH_FLAG)
                             .value_name("path")
                             .requires(LOGFILE_FORMAT_FLAG)
-                            .help(format!("Sends all monitored data to a log file specified in the path.").as_str()))
+                            .help("Sends all monitored data to a log file specified in the path."))
                         // log file rotation count
                         .arg(Arg::with_name(LOGFILE_ROTATION_COUNT_FLAG)
                             .long(LOGFILE_ROTATION_COUNT_FLAG)
                             .value_name("count")
                             .requires_all(&[LOGFILE_PATH_FLAG,LOGFILE_ROTATION_SIZE_FLAG])
-                            .help(format!("Setting this enables file rotation. Files are rotated as $path.0, $path.1.. etc. upto the number specified by this argument (and then starting back at $path.0 when the N'th file exceeds max size).").as_str()))
+                            .help("Setting this enables file rotation. Files are rotated as $path.0, $path.1.. etc. upto the number specified by this argument (and then starting back at $path.0 when the N'th file exceeds max size)."))
                         // log file rotation max size
                         .arg(Arg::with_name(LOGFILE_ROTATION_SIZE_FLAG)
                             .long(LOGFILE_ROTATION_SIZE_FLAG)
                             .value_name("size")
                             .requires_all(&[LOGFILE_PATH_FLAG, LOGFILE_ROTATION_COUNT_FLAG])
-                            .help(format!("Setting this enables file rotation. A new file is begin in the rotation sequence when the current file exceeds the size (in bytes) specified by this argument.").as_str()))
+                            .help("Setting this enables file rotation. A new file is begin in the rotation sequence when the current file exceeds the size (in bytes) specified by this argument."))
 
                         // Built-in analytics
                         .arg(Arg::with_name(ANALYTICS_MODE_FLAG)
@@ -619,21 +618,21 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .possible_values(ANALYTICS_POSSIBLE_MODES)
                             .case_insensitive(true)
                             .default_value(ANALYTICS_MODE_PASSTHROUGH)
-                            .help(format!("Enable or disable built-in analytics (looks for localized indicators of live attacks)").as_str()))
+                            .help("Enable or disable built-in analytics (looks for localized indicators of live attacks)"))
                         // How much detail when an event is detected?
                         .arg(Arg::with_name(DETECTED_EVENT_JUSTIFICATION_FLAG)
                             .long(DETECTED_EVENT_JUSTIFICATION_FLAG)
                             .possible_values(DETECTED_EVENT_JUSTIFICATIONS)
                             .case_insensitive(true)
                             .default_value(DETECTED_EVENT_JUSTIFICATION_SUMMARY)
-                            .help(format!("When an event is detected, how much justification (i.e. details on exactly why that event was detected) ").as_str()))
+                            .help("When an event is detected, how much justification (i.e. details on exactly why that event was detected) "))
 
                         // verbose internal logging?
                         .arg(Arg::with_name("verbose")
                             .short("v")
                             .long("verbose")
                             .multiple(true)
-                            .help(format!("Increase debug verbosity of zerotect.").as_str()))
+                            .help("Increase debug verbosity of zerotect."))
                         .get_matches_from_safe(args)?;
 
     if let Some(configfile) = matches.value_of(CONFIG_FILE_FLAG) {
@@ -906,7 +905,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 None => return Err(ParsingError{message: "In config file, the polycorder configuration key was specified without an authkey. Please remove polycorder configuration entirely, or provide a valid authkey to publish events with.".to_owned(), inner_error: InnerError::None}),
                 Some(ak) => Some(PolycorderConfig {
                     auth_key: ak.trim().to_owned(),
-                    node_id: pco.node_id.unwrap_or(UNIDENTIFIED_NODE.to_owned()),
+                    node_id: pco.node_id.unwrap_or_else(|| UNIDENTIFIED_NODE.to_owned()),
                     flush_event_count: pco
                         .flush_event_count
                         .unwrap_or(DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT),
@@ -967,7 +966,7 @@ fn auto_configure_flag(values: clap::Values, value: &str) -> Result<bool, Parsin
             }
         }
     }
-    return Ok(seen_before);
+    Ok(seen_before)
 }
 
 #[cfg(test)]

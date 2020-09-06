@@ -81,9 +81,10 @@ impl DevKMsgReader {
         let mut kmsg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
         match kmsg_line_reader.peek() {
             None => {
-                return Err(KMsgParserError::BadSource(format!(
+                return Err(KMsgParserError::BadSource(
                     "Couldn't peek a single line from source. Source seems to be closed."
-                )))
+                        .to_owned(),
+                ))
             }
             Some(l) => match l {
                 Ok(_) => {}
@@ -152,7 +153,7 @@ impl DevKMsgReader {
             );
         }
 
-        let mut meta_parts = meta.splitn(4, ",");
+        let mut meta_parts = meta.splitn(4, ',');
         let (facility, level) = match meta_parts.next() {
             Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
                 Some(faclev) => {
@@ -235,21 +236,15 @@ impl DevKMsgReader {
                     line_str.push_str(line.as_str());
 
                     // look for any supplemental lines and append them
-                    loop {
-                        match self.kmsg_line_reader.peek_timeout(self.flush_timeout) {
-                            Ok(maybe_supplemental_line) => match maybe_supplemental_line {
-                                Ok(supplemental_line) => {
-                                    if supplemental_line.starts_with(' ') {
-                                        line_str.push('\n'); //Preserve newlines
-                                        line_str.push_str(supplemental_line);
-                                        self.kmsg_line_reader.next(); //consume the next one
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                Err(_) => break,
-                            },
-                            Err(_) => break,
+                    while let Ok(Ok(supplemental_line)) =
+                        self.kmsg_line_reader.peek_timeout(self.flush_timeout)
+                    {
+                        if supplemental_line.starts_with(' ') {
+                            line_str.push('\n'); //Preserve newlines
+                            line_str.push_str(supplemental_line);
+                            self.kmsg_line_reader.next(); //consume the next one
+                        } else {
+                            break;
                         }
                     }
                 }

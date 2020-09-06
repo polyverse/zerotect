@@ -157,12 +157,11 @@ impl Analyzer {
 
     fn send_event(&mut self, event: events::Event) {
         // send this event
-        match self.detected_event_sink.send(event) {
-            Err(e) => eprintln!(
+        if let Err(e) = self.detected_event_sink.send(event) {
+            eprintln!(
                 "Analyzer: Detector unable to send detection event to output channel: {}",
                 e
-            ),
-            _ => {}
+            )
         }
     }
 
@@ -186,16 +185,16 @@ impl Analyzer {
                     events::Version::V1 {
                         timestamp,
                         event: events::EventType::LinuxKernelTrap(lkt),
-                    } => self.buffer_event(timestamp.clone(), lkt.procname.clone(), event),
+                    } => self.buffer_event(*timestamp, lkt.procname.clone(), event),
                     events::Version::V1 {
                         timestamp,
                         event: events::EventType::LinuxFatalSignal(lfs),
-                    } => match lfs.stack_dump.get("Comm") {
-                        // comm is process name
-                        Some(comm) => self.buffer_event(timestamp.clone(), comm.clone(), event),
-                        // Ignore event without a command
-                        None => {}
-                    },
+                    } => {
+                        if let Some(comm) = lfs.stack_dump.get("Comm") {
+                            // comm is process name
+                            self.buffer_event(*timestamp, comm.clone(), event)
+                        }
+                    }
 
                     // ignore other event types for detection
                     _ => {}
@@ -213,7 +212,7 @@ impl Analyzer {
         }
     }
 
-    fn used(e: &events::Event, used_events: &Vec<events::Event>) -> bool {
+    fn used(e: &events::Event, used_events: &[events::Event]) -> bool {
         for used_event in used_events {
             if e == used_event {
                 return true;
@@ -235,7 +234,7 @@ pub fn analyze(
     if config.max_event_count <= 1 {
         return Err(AnalyzerError(format!("Analyzer's 'max_event_count'({}) must be at least 2. If we cannot store at least 2 events, we cannot detect even the simplest attack. You should turn off analytics altogether. Aboring Analyzer due to misconfiguration.", config.max_event_count)));
     }
-    if config.event_drop_count <= 0 {
+    if config.event_drop_count == 0 {
         return Err(AnalyzerError(format!("Analyzer's 'event_drop_count'({}) must be at least 1. If we cannot drop at least 1 event when the buffer is full, we cannot add new events. Aboring Analyzer due to misconfiguration.", config.event_drop_count)));
     }
     if config.max_event_count < config.event_drop_count {
@@ -282,7 +281,7 @@ pub fn analyze(
 
                 detected_since_last_add: true,
             };
-            if let Err(_) = analyzer.analyze_forever() {
+            if analyzer.analyze_forever().is_err() {
                 eprintln!("Analyzer: Background analysis thread exited. Aborting program.");
                 process::exit(1)
             }
@@ -300,9 +299,8 @@ pub fn analyze(
             Ok(event) => match inner_analyzer_sink.send(event.clone()) {
                 Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
                 Ok(_) => if config.mode == params::AnalyticsMode::Passthrough {
-                    match passthrough_sink.send(event) {
-                        Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e))),
-                        Ok(_) => {},
+                    if let Err(e) = passthrough_sink.send(event) {
+                        return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e)))
                     }
                 },
             },

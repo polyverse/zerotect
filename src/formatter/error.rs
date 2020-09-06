@@ -1,4 +1,3 @@
-use rust_cef;
 use std::convert::From;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};

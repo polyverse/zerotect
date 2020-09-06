@@ -69,10 +69,13 @@ impl EventBuffer {
     }
 
     pub fn insert(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
+        // so we don't double-borrow self
+        let list_capacity = self.list_capacity;
+
         // Do we have a list for this proc?
         self.hashlist
             .entry(procname)
-            .or_insert(TimestampedEventList::with_capacity(self.list_capacity))
+            .or_insert_with(|| TimestampedEventList::with_capacity(list_capacity))
             .push_back((timestamp, event));
 
         self.cached_len += 1;
@@ -113,17 +116,14 @@ impl EventBuffer {
 
         // populate the removal map with timestamp -> procname (the oldest timestamp in each procname)
         for (procname, eventlist) in self.hashlist.iter() {
-            match eventlist.iter().next() {
-                Some((timestamp, _)) => {
-                    priority_removal_map.insert(timestamp.clone(), procname.clone());
-                }
-                None => {}
+            if let Some((timestamp, _)) = eventlist.iter().next() {
+                priority_removal_map.insert(*timestamp, procname.clone());
             }
         }
 
         // while we have events let to be dropped...
         let mut events_remaining_to_drop = self.event_drop_count;
-        while events_remaining_to_drop > 0 && priority_removal_map.len() > 0 {
+        while events_remaining_to_drop > 0 && !priority_removal_map.is_empty() {
             // May become more efficient in the future. See: https://github.com/rust-lang/rust/issues/62924
             // Find procname having oldest event (since we've got oldest events by procname in BTreeMap)
             // Since BTreeMap is sorted ascending by keys, the oldest (i.e. lowest) datetime key will
@@ -131,7 +131,7 @@ impl EventBuffer {
             let (borrowed_timestamp, borrowed_procname) =
                 priority_removal_map.iter().next().unwrap();
             // detach these from the iterator, and thus drop scope of the priority_removal_map borrow
-            let (timestamp, procname) = (borrowed_timestamp.clone(), borrowed_procname.clone());
+            let (timestamp, procname) = (*borrowed_timestamp, borrowed_procname.clone());
             priority_removal_map.remove(&timestamp);
 
             // look up event list for that oldest timestamped event
@@ -146,7 +146,7 @@ impl EventBuffer {
                     match eventlist.front() {
                         None => {}
                         Some((timestamp, _)) => {
-                            priority_removal_map.insert(timestamp.clone(), procname);
+                            priority_removal_map.insert(*timestamp, procname);
                         }
                     }
                 }
@@ -187,7 +187,7 @@ impl EventBuffer {
             .hashlist
             .iter()
             .filter_map(|(key, value)| {
-                if value.len() == 0 {
+                if value.is_empty() {
                     // separate out of the iterator
                     Some(key.clone())
                 } else {
