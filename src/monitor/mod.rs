@@ -81,7 +81,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
         }
     }
 
-    return Err(MonitorError(
+    Err(MonitorError(
         "Monitor: Should have been unreachable code, but somehow we got here.".to_owned(),
-    ));
+    ))
 }

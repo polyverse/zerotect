@@ -20,52 +20,48 @@ pub fn close_by_register_detect(
     let mut prev_added: bool = false;
     let mut maybe_prev_event: Option<&events::Event> = None;
     for (_, event) in eventslist.iter() {
-        match event.as_ref() {
-            events::Version::V1 {
+        if let events::Version::V1 {
+            timestamp: _,
+            event: events::EventType::LinuxFatalSignal(lfs),
+        } = event.as_ref()
+        {
+            if let Some(events::Version::V1 {
                 timestamp: _,
-                event: events::EventType::LinuxFatalSignal(lfs),
-            } => {
-                if let Some(events::Version::V1 {
-                    timestamp: _,
-                    event: events::EventType::LinuxFatalSignal(prev_lfs),
-                }) = maybe_prev_event.map(|x| &(**x))
-                {
-                    if let (Some(prev_register_val), Some(register_val)) = (
-                        prev_lfs
-                            .stack_dump
-                            .get(register)
-                            .map(|v| parse_hex::<usize>(v, register, prev_lfs))
-                            .flatten(),
-                        lfs.stack_dump
-                            .get(register)
-                            .map(|v| parse_hex::<usize>(v, register, lfs))
-                            .flatten(),
-                    ) {
-                        // analytics only works if there is a prevous event
-                        let ad = abs_diff(prev_register_val, register_val);
+                event: events::EventType::LinuxFatalSignal(prev_lfs),
+            }) = maybe_prev_event.map(|x| &(**x))
+            {
+                if let (Some(prev_register_val), Some(register_val)) = (
+                    prev_lfs
+                        .stack_dump
+                        .get(register)
+                        .map(|v| parse_hex::<usize>(v, register, prev_lfs))
+                        .flatten(),
+                    lfs.stack_dump
+                        .get(register)
+                        .map(|v| parse_hex::<usize>(v, register, lfs))
+                        .flatten(),
+                ) {
+                    // analytics only works if there is a prevous event
+                    let ad = abs_diff(prev_register_val, register_val);
 
-                        // we have winner events
-                        // ignore when IP is identical across events - it may just be a legit crash.
-                        if ad != 0 && ad <= register_max_distance {
-                            if !prev_added {
-                                // if close_by_ip is empty, add the previous event too
-                                // we can unwrap safely - we're already inside a destructure of it
-                                close_by_register.push(maybe_prev_event.unwrap().clone())
-                            }
-                            prev_added = true;
-                            close_by_register.push(event.clone());
-                        } else {
-                            prev_added = false;
+                    // we have winner events
+                    // ignore when IP is identical across events - it may just be a legit crash.
+                    if ad != 0 && ad <= register_max_distance {
+                        if !prev_added {
+                            // if close_by_ip is empty, add the previous event too
+                            // we can unwrap safely - we're already inside a destructure of it
+                            close_by_register.push(maybe_prev_event.unwrap().clone())
                         }
+                        prev_added = true;
+                        close_by_register.push(event.clone());
+                    } else {
+                        prev_added = false;
                     }
                 }
-
-                // Make current event the previous event
-                maybe_prev_event = Some(event);
             }
 
-            // ignore everything else
-            _ => {}
+            // Make current event the previous event
+            maybe_prev_event = Some(event);
         }
     }
 
@@ -147,7 +143,7 @@ fn justify(
                     events::Version::V1 {
                         timestamp: _,
                         event: events::EventType::LinuxFatalSignal(lfs),
-                    } => lfs.stack_dump.get(register).map(|s| s.clone()),
+                    } => lfs.stack_dump.get(register).cloned(),
 
                     _ => {
                         eprintln!("Analyzer:: close_by_register_detect::justify: Unsupported event found when summarizing: {}", e);

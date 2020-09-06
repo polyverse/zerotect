@@ -1,10 +1,8 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use http::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, USER_AGENT};
 use http::StatusCode;
 use libflate::gzip::Encoder;
 use serde::Serialize;
-use serde_json;
 use std::convert::From;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -12,11 +10,15 @@ use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
-use ureq;
 
 use crate::emitter;
 use crate::events;
 use crate::params;
+
+const AUTHORIZATION: &str = "authorization";
+const CONTENT_ENCODING: &str = "content-encoding";
+const CONTENT_TYPE: &str = "content-type";
+const USER_AGENT: &str = "user-agent";
 
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 const GZIP_THRESHOLD_BYTES: usize = 512;
@@ -79,16 +81,13 @@ fn publish_to_polycorder_forever(
     let timeout_duration = Duration::from_secs(config.flush_timeout_seconds);
 
     let bearer_token = format!("Bearer {}", config.auth_key);
+    let bearer_token_str = bearer_token.as_str();
 
     loop {
         let flush = match receiver.recv_timeout(timeout_duration) {
             Ok(event) => {
                 events.push(event);
-                if events.len() >= config.flush_event_count {
-                    true
-                } else {
-                    false
-                }
+                events.len() >= config.flush_event_count
             }
             Err(e) => match e {
                 RecvTimeoutError::Timeout => true,
@@ -99,7 +98,7 @@ fn publish_to_polycorder_forever(
             },
         };
 
-        if flush && events.len() > 0 {
+        if flush && events.is_empty() {
             let report = Report {
                 node_id: config.node_id.as_str(),
                 events: &events,
@@ -119,10 +118,10 @@ fn publish_to_polycorder_forever(
             // requires feature:
             // `ureq = { version = "*", features = ["json"] }`
             let resp = ureq::post(POLYCORDER_PUBLISH_ENDPOINT)
-                .set(AUTHORIZATION.as_str(), bearer_token.as_str())
-                .set(CONTENT_TYPE.as_str(), CONTENT_TYPE_JSON)
-                .set(CONTENT_ENCODING.as_str(), content_encoding)
-                .set(USER_AGENT.as_str(), USER_AGENT_ZEROTECT)
+                .set(AUTHORIZATION, bearer_token_str)
+                .set(CONTENT_TYPE, CONTENT_TYPE_JSON)
+                .set(CONTENT_ENCODING, content_encoding)
+                .set(USER_AGENT, USER_AGENT_ZEROTECT)
                 // 10 seconds should be plenty to post to polycorder
                 .timeout(Duration::from_secs(10))
                 .send_bytes(body.as_slice());

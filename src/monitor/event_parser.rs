@@ -56,29 +56,24 @@ impl EventParser {
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
-            let maybe_kmsg_entry = self.timeout_kmsg_iter.next();
-            match maybe_kmsg_entry {
-                Some(kmsg_entry) => match EventParser::parse_finite_kmsg_to_event(&kmsg_entry)
-                    .or(self.parse_fatal_signal(&kmsg_entry))
+            if let Some(kmsg_entry) = self.timeout_kmsg_iter.next() {
+                if let Some(e) = EventParser::parse_finite_kmsg_to_event(&kmsg_entry)
+                    .or_else(|| self.parse_fatal_signal(&kmsg_entry))
                 {
-                    Some(e) => return Ok(e),
-
-                    // Continue looping if this line didn't result in an event
-                    None => {}
-                },
-                // only break if the underlying iterator quit on us
-                None => {
-                    return Err(EventParserError(
-                        "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
-                    ))
+                    return Ok(e);
                 }
+            // only break if the underlying iterator quit on us
+            } else {
+                return Err(EventParserError(
+                    "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
+                ));
             }
         }
     }
 
     fn parse_finite_kmsg_to_event(kmsg_entry: &kmsg::KMsg) -> Option<events::Version> {
         EventParser::parse_callbacks_suppressed(kmsg_entry)
-            .or(EventParser::parse_kernel_trap(kmsg_entry))
+            .or_else(|| EventParser::parse_kernel_trap(kmsg_entry))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -156,8 +151,8 @@ impl EventParser {
                         trap,
                         procname: procname.to_owned(),
                         pid,
-                        ip: ip,
-                        sp: sp,
+                        ip,
+                        sp,
                         errcode: events::SegfaultErrorCode::from_error_code(errcode),
                         file,
                         vmastart,
@@ -281,11 +276,11 @@ impl EventParser {
                 Ok(peek_kmsg) => {
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if let Some(_) = EventParser::parse_finite_kmsg_to_event(peek_kmsg) {
+                    if EventParser::parse_finite_kmsg_to_event(peek_kmsg).is_some() {
                         return sd;
                     }
 
-                    if !peek_kmsg.message.contains(":") {
+                    if !peek_kmsg.message.contains(':') {
                         // if no ":", then this isn't part of all the KV pairs
                         return sd;
                     } else {
@@ -310,7 +305,7 @@ impl EventParser {
             for part in parts {
                 // this word is part of the next key,
                 // first handle any k/vs we already have (if any)
-                if part.ends_with(":") {
+                if part.ends_with(':') {
                     let part_without_colon = &part[..(part.len() - 1)];
 
                     // if there's a value, let's publish it before transitioning to new key
@@ -320,10 +315,8 @@ impl EventParser {
                                 eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
                             }
                             sd.insert(k, v);
-                        } else {
-                            if self.verbosity > 0 {
-                                eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
-                            }
+                        } else if self.verbosity > 0 {
+                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
                         }
 
                         // Key becomes this part, minus the :

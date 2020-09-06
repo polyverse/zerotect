@@ -73,8 +73,8 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), Em
         emitters.push(Box::new(filelogger::new(lfc)?));
     }
 
-    if emitters.len() == 0 {
-        return Err(EmitterError(format!("Emitter: There are no emitters configured. Zerotect is useless if not emitting somewhere.")));
+    if emitters.is_empty() {
+        return Err(EmitterError("Emitter: There are no emitters configured. Zerotect is useless if not emitting somewhere.".to_owned()));
     }
 
     loop {

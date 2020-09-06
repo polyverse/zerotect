@@ -41,13 +41,14 @@ pub struct SysLogger {
 impl emitter::Emitter for SysLogger {
     fn emit(&mut self, event: &events::Event) {
         match self.event_formatter.format(event) {
-            Ok(formattedstr) => match self.inner_logger.info(&formattedstr) {
-                Err(e) => eprintln!(
-                    "Error writing event to syslog due to error {:?}. The event string: {}",
-                    e, &formattedstr
-                ),
-                Ok(_) => {}
-            },
+            Ok(formattedstr) => {
+                if let Err(e) = self.inner_logger.info(&formattedstr) {
+                    eprintln!(
+                        "Error writing event to syslog due to error {:?}. The event string: {}",
+                        e, &formattedstr
+                    )
+                }
+            }
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.output_format, e),
         }
     }
@@ -65,6 +66,7 @@ pub fn new(sc: SyslogConfig) -> Result<SysLogger, SysLoggerError> {
     // fire up the syslogger logger
     let inner_logger = match sc.destination {
         SyslogDestination::Default => match syslog::unix(syslog_formatter.clone()) {
+            Ok(unix_logger) => unix_logger,
             // logic copied from 'init'
             // https://docs.rs/syslog/5.0.0/src/syslog/lib.rs.html#429
             Err(unix_err) => {
@@ -77,23 +79,22 @@ pub fn new(sc: SyslogConfig) -> Result<SysLogger, SysLoggerError> {
                     Ok(tcp_logger) => tcp_logger,
                 }
             },
-            Ok(unix_logger) => unix_logger,
-        }
+        },
         SyslogDestination::Unix => match sc.path {
             Some(path) => syslog::unix_custom(syslog_formatter, path)?,
-            None => return Err(SysLoggerError::MissingParameter(format!("Parameter 'path' was not provided, but required to connect syslog to unix socket."))),
-        }
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'path' was not provided, but required to connect syslog to unix socket.".to_owned())),
+        },
         SyslogDestination::Tcp => match sc.server {
             Some(server) => syslog::tcp(syslog_formatter, server)?,
-            None => return Err(SysLoggerError::MissingParameter(format!("Parameter 'server' was not provided, but required to connect syslog to unix socket."))),
-        }
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned())),
+        },
         SyslogDestination::Udp => match sc.server {
             Some(server) => match sc.local {
                 Some(local) => syslog::udp(syslog_formatter, local, server)?,
-                None => return Err(SysLoggerError::MissingParameter(format!("Parameter 'local' was not provided, but required to connect syslog to unix socket."))),
+                None => return Err(SysLoggerError::MissingParameter("Parameter 'local' was not provided, but required to connect syslog to unix socket.".to_owned())),
             },
-            None => return Err(SysLoggerError::MissingParameter(format!("Parameter 'server' was not provided, but required to connect syslog to unix socket."))),
-        }
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned())),
+        },
     };
 
     let event_formatter = new_formatter(&sc.format);

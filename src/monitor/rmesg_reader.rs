@@ -71,16 +71,20 @@ impl RMesgReader {
         verbosity: u8,
     ) -> Result<RMesgReader, KMsgParserError> {
         let mut rmesg_line_reader = TimeoutIterator::from_item_iterator(reader)?;
-        if let None = rmesg_line_reader.peek() {
-            return Err(KMsgParserError::BadSource(format!(
-                "Couldn't peek a single line from source. Source seems to be closed."
-            )));
-        }
-        if let Err(e) = rmesg_line_reader.peek().unwrap() {
-            return Err(KMsgParserError::BadSource(format!(
-                "Couldn't peek a single line from source due to error: {:?}",
-                e
-            )));
+        match rmesg_line_reader.peek() {
+            None => {
+                return Err(KMsgParserError::BadSource(
+                    "Couldn't peek a single line from source. Source seems to be closed."
+                        .to_owned(),
+                ))
+            }
+            Some(Err(e)) => {
+                return Err(KMsgParserError::BadSource(format!(
+                    "Couldn't peek a single line from source due to error: {:?}",
+                    e
+                )))
+            }
+            _ => {}
         }
 
         Ok(RMesgReader {
@@ -169,15 +173,13 @@ impl RMesgReader {
         // read next line
         match self.rmesg_line_reader.next() {
             Some(maybe_line) => match maybe_line {
-                Ok(line) => Ok(line.to_owned()),
-                Err(e) => {
-                    return Err(KMsgParsingError::Generic(format!(
-                        "Error from underlying iterator: {:?}",
-                        e
-                    )))
-                }
+                Ok(line) => Ok(line),
+                Err(e) => Err(KMsgParsingError::Generic(format!(
+                    "Error from underlying iterator: {:?}",
+                    e
+                ))),
             },
-            None => return Err(KMsgParsingError::Completed),
+            None => Err(KMsgParsingError::Completed),
         }
     }
 
