@@ -58,22 +58,27 @@ impl EventParser {
         loop {
             let maybe_kmsg_entry = self.timeout_kmsg_iter.next();
             match maybe_kmsg_entry {
-                Some(kmsg_entry) => {
-                    if let Some(e) = self.parse_callbacks_suppressed(&kmsg_entry) {
-                        return Ok(e);
-                    } else if let Some(e) = self.parse_kernel_trap(&kmsg_entry) {
-                        return Ok(e);
-                    } else if let Some(e) = self.parse_fatal_signal(&kmsg_entry) {
-                        return Ok(e);
-                    }
+                Some(kmsg_entry) => match EventParser::parse_finite_kmsg_to_event(&kmsg_entry)
+                    .or(self.parse_fatal_signal(&kmsg_entry))
+                {
+                    Some(e) => return Ok(e),
+
+                    // Continue looping if this line didn't result in an event
+                    None => {}
+                },
+                // only break if the underlying iterator quit on us
+                None => {
+                    return Err(EventParserError(
+                        "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
+                    ))
                 }
-                None => break,
             }
         }
+    }
 
-        Err(EventParserError(
-            "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
-        ))
+    fn parse_finite_kmsg_to_event(kmsg_entry: &kmsg::KMsg) -> Option<events::Version> {
+        EventParser::parse_callbacks_suppressed(kmsg_entry)
+            .or(EventParser::parse_kernel_trap(kmsg_entry))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -85,7 +90,7 @@ impl EventParser {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
+    fn parse_kernel_trap(km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -114,13 +119,6 @@ impl EventParser {
 
         }
 
-        if self.verbosity > 2 {
-            eprintln!(
-                "Monitor:: parse_kernel_trap:: Attempting to parse kernel log as kernel trap: {:?}",
-                km
-            );
-        }
-
         if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(km.message.as_str()) {
             if let (
                 procname,
@@ -133,33 +131,22 @@ impl EventParser {
             ) = (
                 &dmesg_parts["procname"],
                 EventParser::parse_fragment::<usize>(&dmesg_parts["pid"]),
-                self.parse_kernel_trap_type(&dmesg_parts["message"]),
+                EventParser::parse_kernel_trap_type(&dmesg_parts["message"]),
                 EventParser::parse_hex::<usize>(&dmesg_parts["ip"]),
                 EventParser::parse_hex::<usize>(&dmesg_parts["sp"]),
                 EventParser::parse_hex::<u8>(&dmesg_parts["errcode"]),
                 &dmesg_parts["maybelocation"],
             ) {
-                if self.verbosity > 2 {
-                    eprintln!(
-                        "Monitor:: parse_kernel_trap:: Successfully parsed kernel trap parts: {:?}",
-                        dmesg_parts
-                    );
-                }
-
-                let (file, vmastart, vmasize) = if let Some(location_parts) =
-                    RE_LOCATION.captures(maybelocation)
-                {
-                    if self.verbosity > 2 {
-                        eprintln!("Monitor:: parse_kernel_trap:: Successfully parsed kernel trap location: {:?}", location_parts);
-                    }
-                    (
-                        Some((&location_parts["file"]).to_owned()),
-                        EventParser::parse_hex::<usize>(&location_parts["vmastart"]),
-                        EventParser::parse_hex::<usize>(&location_parts["vmasize"]),
-                    )
-                } else {
-                    (None, None, None)
-                };
+                let (file, vmastart, vmasize) =
+                    if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
+                        (
+                            Some((&location_parts["file"]).to_owned()),
+                            EventParser::parse_hex::<usize>(&location_parts["vmastart"]),
+                            EventParser::parse_hex::<usize>(&location_parts["vmasize"]),
+                        )
+                    } else {
+                        (None, None, None)
+                    };
 
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
@@ -186,7 +173,7 @@ impl EventParser {
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure:
     // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap_type(&mut self, trap_string: &str) -> Option<events::KernelTrapType> {
+    fn parse_kernel_trap_type(trap_string: &str) -> Option<events::KernelTrapType> {
         lazy_static! {
             static ref RE_SEGFAULT: Regex = Regex::new(
                 r"(?x)^
@@ -288,92 +275,101 @@ impl EventParser {
 
         // the various branches of the loop will terminate...
         loop {
+            let maybe_peek_msg = self.timeout_kmsg_iter.peek_timeout(self.flush_timeout);
             // peek next line, and if it has a colon, take it
-            match self.timeout_kmsg_iter.peek_timeout(self.flush_timeout) {
+            let km = match maybe_peek_msg {
                 Ok(peek_kmsg) => {
+                    // is next message possibly a finite event? Like a kernel trap?
+                    // if so, don't consume it and end this KV madness
+                    if let Some(_) = EventParser::parse_finite_kmsg_to_event(peek_kmsg) {
+                        return sd;
+                    }
+
                     if !peek_kmsg.message.contains(":") {
                         // if no ":", then this isn't part of all the KV pairs
                         return sd;
                     } else {
-                        // take the line - and unwrap because we've peek'd that it exists
-                        let km = self.timeout_kmsg_iter.next().unwrap();
-
-                        // split message parts on whitespace
-                        let parts: Vec<_> = km.message.split(|c| c == ' ').collect();
-
-                        // consume kmsg key->value one by one (don't split all at once)
-                        // maintain state as we iterate
-                        let mut key: Option<String> = None;
-                        let mut value: Option<String> = None;
-                        for part in parts {
-                            // this word is part of the next key,
-                            // first handle any k/vs we already have (if any)
-                            if part.ends_with(":") {
-                                let part_without_colon = &part[..(part.len() - 1)];
-
-                                // if there's a value, let's publish it before transitioning to new key
-                                if let Some(v) = value {
-                                    if let Some(k) = key {
-                                        if self.verbosity > 1 {
-                                            eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
-                                        }
-                                        sd.insert(k, v);
-                                    } else {
-                                        if self.verbosity > 0 {
-                                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
-                                        }
-                                    }
-
-                                    // Key becomes this part, minus the :
-                                    key = Some(part_without_colon.to_owned());
-                                } else {
-                                    let appended_key = match key {
-                                        Some(mut ks) => {
-                                            if ks != "" {
-                                                ks.push_str(" ")
-                                            };
-                                            ks.push_str(part_without_colon);
-                                            ks
-                                        }
-                                        None => part_without_colon.to_owned(),
-                                    };
-                                    key = Some(appended_key);
-                                }
-
-                                // start a blank value - with the colon, anything that comes after is a value
-                                value = Some(String::new());
-                            } else {
-                                // are we in a value? if so append to it
-                                if let Some(mut v) = value {
-                                    if v != "" {
-                                        v.push_str(" ")
-                                    };
-                                    v.push_str(part);
-                                    value = Some(v);
-                                } else if let Some(mut k) = key {
-                                    if k != "" {
-                                        k.push_str(" ")
-                                    };
-                                    k.push_str(part);
-                                    key = Some(k);
-                                } else if key == None {
-                                    key = Some(part.to_owned());
-                                }
-                            }
-                        }
-
-                        // cleanup last value - if it comes in a pair
-                        if let (Some(k), Some(v)) = (key, value) {
-                            if self.verbosity > 1 {
-                                eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
-                            }
-                            sd.insert(k, v);
-                        }
+                        self.timeout_kmsg_iter.next().unwrap()
                     }
                 }
                 // if error peeking, return what we have...
                 // error might be a timeout or something else.
                 Err(_) => return sd,
+            };
+
+            // now operate on the owned KMsg line
+            // since all other paths have exited
+
+            // split message parts on whitespace
+            let parts: Vec<_> = km.message.split(|c| c == ' ').collect();
+
+            // consume kmsg key->value one by one (don't split all at once)
+            // maintain state as we iterate
+            let mut key: Option<String> = None;
+            let mut value: Option<String> = None;
+            for part in parts {
+                // this word is part of the next key,
+                // first handle any k/vs we already have (if any)
+                if part.ends_with(":") {
+                    let part_without_colon = &part[..(part.len() - 1)];
+
+                    // if there's a value, let's publish it before transitioning to new key
+                    if let Some(v) = value {
+                        if let Some(k) = key {
+                            if self.verbosity > 1 {
+                                eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                            }
+                            sd.insert(k, v);
+                        } else {
+                            if self.verbosity > 0 {
+                                eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
+                            }
+                        }
+
+                        // Key becomes this part, minus the :
+                        key = Some(part_without_colon.to_owned());
+                    } else {
+                        let appended_key = match key {
+                            Some(mut ks) => {
+                                if ks != "" {
+                                    ks.push_str(" ")
+                                };
+                                ks.push_str(part_without_colon);
+                                ks
+                            }
+                            None => part_without_colon.to_owned(),
+                        };
+                        key = Some(appended_key);
+                    }
+
+                    // start a blank value - with the colon, anything that comes after is a value
+                    value = Some(String::new());
+                } else {
+                    // are we in a value? if so append to it
+                    if let Some(mut v) = value {
+                        if v != "" {
+                            v.push_str(" ")
+                        };
+                        v.push_str(part);
+                        value = Some(v);
+                    } else if let Some(mut k) = key {
+                        if k != "" {
+                            k.push_str(" ")
+                        };
+                        k.push_str(part);
+                        key = Some(k);
+                    } else if key == None {
+                        key = Some(part.to_owned());
+                    }
+                }
+            }
+
+            // cleanup last value - if it comes in a pair
+            if let (Some(k), Some(v)) = (key, value) {
+                if self.verbosity > 1 {
+                    eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                }
+                sd.insert(k, v);
             }
         }
     }
@@ -381,7 +377,7 @@ impl EventParser {
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
-    fn parse_callbacks_suppressed(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
+    fn parse_callbacks_suppressed(km: &kmsg::KMsg) -> Option<events::Version> {
         lazy_static! {
             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
                 r"(?x)^
@@ -395,19 +391,11 @@ impl EventParser {
             .unwrap();
         }
 
-        if self.verbosity > 2 {
-            eprintln!("Monitor:: parse_callbacks_suppressed:: Attempting to parse kernel log as suppressed number of callbacks: {:?}", km);
-        }
-
         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
             if let (function_name, Some(count)) = (
                 &dmesg_parts["function"],
                 EventParser::parse_fragment::<usize>(&dmesg_parts["count"]),
             ) {
-                if self.verbosity > 2 {
-                    eprintln!("Monitor:: parse_callbacks_suppressed:: Successfully suppressed callbacks: {:?}", dmesg_parts);
-                }
-
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
                     event: events::EventType::LinuxSuppressedCallback(
@@ -1209,7 +1197,7 @@ mod test {
 
         {
             // Validate when new kmsg's stop bring KV/pairs
-            kmsgs.push(boxed_kmsg(timestamp, String::from("An unrelated message")));
+            kmsgs.push(boxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
 
             let mut parser = EventParser::from_kmsg_iterator(
                 Box::new(kmsgs.into_iter()),
@@ -1263,7 +1251,18 @@ mod test {
                         },
                     }),
                 })
-            )
+            );
+
+            // make sure the next kernel trap message is parsed as well
+            let kt = parser.next();
+            assert!(kt.is_some());
+            assert_matches!(
+                kt.unwrap().as_ref(),
+                events::Version::V1 {
+                    timestamp: _,
+                    event: events::EventType::LinuxKernelTrap(_),
+                }
+            );
         }
     }
 

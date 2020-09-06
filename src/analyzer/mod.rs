@@ -96,6 +96,7 @@ impl Analyzer {
                 if let Some((detected_event, mut events_used_for_detection)) =
                     close_by_ip_detect(eventslist, self.ip_max_distance, 1, self.justification_kind)
                 {
+                    eprintln!("Close_by_ip detected: {}", detected_event);
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
@@ -186,7 +187,9 @@ impl Analyzer {
                     events::Version::V1 {
                         timestamp,
                         event: events::EventType::LinuxKernelTrap(lkt),
-                    } => self.buffer_event(timestamp.clone(), lkt.procname.clone(), event),
+                    } => {
+                        self.buffer_event(timestamp.clone(), lkt.procname.clone(), event)
+                    }
                     events::Version::V1 {
                         timestamp,
                         event: events::EventType::LinuxFatalSignal(lfs),

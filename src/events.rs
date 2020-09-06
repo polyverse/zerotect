@@ -386,7 +386,11 @@ pub struct LinuxFatalSignal {
 
 impl Display for LinuxFatalSignal {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "LinuxFataSignal {} with level {} from facility {} and dump: {:?}", self.signal, self.level, self.facility, self.stack_dump)
+        write!(
+            f,
+            "LinuxFataSignal {} with level {} from facility {} and dump: {:?}",
+            self.signal, self.level, self.facility, self.stack_dump
+        )
     }
 }
 

@@ -157,14 +157,29 @@ impl DevKMsgReader {
             Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
-                    match (events::LogFacility::from_u32(faclev >> 3), events::LogLevel::from_u32(faclev & LEVEL_MASK)) {
-                         (Some(facility), Some(level)) => (facility, level),
-                         _ => return Err(KMsgParsingError::Generic(format!("Unable to parse {} into log facility and level. Line: {}", faclev, line_str)))
+                    match (
+                        events::LogFacility::from_u32(faclev >> 3),
+                        events::LogLevel::from_u32(faclev & LEVEL_MASK),
+                    ) {
+                        (Some(facility), Some(level)) => (facility, level),
+                        _ => {
+                            return Err(KMsgParsingError::Generic(format!(
+                                "Unable to parse {} into log facility and level. Line: {}",
+                                faclev, line_str
+                            )));
+                        }
                     }
-                },
-                None => return Err(KMsgParsingError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", faclevstr, line_str)))
+                }
+                None => {
+                    return Err(KMsgParsingError::Generic(format!("Unable to parse facility/level {} into a base-10 32-bit unsigned integer. Line: {}", faclevstr, line_str)));
+                }
+            },
+            None => {
+                return Err(KMsgParsingError::Generic(format!(
+                    "Didn't find kmsg facility/level (the very first part) in line: {}",
+                    line_str
+                )));
             }
-            None => return Err(KMsgParsingError::Generic(format!("Didn't find kmsg facility/level (the very first part) in line: {}", line_str)))
         };
 
         // Sequence is a 64-bit integer: https://www.kernel.org/doc/Documentation/ABI/testing/dev-kmsg

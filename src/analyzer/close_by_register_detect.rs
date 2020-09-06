@@ -96,7 +96,11 @@ fn abs_diff(u1: usize, u2: usize) -> usize {
     }
 }
 
-fn parse_hex<N: num::Num + typename::TypeName>(frag: &str, register: &str, lfs: &events::LinuxFatalSignal) -> Option<N>
+fn parse_hex<N: num::Num + typename::TypeName>(
+    frag: &str,
+    register: &str,
+    lfs: &events::LinuxFatalSignal,
+) -> Option<N>
 where
     <N as num::Num>::FromStrRadixErr: std::fmt::Display,
 {
