@@ -1,9 +1,8 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use http::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, USER_AGENT};
 use http::StatusCode;
 use libflate::gzip::Encoder;
-use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
 use serde::Serialize;
 use serde_json;
 use std::convert::From;
@@ -13,6 +12,7 @@ use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
+use ureq;
 
 use crate::emitter;
 use crate::events;
@@ -23,7 +23,7 @@ const GZIP_THRESHOLD_BYTES: usize = 512;
 const CONTENT_ENCODING_GZIP: &str = "gzip";
 const CONTENT_ENCODING_IDENTITY: &str = "identity";
 const CONTENT_TYPE_JSON: &str = "application/json";
-const USER_AGENT: &str = "zerotect";
+const USER_AGENT_ZEROTECT: &str = "zerotect";
 
 pub struct Polycorder {
     sender: Sender<events::Event>,
@@ -60,52 +60,9 @@ impl From<std::io::Error> for PolycorderError {
 
 pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder, PolycorderError> {
     let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
-
-    let bearer_token = match HeaderValue::from_str(format!("Bearer {}", config.auth_key).as_str()) {
-        Ok(b) => b,
-        Err(e) => {
-            return Err(PolycorderError(format!(
-                "Polycorder: Aborting. Unable to create the bearer auth token due to error: {}",
-                e
-            )))
-        }
-    };
-    let content_type_json = match HeaderValue::from_str(CONTENT_TYPE_JSON) {
-        Ok(c) => c,
-        Err(e) => {
-            return Err(PolycorderError(format!(
-            "Polycorder: Aborting. Unable to create the content type json header due to error: {}",
-            e
-        )))
-        }
-    };
-
-    let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, bearer_token);
-    headers.insert(CONTENT_TYPE, content_type_json);
-
-    let client = match Client::builder()
-        .user_agent(USER_AGENT)
-        .default_headers(headers)
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            return Err(PolycorderError(format!(
-                "Polycorder: Aborting. Unable to create reqwest client: {}",
-                e
-            )))
-        }
-    };
-
-    // This live-tests the built-in URL early.
-    if let Err(e) = reqwest::Url::parse(POLYCORDER_PUBLISH_ENDPOINT) {
-        return Err(PolycorderError(format!("Polycorder: Aborting. Unable to parse built-in Polycorder URL into a reqwest library url: {}", e)));
-    };
-
     thread::Builder::new()
         .name("Emit to Polycorder Thread".to_owned())
-        .spawn(move || publish_to_polycorder_forever(config, receiver, client, verbosity))?;
+        .spawn(move || publish_to_polycorder_forever(config, receiver, verbosity))?;
 
     Ok(Polycorder { sender })
 }
@@ -113,7 +70,6 @@ pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder
 fn publish_to_polycorder_forever(
     config: params::PolycorderConfig,
     receiver: Receiver<events::Event>,
-    client: reqwest::blocking::Client,
     verbosity: u8,
 ) {
     eprintln!("Polycorder: Emitter to Polycorder initialized.");
@@ -121,6 +77,8 @@ fn publish_to_polycorder_forever(
     let mut events: Vec<events::Event> = vec![];
 
     let timeout_duration = Duration::from_secs(config.flush_timeout_seconds);
+
+    let bearer_token = format!("Bearer {}", config.auth_key);
 
     loop {
         let flush = match receiver.recv_timeout(timeout_duration) {
@@ -157,51 +115,51 @@ fn publish_to_polycorder_forever(
 
             let (body, content_encoding) = encode_payload(json_serialized_report, verbosity);
 
-            let response_result = client
-                .post(POLYCORDER_PUBLISH_ENDPOINT)
-                .header(CONTENT_ENCODING, content_encoding)
-                .body(body)
-                .send();
-            match response_result {
-                Ok(response) => {
-                    let status = response.status();
-                    // explain common statuses a bit more...
-                    if status.is_success() {
-                        if status == StatusCode::OK {
-                            eprintln!(
-                                "Polycorder: Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
-                                events.len(),
-                                response
-                            );
-                        } else {
-                            eprintln!("Polycorder: The HTTP request was successful, but returned a non-OK status: {}", status)
-                        }
-                        events.clear();
-                    } else if status.is_server_error() {
-                        eprintln!(
-                            "Polycorder: Unable to publish {} events due to a server-side error. Response from Polycorder: {:?}",
-                            events.len(),
-                            response
-                        );
-                    } else if status == StatusCode::UNAUTHORIZED {
-                        eprintln!(
-                            "Polycorder: Unable to publish {} events due to a failure to authenticate using the polycorder authkey {}. Response from Polycorder: {:?}",
-                            events.len(),
-                            &config.auth_key,
-                            response
-                        );
-                    } else {
-                        eprintln!(
-                            "Polycorder: Failed to publish {} events to Polycorder due to an unexpected error. Response from Polycorder: {:?}",
-                            events.len(),
-                            response
-                        );
-                    }
+            // sync post request of some json.
+            // requires feature:
+            // `ureq = { version = "*", features = ["json"] }`
+            let resp = ureq::post(POLYCORDER_PUBLISH_ENDPOINT)
+                .set(AUTHORIZATION.as_str(), bearer_token.as_str())
+                .set(CONTENT_TYPE.as_str(), CONTENT_TYPE_JSON)
+                .set(CONTENT_ENCODING.as_str(), content_encoding)
+                .set(USER_AGENT.as_str(), USER_AGENT_ZEROTECT)
+                // 10 seconds should be plenty to post to polycorder
+                .timeout(Duration::from_secs(10))
+                .send_bytes(body.as_slice());
+
+            //ok if response is 200-299.
+            if resp.ok() {
+                if resp.status() == StatusCode::OK {
+                    eprintln!(
+                        "Polycorder: Successfully published {} events. Clearing buffer. Response from Polycorder: {:?}",
+                        events.len(),
+                        resp
+                    );
+                } else {
+                    eprintln!("Polycorder: The HTTP request was successful, but returned a non-OK status: {}", resp.status_line());
                 }
-                Err(e) => eprintln!(
-                    "Polycorder: error making POST request to Polycorder service {}: {}",
-                    POLYCORDER_PUBLISH_ENDPOINT, e
-                ),
+                events.clear();
+            } else if resp.server_error() {
+                eprintln!(
+                    "Polycorder: Unable to publish {} events due to a server-side error. Response from Polycorder: {:?}",
+                    events.len(),
+                    resp
+                );
+            } else if resp.client_error() {
+                if resp.status() == StatusCode::UNAUTHORIZED {
+                    eprintln!(
+                        "Polycorder: Unable to publish {} events due to a failure to authenticate using the polycorder authkey {}. Response from Polycorder: {:?}",
+                        events.len(),
+                        &config.auth_key,
+                        resp
+                    );
+                } else {
+                    eprintln!(
+                        "Polycorder: Failed to publish {} events to Polycorder due to an unexpected client-side error. Response from Polycorder: {:?}",
+                        events.len(),
+                        resp
+                    );
+                }
             }
         }
     }
