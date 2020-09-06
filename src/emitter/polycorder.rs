@@ -1,6 +1,6 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use http::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
+use http::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, USER_AGENT};
 use http::StatusCode;
 use libflate::gzip::Encoder;
 use serde::Serialize;
@@ -23,7 +23,7 @@ const GZIP_THRESHOLD_BYTES: usize = 512;
 const CONTENT_ENCODING_GZIP: &str = "gzip";
 const CONTENT_ENCODING_IDENTITY: &str = "identity";
 const CONTENT_TYPE_JSON: &str = "application/json";
-const USER_AGENT: &str = "zerotect";
+const USER_AGENT_ZEROTECT: &str = "zerotect";
 
 pub struct Polycorder {
     sender: Sender<events::Event>,
@@ -78,7 +78,7 @@ fn publish_to_polycorder_forever(
 
     let timeout_duration = Duration::from_secs(config.flush_timeout_seconds);
 
-    let bearer_token = format!("Bearer {}", config.auth_key).as_str();
+    let bearer_token = format!("Bearer {}", config.auth_key);
 
     loop {
         let flush = match receiver.recv_timeout(timeout_duration) {
@@ -119,9 +119,10 @@ fn publish_to_polycorder_forever(
             // requires feature:
             // `ureq = { version = "*", features = ["json"] }`
             let resp = ureq::post(POLYCORDER_PUBLISH_ENDPOINT)
-                .set(AUTHORIZATION.as_str(), bearer_token)
+                .set(AUTHORIZATION.as_str(), bearer_token.as_str())
                 .set(CONTENT_TYPE.as_str(), CONTENT_TYPE_JSON)
                 .set(CONTENT_ENCODING.as_str(), content_encoding)
+                .set(USER_AGENT.as_str(), USER_AGENT_ZEROTECT)
                 // 10 seconds should be plenty to post to polycorder
                 .timeout(Duration::from_secs(10))
                 .send_bytes(body.as_slice());
