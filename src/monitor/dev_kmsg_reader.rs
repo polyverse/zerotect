@@ -12,7 +12,6 @@ use num::FromPrimitive;
 use std::fs::File;
 use std::io::BufReader;
 use std::ops::Add;
-use std::str::FromStr;
 use std::time::Duration;
 
 pub type LineItem = std::result::Result<String, std::io::Error>;
@@ -155,7 +154,7 @@ impl DevKMsgReader {
 
         let mut meta_parts = meta.splitn(4, ',');
         let (facility, level) = match meta_parts.next() {
-            Some(faclevstr) => match DevKMsgReader::parse_fragment::<u32>(faclevstr) {
+            Some(faclevstr) => match DevKMsgReader::parse_fragment_u32(faclevstr) {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (
@@ -188,7 +187,7 @@ impl DevKMsgReader {
         meta_parts.next();
 
         let timestamp = match meta_parts.next() {
-            Some(tstr) => match DevKMsgReader::parse_fragment::<i64>(tstr) {
+            Some(tstr) => match DevKMsgReader::parse_fragment_i64(tstr) {
                 Some(t) => self.system_start_time.add(ChronoDuration::microseconds(t)),
                 None => {
                     return Err(KMsgParsingError::Generic(format!(
@@ -260,14 +259,21 @@ impl DevKMsgReader {
         Ok(line_str)
     }
 
-    fn parse_fragment<F: FromStr + typename::TypeName>(frag: &str) -> Option<F>
-    where
-        <F as std::str::FromStr>::Err: std::fmt::Display,
-    {
-        match frag.trim().parse::<F>() {
+    fn parse_fragment_u32(frag: &str) -> Option<u32> {
+        match frag.trim().parse() {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Unable to parse {} into {}: {}", frag, F::type_name(), e);
+                eprintln!("Unable to parse {} into u32: {}", frag, e);
+                None
+            }
+        }
+    }
+
+    fn parse_fragment_i64(frag: &str) -> Option<i64> {
+        match frag.trim().parse() {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("Unable to parse {} into i64: {}", frag, e);
                 None
             }
         }
