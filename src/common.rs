@@ -1,4 +1,4 @@
-use num::Integer;
+use num::{Unsigned, Integer};
 use std::any::type_name;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -38,5 +38,14 @@ where
             eprintln!("Unable to parse {} into {}: {}", frag, type_name::<N>(), e);
             None
         }
+    }
+}
+
+// This will go away after this: https://github.com/rust-lang/rust/issues/62111
+pub fn abs_diff<N: Unsigned + Integer>(u1: N, u2: N) -> N {
+    if u1 > u2 {
+        u1 - u2
+    } else {
+        u2 - u1
     }
 }

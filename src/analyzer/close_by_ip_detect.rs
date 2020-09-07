@@ -1,5 +1,7 @@
 use crate::events;
 use crate::params;
+use crate::common;
+
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -29,7 +31,7 @@ pub fn close_by_ip_detect(
             }) = maybe_prev_event.map(|x| &(**x))
             {
                 // analytics only works if there is a prevous event
-                let ad = abs_diff(prev_lkt.ip, lkt.ip);
+                let ad = common::abs_diff(prev_lkt.ip, lkt.ip);
 
                 // we have winner events
                 // ignore when IP is identical across events - it may just be a legit crash.
@@ -67,15 +69,6 @@ pub fn close_by_ip_detect(
     }
 
     None
-}
-
-// This will go away after this: https://github.com/rust-lang/rust/issues/62111
-fn abs_diff(u1: usize, u2: usize) -> usize {
-    if u1 > u2 {
-        u1 - u2
-    } else {
-        u2 - u1
-    }
 }
 
 fn justify(

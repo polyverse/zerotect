@@ -44,7 +44,7 @@ pub fn close_by_register_detect(
                         .flatten(),
                 ) {
                     // analytics only works if there is a prevous event
-                    let ad = abs_diff(prev_register_val, register_val);
+                    let ad = common::abs_diff(prev_register_val, register_val);
 
                     // we have winner events
                     // ignore when IP is identical across events - it may just be a legit crash.
@@ -83,15 +83,6 @@ pub fn close_by_register_detect(
     }
 
     None
-}
-
-// This will go away after this: https://github.com/rust-lang/rust/issues/62111
-fn abs_diff(u1: usize, u2: usize) -> usize {
-    if u1 > u2 {
-        u1 - u2
-    } else {
-        u2 - u1
-    }
 }
 
 fn justify(
