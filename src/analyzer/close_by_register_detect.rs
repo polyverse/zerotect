@@ -36,11 +36,11 @@ pub fn close_by_register_detect(
                     prev_lfs
                         .stack_dump
                         .get(register)
-                        .map(|v| common::parse_hex_usize(v))
+                        .map(|v| common::parse_hex::<usize>(v))
                         .flatten(),
                     lfs.stack_dump
                         .get(register)
-                        .map(|v| common::parse_hex_usize(v))
+                        .map(|v| common::parse_hex::<usize>(v))
                         .flatten(),
                 ) {
                     // analytics only works if there is a prevous event

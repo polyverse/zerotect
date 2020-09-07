@@ -127,17 +127,17 @@ impl EventParser {
                 &dmesg_parts["procname"],
                 common::parse_fragment::<usize>(&dmesg_parts["pid"]),
                 EventParser::parse_kernel_trap_type(&dmesg_parts["message"]),
-                common::parse_hex_usize(&dmesg_parts["ip"]),
-                common::parse_hex_usize(&dmesg_parts["sp"]),
-                common::parse_hex_usize(&dmesg_parts["errcode"]),
+                common::parse_hex::<usize>(&dmesg_parts["ip"]),
+                common::parse_hex::<usize>(&dmesg_parts["sp"]),
+                common::parse_hex::<usize>(&dmesg_parts["errcode"]),
                 &dmesg_parts["maybelocation"],
             ) {
                 let (file, vmastart, vmasize) =
                     if let Some(location_parts) = RE_LOCATION.captures(maybelocation) {
                         (
                             Some((&location_parts["file"]).to_owned()),
-                            common::parse_hex_usize(&location_parts["vmastart"]),
-                            common::parse_hex_usize(&location_parts["vmasize"]),
+                            common::parse_hex::<usize>(&location_parts["vmastart"]),
+                            common::parse_hex::<usize>(&location_parts["vmasize"]),
                         )
                     } else {
                         (None, None, None)
@@ -186,7 +186,7 @@ impl EventParser {
         }
 
         if let Some(segfault_parts) = RE_SEGFAULT.captures(trap_string) {
-            if let Some(location) = common::parse_hex_usize(&segfault_parts["location"]) {
+            if let Some(location) = common::parse_hex::<usize>(&segfault_parts["location"]) {
                 Some(events::KernelTrapType::Segfault { location })
             } else {
                 eprintln!("Reporting segfault as a generic kernel trap because {} couldn't be parsed as a hexadecimal.", &segfault_parts["location"]);

@@ -1,3 +1,4 @@
+use num::Integer;
 use std::any::type_name;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -15,10 +16,13 @@ where
     }
 }
 
-pub fn parse_hex_usize(frag: &str) -> Option<usize> {
+pub fn parse_hex<N: Integer + FromStr>(frag: &str) -> Option<N>
+where
+    N::FromStrRadixErr: Display,
+{
     // special case
     if frag == "(null)" || frag == "" {
-        return Some(0);
+        return Some(N::zero());
     };
 
     // Some register values look like: 0033:0x7f883e3ad43
@@ -28,10 +32,10 @@ pub fn parse_hex_usize(frag: &str) -> Option<usize> {
         None => frag,
     };
 
-    match usize::from_str_radix(sanitized_frag.trim(), 16) {
+    match N::from_str_radix(sanitized_frag.trim(), 16) {
         Ok(n) => Some(n),
         Err(e) => {
-            eprintln!("Unable to parse {} into usize: {}", frag, e);
+            eprintln!("Unable to parse {} into {}: {}", frag, type_name::<N>(), e);
             None
         }
     }
