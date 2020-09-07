@@ -22,8 +22,3 @@ deploy:
     on:
       tags: true
     edge: true
-  - provider: script
-    script: bash scripts/docker-deploy.sh $TRAVIS_TAG
-    skip_cleanup: true
-    on:
-      tags: true
