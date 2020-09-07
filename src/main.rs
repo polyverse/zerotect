@@ -6,12 +6,15 @@ extern crate enum_display_derive;
 extern crate lazy_static;
 #[macro_use]
 extern crate rust_cef_derive;
+#[macro_use]
+extern crate num_derive;
 
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
 
 mod analyzer;
+mod common;
 mod emitter;
 mod events;
 mod formatter;

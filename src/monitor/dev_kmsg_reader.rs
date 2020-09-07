@@ -1,8 +1,10 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use crate::common;
 use crate::events;
 use crate::monitor::kmsg::{KMsg, KMsgParserError, KMsgParsingError, KMsgPtr};
 use crate::system;
+
 use std::boxed::Box;
 use std::io::BufRead;
 use timeout_iterator::TimeoutIterator;
@@ -154,7 +156,7 @@ impl DevKMsgReader {
 
         let mut meta_parts = meta.splitn(4, ',');
         let (facility, level) = match meta_parts.next() {
-            Some(faclevstr) => match DevKMsgReader::parse_fragment_u32(faclevstr) {
+            Some(faclevstr) => match common::parse_fragment::<u32>(faclevstr) {
                 Some(faclev) => {
                     // facility is top 28 bits, log level is bottom 3 bits
                     match (
@@ -187,7 +189,7 @@ impl DevKMsgReader {
         meta_parts.next();
 
         let timestamp = match meta_parts.next() {
-            Some(tstr) => match DevKMsgReader::parse_fragment_i64(tstr) {
+            Some(tstr) => match common::parse_fragment(tstr) {
                 Some(t) => self.system_start_time.add(ChronoDuration::microseconds(t)),
                 None => {
                     return Err(KMsgParsingError::Generic(format!(
@@ -257,26 +259,6 @@ impl DevKMsgReader {
             None => return Err(KMsgParsingError::Completed),
         }
         Ok(line_str)
-    }
-
-    fn parse_fragment_u32(frag: &str) -> Option<u32> {
-        match frag.trim().parse() {
-            Ok(f) => Some(f),
-            Err(e) => {
-                eprintln!("Unable to parse {} into u32: {}", frag, e);
-                None
-            }
-        }
-    }
-
-    fn parse_fragment_i64(frag: &str) -> Option<i64> {
-        match frag.trim().parse() {
-            Ok(f) => Some(f),
-            Err(e) => {
-                eprintln!("Unable to parse {} into i64: {}", frag, e);
-                None
-            }
-        }
     }
 }
 

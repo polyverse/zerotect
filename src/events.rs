@@ -1,7 +1,6 @@
 // Copyright (c) 2019 Polyverse Corporation
 
 use chrono::{DateTime, Utc};
-use num_derive::FromPrimitive;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -428,7 +427,7 @@ pub struct ConfigMismatch {
 }
 
 /// Linux kmesg (kernel message buffer) Log Facility.
-#[derive(EnumString, Debug, PartialEq, Display, FromPrimitive, Copy, Clone, Serialize)]
+#[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogFacility {
     #[strum(serialize = "kern")]
@@ -469,7 +468,7 @@ pub enum LogFacility {
 }
 
 /// Linux kmesg (kernel message buffer) Log Level.
-#[derive(EnumString, Debug, PartialEq, Display, FromPrimitive, Copy, Clone, Serialize)]
+#[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum LogLevel {
     #[strum(serialize = "emerg")]
@@ -600,14 +599,15 @@ pub struct SegfaultErrorCode {
 }
 
 impl SegfaultErrorCode {
-    const REASON_BIT: u8 = 1 << 0;
-    const ACCESS_TYPE_BIT: u8 = 1 << 1;
-    const ACCESS_MODE_BIT: u8 = 1 << 2;
-    const USE_OF_RESERVED_BIT: u8 = 1 << 3;
-    const INSTRUCTION_FETCH_BIT: u8 = 1 << 4;
-    const PROTECTION_KEYS_BLOCK_ACCESS_BIT: u8 = 1 << 5;
+    const REASON_BIT: usize = 1 << 0;
+    const ACCESS_TYPE_BIT: usize = 1 << 1;
+    const ACCESS_MODE_BIT: usize = 1 << 2;
+    const USE_OF_RESERVED_BIT: usize = 1 << 3;
+    const INSTRUCTION_FETCH_BIT: usize = 1 << 4;
+    const PROTECTION_KEYS_BLOCK_ACCESS_BIT: usize = 1 << 5;
 
-    pub fn from_error_code(code: u8) -> SegfaultErrorCode {
+    // errcode is now long
+    pub fn from_error_code(code: usize) -> SegfaultErrorCode {
         SegfaultErrorCode {
             reason: match (code & SegfaultErrorCode::REASON_BIT) > 0 {
                 false => SegfaultReason::NoPageFound,
@@ -658,7 +658,7 @@ impl Display for SegfaultErrorCode {
 ///
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
-#[derive(Debug, PartialEq, EnumString, FromPrimitive, Display, Copy, Clone, Serialize)]
+#[derive(Debug, PartialEq, EnumString, Display, Copy, Clone, FromPrimitive, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process

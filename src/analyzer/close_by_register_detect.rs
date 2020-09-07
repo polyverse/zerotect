@@ -1,5 +1,7 @@
+use crate::common;
 use crate::events;
 use crate::params;
+
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -34,11 +36,11 @@ pub fn close_by_register_detect(
                     prev_lfs
                         .stack_dump
                         .get(register)
-                        .map(|v| parse_hex(v, register, prev_lfs))
+                        .map(|v| common::parse_hex_usize(v))
                         .flatten(),
                     lfs.stack_dump
                         .get(register)
-                        .map(|v| parse_hex(v, register, lfs))
+                        .map(|v| common::parse_hex_usize(v))
                         .flatten(),
                 ) {
                     // analytics only works if there is a prevous event
@@ -89,34 +91,6 @@ fn abs_diff(u1: usize, u2: usize) -> usize {
         u1 - u2
     } else {
         u2 - u1
-    }
-}
-
-fn parse_hex(frag: &str, register: &str, lfs: &events::LinuxFatalSignal) -> Option<usize> {
-    // special case
-    if frag == "(null)" || frag == "" {
-        return Some(0);
-    };
-
-    // Some register values look like: 0033:0x7f883e3ad43
-    // only parse the 7f883e3ad43
-    let sanitized_frag = match frag.find(":0x") {
-        Some(idx) => &frag[(idx + ":0x".len())..],
-        None => frag,
-    };
-
-    match usize::from_str_radix(sanitized_frag.trim(), 16) {
-        Ok(n) => Some(n),
-        Err(e) => {
-            eprintln!(
-                "Unable to parse register {} value {} into type 'usize': {}. The complete event: {}",
-                register,
-                frag,
-                e,
-                lfs
-            );
-            None
-        }
     }
 }
 
