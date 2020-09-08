@@ -100,7 +100,6 @@ OPTIONS:
         --configfile <filepath>                                Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)
         --auto-configure <sysctl-flag-to-auto-configure>...    Automatically configure the system on the user\'s behalf. [possible values: debug.exception-trace, kernel.print-fatal-signals]
         --console <format>                                     Prints all monitored data to the console in the specified format. [possible values: text, json]
-        --node <node_identifier>                               All reported events are attributed to this 'node' within your overall organization, allowing for filtering, separation and more.
 ```
 
 ## Zerotect Log Format
