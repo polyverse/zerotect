@@ -475,7 +475,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     let matches = App::new("zerotect")
                         .setting(AppSettings::DeriveDisplayOrder)
-                        .version("1.0")
+                        .version("0.4.7")
                         .author("Polyverse Corporation <support@polyverse.com>")
                         .about("Detect attempted (and ultimately failed) attacks and exploits using known and unknown vulnerabilities by observing side effects (segfaults, crashes, etc.)")
 
