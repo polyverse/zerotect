@@ -98,7 +98,7 @@ fn publish_to_polycorder_forever(
             },
         };
 
-        if flush && events.is_empty() {
+        if flush && !events.is_empty() {
             let report = Report {
                 node_id: config.node_id.as_str(),
                 events: &events,
