@@ -121,12 +121,13 @@ mod test {
             event: events::EventType::RegisterProbe(events::RegisterProbe {
                 register: "RIP".to_owned(),
                 message: "Instruction pointer".to_owned(),
+                procname: "nginx".to_owned(),
                 justification: events::RegisterProbeJustification::FullEvents(vec![]),
             }),
         };
 
         let formatter = JsonFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"RegisterProbe\",\"register\":\"RIP\",\"message\":\"Instruction pointer\",\"justification\":{\"FullEvents\":[]}}}");
+        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"RegisterProbe\",\"register\":\"RIP\",\"message\":\"Instruction pointer\",\"procname\":\"nginx\",\"justification\":{\"FullEvents\":[]}}}");
     }
 }

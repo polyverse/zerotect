@@ -360,6 +360,7 @@ mod test {
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
+                    procname: _,
                     justification: events::RegisterProbeJustification::FullEvents(_)
                 })
             }
@@ -373,11 +374,13 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname,
                         justification: events::RegisterProbeJustification::FullEvents(full_events),
                     }),
             } => {
                 assert_eq!(register, "ip");
                 assert_eq!(5, full_events.len());
+                assert_eq!(procname, "nginx");
             }
             _ => panic!("An unexpected event occurred."),
         }
@@ -403,6 +406,7 @@ mod test {
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
+                    procname: _,
                     justification: events::RegisterProbeJustification::RegisterValues(_)
                 })
             }
@@ -416,11 +420,13 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname,
                         justification: events::RegisterProbeJustification::RegisterValues(values),
                     }),
             } => {
                 assert_eq!(register, "ip");
                 assert_eq!(5, values.len());
+                assert_eq!(procname, "nginx");
             }
             _ => panic!("An unexpected event occurred."),
         }
@@ -454,6 +460,7 @@ mod test {
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
+                    procname: _,
                     justification: events::RegisterProbeJustification::RegisterValues(_)
                 })
             }
@@ -467,11 +474,13 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname,
                         justification: events::RegisterProbeJustification::RegisterValues(values),
                     }),
             } => {
                 assert_eq!(register, "RDI");
                 assert_eq!(20, values.len());
+                assert_eq!(procname, "nginx");
             }
             _ => panic!("An unexpected event occurred."),
         }
@@ -509,6 +518,7 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname: _,
                         justification: events::RegisterProbeJustification::RegisterValues(_),
                     }),
             } => register,
@@ -524,6 +534,7 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname: _,
                         justification: events::RegisterProbeJustification::RegisterValues(_),
                     }),
             } => register,
@@ -539,6 +550,7 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname: _,
                         justification: events::RegisterProbeJustification::RegisterValues(_),
                     }),
             } => register,
@@ -575,6 +587,7 @@ mod test {
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
+                    procname: _,
                     justification: events::RegisterProbeJustification::EventCount(_)
                 })
             }
@@ -588,11 +601,13 @@ mod test {
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
                         message: _,
+                        procname,
                         justification: events::RegisterProbeJustification::EventCount(c),
                     }),
             } => {
                 assert_eq!(register, "RSI");
                 assert_eq!(&20, c);
+                assert_eq!(procname, "nginx");
             }
             _ => panic!("An unexpected event occurred."),
         }

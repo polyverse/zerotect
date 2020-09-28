@@ -50,7 +50,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|V1|LinuxKernelTrap|Linux Kernel Trap|10|access_mode=User access_type=Read file=a.out instruction_fetch=false ip=0 pid=36275 procname=a.out protection_keys_block_access=false reason=NoPageFound sp=140726083244224 use_of_reserved_bit=false vmasize=4096 vmastart=94677333766144"
+            "CEF:0|polyverse|zerotect|1.0|LinuxKernelTrap|Linux Kernel Trap|10|access_mode=User access_type=Read file=a.out instruction_fetch=false ip=0 pid=36275 procname=a.out protection_keys_block_access=false reason=NoPageFound sp=140726083244224 use_of_reserved_bit=false vmasize=4096 vmastart=94677333766144"
         );
     }
 
@@ -72,7 +72,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|V1|LinuxFatalSignal|Linux Fatal Signal|10|signal=SIGSEGV"
+            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|signal=SIGSEGV"
         );
     }
 
@@ -91,7 +91,7 @@ mod test {
         };
 
         let formatter = CEFFormatter {};
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod test {
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|ConfigMismatch|Configuration mismatched what zerotect expected|4|expected_value=Y key=/sys/module/printk/parameters/time observed_value=N");
     }
 
     #[test]
@@ -121,12 +121,13 @@ mod test {
             event: events::EventType::RegisterProbe(events::RegisterProbe {
                 register: "RIP".to_owned(),
                 message: "Instruction pointer".to_owned(),
+                procname: "nginx".to_owned(),
                 justification: events::RegisterProbeJustification::FullEvents(vec![]),
             }),
         };
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|V1|RegisterProbe|Probe using Register Increment|10|number_of_segfaults_with_instruction_pointer_within_word_size=0");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|justifying_event_count=0 message=Instruction pointer procname=nginx register=RIP");
     }
 }

@@ -44,6 +44,7 @@
           "required": [
             "justification",
             "message",
+            "procname",
             "register",
             "type"
           ],
@@ -58,6 +59,9 @@
             },
             "message": {
               "description": "What does this probe mean? What interpretation could this particular register probe have?",
+              "type": "string"
+            },
+            "procname": {
               "type": "string"
             },
             "register": {
@@ -205,7 +209,7 @@
               ]
             },
             "stack_dump": {
-              "description": "An Optional Stack Dump if one was found and parsable.",
+              "description": "An Optional Stack Dump if one was found and parsable. Do not place these in CEF format since ArcSight/Microfocus needs explicit field mappings. No telling what a real dump of registers/values might be contained here. Best to be safe. If you care about these values, use JSON/Text logging.",
               "type": "object",
               "additionalProperties": {
                 "type": "string"
