@@ -1,12 +1,13 @@
+use crate::common;
 use crate::events;
 use crate::params;
-use crate::common;
 
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub fn close_by_ip_detect(
+    procname: &str,
     eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
     ip_max_distance: usize,
     justification_threshold: usize,
@@ -61,6 +62,7 @@ pub fn close_by_ip_detect(
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: "ip".to_owned(),
                     message: "Instruction Pointer probe".to_owned(),
+                    procname: procname.to_owned(),
                     justification: justify(close_by_ip.clone(), justification_kind),
                 }),
             }),

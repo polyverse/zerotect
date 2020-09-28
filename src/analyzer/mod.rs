@@ -87,21 +87,26 @@ impl Analyzer {
             let mut detected_events: Vec<events::Event> = vec![];
             let mut used_events: Vec<events::Event> = vec![];
 
-            for (_, eventslist) in self.event_buffer.iter_mut() {
+            for (procname, eventslist) in self.event_buffer.iter_mut() {
                 // do we have at least 2 events?
                 if eventslist.len() <= 1 {
                     continue; // not enough to do anything reasonable
                 }
 
-                if let Some((detected_event, mut events_used_for_detection)) =
-                    close_by_ip_detect(eventslist, self.ip_max_distance, 1, self.justification_kind)
-                {
+                if let Some((detected_event, mut events_used_for_detection)) = close_by_ip_detect(
+                    procname,
+                    eventslist,
+                    self.ip_max_distance,
+                    1,
+                    self.justification_kind,
+                ) {
                     detected_events.push(detected_event);
                     used_events.append(&mut events_used_for_detection)
                 }
 
                 if let Some((detected_event, mut events_used_for_detection)) =
                     close_by_register_detect(
+                        procname,
                         eventslist,
                         "RDI",
                         1,
@@ -116,6 +121,7 @@ impl Analyzer {
 
                 if let Some((detected_event, mut events_used_for_detection)) =
                     close_by_register_detect(
+                        procname,
                         eventslist,
                         "RSI",
                         1,
@@ -130,6 +136,7 @@ impl Analyzer {
 
                 if let Some((detected_event, mut events_used_for_detection)) =
                 close_by_register_detect(
+                    procname,
                     eventslist,
                     "RIP",
                     1,

@@ -1,4 +1,4 @@
-use num::{Unsigned, Integer};
+use num::{Integer, Unsigned};
 use std::any::type_name;
 use std::fmt::Display;
 use std::str::FromStr;
