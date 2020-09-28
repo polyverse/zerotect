@@ -4,11 +4,11 @@ rust:
 services:
   - docker
 before_install:
-  - docker pull clux/muslrust
+  - docker pull polyverse/rust-dev-env
 script:
-  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust cargo test
-  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust  /bin/bash -c "rustup component add clippy && cargo clippy"
-  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t clux/muslrust cargo build --release
+  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t polyverse/rust-dev-env cargo clippy
+  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t polyverse/rust-dev-env cargo test
+  - docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t polyverse/rust-dev-env cargo build --release
 deploy:
 # Be sure to add a GITHUB_TOKEN environment variable in this job's config
 # which the "Public Repos" permission, to enable pushing releases.

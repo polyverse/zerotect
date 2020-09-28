@@ -57,7 +57,7 @@ pub enum Version {
     /// to all other fields. It allows parsers to test on version and determine if they
     /// know what to do with the rest.
     /// For this particular variant, set DeviceVersion to a fixed value "V1"
-    #[cef_values(CefHeaderDeviceVersion = "V1")]
+    #[cef_values(CefHeaderDeviceVersion = "1.0")]
     V1 {
         /// This is universal and important for all events. They occur at a time.
         timestamp: DateTime<Utc>,
@@ -155,10 +155,11 @@ impl Display for EventType {
             EventType::RegisterProbe(RegisterProbe {
                 register,
                 message,
+                procname,
                 justification,
             }) => {
                 write!(f,
-                    "Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", register, justification.len(), message, justification)
+                    "In process {}, Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", procname, register, justification.len(), message, justification)
             },
             EventType::LinuxKernelTrap(LinuxKernelTrap {
                 level,
@@ -238,36 +239,6 @@ impl Display for EventType {
     }
 }
 
-/// This event represents a probe using the instruction pointer
-/// i.e. someone is exploiting a buffer overflow to visit various random
-/// instruction locations in memory and trying to execute at them.
-///
-/// The goal is to find beneficial or suitable instructions that are
-/// executable and helpful.
-#[derive(Debug, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
-pub struct InstructionPointerProbe {
-    /// How many pairs of kernel events offcurred with an instruction pointer that was
-    /// mutually close. For example if there were 3 segfaults, each with IP:
-    /// 0x1000, 0x1008 and 0x100B, then the first two are 8-bytes apart, the next two
-    /// are 4 bytes apart. This means there were two pairs of close-IPs.
-    /// The events which justify this analytics event.
-    pub justifying_events: Vec<Event>,
-}
-
-impl rust_cef::CefExtensions for InstructionPointerProbe {
-    fn cef_extensions(
-        &self,
-        collector: &mut HashMap<String, String>,
-    ) -> rust_cef::CefExtensionsResult {
-        collector.insert(
-            "number_of_segfaults_with_instruction_pointer_within_word_size".to_owned(),
-            format!("{}", self.justifying_events.len()),
-        );
-        Ok(())
-    }
-}
-
 /// This event represents a probe using a Register
 /// i.e. someone is probing/fuzzing a program with different values of
 /// a particular register.
@@ -284,6 +255,9 @@ pub struct RegisterProbe {
     /// particular register probe have?
     pub message: String,
 
+    // The process in which this register probe occurred
+    pub procname: String,
+
     /// The raw events which justify this analytics event.
     pub justification: RegisterProbeJustification,
 }
@@ -293,8 +267,12 @@ impl rust_cef::CefExtensions for RegisterProbe {
         &self,
         collector: &mut HashMap<String, String>,
     ) -> rust_cef::CefExtensionsResult {
+        collector.insert("register".to_owned(), self.register.to_owned());
+        collector.insert("procname".to_owned(), self.procname.to_owned());
+        collector.insert("message".to_owned(), self.message.to_owned());
+
         collector.insert(
-            "number_of_segfaults_with_instruction_pointer_within_word_size".to_owned(),
+            "justifying_event_count".to_owned(),
             format!("{}", self.justification.len()),
         );
         Ok(())
@@ -378,7 +356,9 @@ pub struct LinuxFatalSignal {
     pub signal: FatalSignalType,
 
     /// An Optional Stack Dump if one was found and parsable.
-    #[cef_ext_gobble_kv_iterator]
+    /// Do not place these in CEF format since ArcSight/Microfocus needs explicit field mappings.
+    /// No telling what a real dump of registers/values might be contained here. Best to be safe.
+    /// If you care about these values, use JSON/Text logging.
     pub stack_dump: BTreeMap<String, String>,
 }
 

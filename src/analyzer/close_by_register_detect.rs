@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub fn close_by_register_detect(
+    procname: &str,
     eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
     register: &str,
     register_max_distance: usize,
@@ -75,6 +76,7 @@ pub fn close_by_register_detect(
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: register.to_owned(),
                     message: message.to_owned(),
+                    procname: procname.to_owned(),
                     justification: justify(close_by_register.clone(), register, justification_kind),
                 }),
             }),
