@@ -50,7 +50,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|1.0|LinuxKernelTrap|Linux Kernel Trap|10|access_mode=User access_type=Read file=a.out instruction_fetch=false ip=0 pid=36275 procname=a.out protection_keys_block_access=false reason=NoPageFound sp=140726083244224 use_of_reserved_bit=false vmasize=4096 vmastart=94677333766144"
+            "CEF:0|polyverse|zerotect|1.0|LinuxKernelTrap|Linux Kernel Trap|10|cn2=94677333766144 cn2Label=vmastart cn3=4096 cn3Label=vmasize cs2=Read cs2Label=access_type cs3=User cs3Label=access_mode cs4=false cs4Label=use_of_reserved_bit cs5=false cs5Label=instruction_fetch cs6=false cs6Label=protection_keys_block_access dpid=36275 fname=a.out ip=0 procname=a.out reason=NoPageFound sp=140726083244224"
         );
     }
 
@@ -72,7 +72,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|signal=SIGSEGV"
+            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|flexString2=SIGSEGV flexString2Label=signal"
         );
     }
 
@@ -91,7 +91,7 @@ mod test {
         };
 
         let formatter = CEFFormatter {};
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|count=9 function_name=show_signal_msg");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|cn4=9 cn4Label=count function_name=show_signal_msg");
     }
 
     #[test]
@@ -128,6 +128,6 @@ mod test {
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|justifying_event_count=0 message=Instruction pointer procname=nginx register=RIP");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|cn1=0 cn1Label=justifying_event_count cs1=RIP cs1Label=register dproc=nginx message=Instruction pointer");
     }
 }

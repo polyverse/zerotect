@@ -247,10 +247,9 @@ impl Display for EventType {
 ///
 #[derive(Debug, PartialEq, Clone, Serialize)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
-#[cef_ext_values(cs1Label=register, cn1Label=justifying_event_count)]
+//#[cef_ext_values(cs1Label=register, cn1Label=justifying_event_count)]
 pub struct RegisterProbe {
     /// Which register was being probed?
-    #[cef_ext_field(cs1)]
     pub register: String,
 
     /// What does this probe mean? What interpretation could this
@@ -258,11 +257,9 @@ pub struct RegisterProbe {
     pub message: String,
 
     // The process in which this register probe occurred
-    #[cef_ext_field(dproc)]
     pub procname: String,
 
     /// The raw events which justify this analytics event.
-    #[cef_ext_field(cn1)]
     pub justification: RegisterProbeJustification,
 }
 
