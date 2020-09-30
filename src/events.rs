@@ -320,11 +320,9 @@ pub struct LinuxKernelTrap {
     /// Process ID
     pub pid: usize,
 
-    #[cef_ext_field]
     /// Instruction Pointer (what memory address was executing)
     pub ip: usize,
 
-    #[cef_ext_field]
     /// Stack Pointer
     pub sp: usize,
 
@@ -399,15 +397,12 @@ pub struct LinuxSuppressedCallback {
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
-    #[cef_ext_field]
     pub key: String,
 
     /// The value zerotect configured and thus expected.
-    #[cef_ext_field]
     pub expected_value: String,
 
     /// The value zerotect observed.
-    #[cef_ext_field]
     pub observed_value: String,
 }
 
