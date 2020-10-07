@@ -305,9 +305,7 @@ impl EventParser {
             for part in parts {
                 // this word is part of the next key,
                 // first handle any k/vs we already have (if any)
-                if part.ends_with(':') {
-                    let part_without_colon = &part[..(part.len() - 1)];
-
+                if let Some(part_without_colon) = part.strip_suffix(':') {
                     // if there's a value, let's publish it before transitioning to new key
                     if let Some(v) = value {
                         if let Some(k) = key {
