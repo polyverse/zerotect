@@ -50,7 +50,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|1.0|LinuxKernelTrap|Linux Kernel Trap|10|PolyverseZerotectInstructionPointerValue=0 PolyverseZerotectStackPointerValue=140726083244224 cn2=94677333766144 cn2Label=vmastart cn3=4096 cn3Label=vmasize cs2=Read cs2Label=access_type cs3=User cs3Label=access_mode cs4=false cs4Label=use_of_reserved_bit cs5=false cs5Label=instruction_fetch cs6=false cs6Label=protection_keys_block_access dpid=36275 dproc=a.out flexString2=Segfault at location 0 flexString2Label=signal fname=a.out reason=NoPageFound"
+            "CEF:0|polyverse|zerotect|1.0|LinuxKernelTrap|Linux Kernel Trap|10|PolyverseZerotectInstructionPointerValue=0 PolyverseZerotectStackPointerValue=140726083244224 cn2=94677333766144 cn2Label=vmastart cn3=4096 cn3Label=vmasize cs2=Read cs2Label=access_type cs3=User cs3Label=access_mode cs4=false cs4Label=use_of_reserved_bit cs5=false cs5Label=instruction_fetch cs6=false cs6Label=protection_keys_block_access dpid=36275 dproc=a.out flexString2=Segfault at location 0 flexString2Label=signal fname=a.out reason=NoPageFound rt=471804323"
         );
     }
 
@@ -72,7 +72,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|flexString2=SIGSEGV flexString2Label=signal"
+            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|flexString2=SIGSEGV flexString2Label=signal rt=471804323"
         );
     }
 
@@ -91,7 +91,7 @@ mod test {
         };
 
         let formatter = CEFFormatter {};
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|cnt=9 flexString2=show_signal_msg flexString2Label=function_name");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|cnt=9 flexString2=show_signal_msg flexString2Label=function_name rt=471804323");
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod test {
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|ConfigMismatch|Configuration mismatched what zerotect expected|4|PolyverseZerotectExpectedValue=Y PolyverseZerotectKey=/sys/module/printk/parameters/time PolyverseZerotectObservedValue=N");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|ConfigMismatch|Configuration mismatched what zerotect expected|4|PolyverseZerotectExpectedValue=Y PolyverseZerotectKey=/sys/module/printk/parameters/time PolyverseZerotectObservedValue=N rt=471804323");
     }
 
     #[test]
@@ -128,6 +128,6 @@ mod test {
 
         let formatter = CEFFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|cn1=0 cn1Label=justifying_event_count cs1=RIP cs1Label=register dproc=nginx message=Instruction pointer");
+        assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|cn1=0 cn1Label=justifying_event_count cs1=RIP cs1Label=register dproc=nginx message=Instruction pointer rt=471804323");
     }
 }

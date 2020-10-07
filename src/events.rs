@@ -60,6 +60,7 @@ pub enum Version {
     #[cef_values(CefHeaderDeviceVersion = "1.0")]
     V1 {
         /// This is universal and important for all events. They occur at a time.
+        #[cef_ext_gobble]
         timestamp: DateTime<Utc>,
 
         /// Platform records fields specific to a specific mechanism/platform.
