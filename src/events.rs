@@ -245,40 +245,26 @@ impl Display for EventType {
 ///
 /// When probing a stack canary, RDI/RSI increment by one value, for instance.
 ///
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
-//#[cef_ext_values(cs1Label=register, cn1Label=justifying_event_count)]
+#[cef_ext_values(cs1Label="register")]
 pub struct RegisterProbe {
     /// Which register was being probed?
+    #[cef_ext_field(cs1)]
     pub register: String,
 
     /// What does this probe mean? What interpretation could this
     /// particular register probe have?
+    #[cef_ext_field]
     pub message: String,
 
     // The process in which this register probe occurred
+    #[cef_ext_field(dproc)]
     pub procname: String,
 
     /// The raw events which justify this analytics event.
+    #[cef_ext_gobble]
     pub justification: RegisterProbeJustification,
-}
-
-impl rust_cef::CefExtensions for RegisterProbe {
-    fn cef_extensions(
-        &self,
-        collector: &mut HashMap<String, String>,
-    ) -> rust_cef::CefExtensionsResult {
-        collector.insert("cs1Label".to_owned(), "register".to_owned());
-        collector.insert("cs1".to_owned(), self.register.to_owned());
-
-        collector.insert("dproc".to_owned(), self.procname.to_owned());
-
-        collector.insert("message".to_owned(), self.message.to_owned());
-
-        collector.insert("cn1Label".to_owned(), "justifying_event_count".to_owned());
-        collector.insert("cn1".to_owned(), format!("{}", self.justification.len()));
-        Ok(())
-    }
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
@@ -299,8 +285,19 @@ impl RegisterProbeJustification {
     }
 }
 
+impl rust_cef::CefExtensions for RegisterProbeJustification {
+    fn cef_extensions(
+        &self,
+        collector: &mut HashMap<String, String>,
+    ) -> rust_cef::CefExtensionsResult {
+        collector.insert("cn1Label".to_owned(), "justifying_event_count".to_owned());
+        collector.insert("cn1".to_owned(), format!("{}", self.len()));
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cef_ext_values(cn2Label = "vmastart", cn3Label = "vmasize")]
+#[cef_ext_values(cn2Label = "vmastart", cn3Label = "vmasize", flexString2Label = "signal")]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
@@ -310,9 +307,10 @@ pub struct LinuxKernelTrap {
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
     pub facility: LogFacility,
 
+    #[cef_ext_field(flexString2)]
     pub trap: KernelTrapType,
 
-    #[cef_ext_field]
+    #[cef_ext_field(dproc)]
     /// Name of the process in which the trap occurred
     pub procname: String,
 
@@ -321,9 +319,11 @@ pub struct LinuxKernelTrap {
     pub pid: usize,
 
     /// Instruction Pointer (what memory address was executing)
+    #[cef_ext_field(PolyverseZerotectInstructionPointerValue)]
     pub ip: usize,
 
     /// Stack Pointer
+    #[cef_ext_field(PolyverseZerotectStackPointerValue)]
     pub sp: usize,
 
     /// The error code for the trap
@@ -331,15 +331,15 @@ pub struct LinuxKernelTrap {
     pub errcode: SegfaultErrorCode,
 
     /// (Optional) File in which the trap occurred (could be the main executable or library).
-    #[cef_ext_optional_field(fname)]
+    #[cef_ext_field(fname)]
     pub file: Option<String>,
 
     /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
-    #[cef_ext_optional_field(cn2)]
+    #[cef_ext_field(cn2)]
     pub vmastart: Option<usize>,
 
     /// (Optional) The Virtual Memory Size of this file's mapping.
-    #[cef_ext_optional_field(cn3)]
+    #[cef_ext_field(cn3)]
     pub vmasize: Option<usize>,
 }
 
@@ -375,7 +375,7 @@ impl Display for LinuxFatalSignal {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cef_ext_values(cn4Label = "count")]
+#[cef_ext_values(flexString2Label = "function_name")]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
@@ -385,11 +385,11 @@ pub struct LinuxSuppressedCallback {
     pub facility: LogFacility,
 
     /// Name of the function being suppressed/folded.
-    #[cef_ext_field]
+    #[cef_ext_field(flexString2)]
     pub function_name: String,
 
     /// Number of times it was suppressed.
-    #[cef_ext_field(cn4)]
+    #[cef_ext_field(cnt)]
     pub count: usize,
 }
 
@@ -397,12 +397,15 @@ pub struct LinuxSuppressedCallback {
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
+    #[cef_ext_field(PolyverseZerotectKey)]
     pub key: String,
 
     /// The value zerotect configured and thus expected.
+    #[cef_ext_field(PolyverseZerotectExpectedValue)]
     pub expected_value: String,
 
     /// The value zerotect observed.
+    #[cef_ext_field(PolyverseZerotectObservedValue)]
     pub observed_value: String,
 }
 
