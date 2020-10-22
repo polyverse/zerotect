@@ -12,7 +12,7 @@
   * [Recommended usage](#recommended-usage)
     * [Understanding the minimal configuration](#understanding-the-minimal-configuration)
   * [All CLI options](#all-cli-options)
-* [Zerotect Log Format](#zerotect-log-format)
+* [Zerotect Log Format](#zerotect-log)
 * [Contributing](#contributing)
 * [Zero Day Reward Program](#zero-day-reward-program)
 
@@ -105,8 +105,6 @@ OPTIONS:
 ## Zerotect Log 
 
 Zerotect stores activities in the log file located in /var/log/zerotect.log. Examine this log file for further investigation of potential attacks.
-
-### Format
 
 The authoritative log format is defined in [schema.json](./reference/schema.json).
 
