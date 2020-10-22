@@ -12,7 +12,7 @@
   * [Recommended usage](#recommended-usage)
     * [Understanding the minimal configuration](#understanding-the-minimal-configuration)
   * [All CLI options](#all-cli-options)
-* [Zerotect Log Format](#zerotect-log)
+* [Zerotect Log](#zerotect-log)
 * [Contributing](#contributing)
 * [Zero Day Reward Program](#zero-day-reward-program)
 
