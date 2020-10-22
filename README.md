@@ -102,9 +102,13 @@ OPTIONS:
         --console <format>                                     Prints all monitored data to the console in the specified format. [possible values: text, json]
 ```
 
-## Zerotect Log Format
+## Zerotect Log 
 
-[schema.json](./reference/schema.json) is the authoritative log format.
+Zerotect stores activities in the log file located in /var/log/zerotect.log. Examine this log file for further investigation of potential attacks.
+
+### Format
+
+The authoritative log format is defined in [schema.json](./reference/schema.json).
 
 You may use it to generate parsers. The schema contains documentation comments, explanations of fields, and so forth.
 
