@@ -20,4 +20,6 @@ Kernel traps are fewer in frequency and trap illegal program behavior such as a 
 3. What the Stack Pointer was (sp)
 
 ## Linux Fatal Signals
-Linux fatal signals are similar to traps but don't necessarily have structured data.
+Linux fatal signals are similar to traps but don't necessarily have structured data. They contain a set of Key-Value pairs, many of which are values of Registers at the time the fatal was recorded.
+
+These register values give us a clue into whether or not each Fatal was identical or different.
