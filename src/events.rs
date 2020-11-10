@@ -256,7 +256,7 @@ pub struct RegisterProbe {
 
     /// What does this probe mean? What interpretation could this
     /// particular register probe have?
-    #[cef_ext_field]
+    #[cef_ext_field(msg)]
     pub message: String,
 
     // The process in which this register probe occurred
@@ -376,7 +376,7 @@ impl Display for LinuxFatalSignal {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cef_ext_values(flexString2Label = "function_name")]
+#[cef_ext_values(flexString1Label = "function_name")]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
@@ -386,7 +386,7 @@ pub struct LinuxSuppressedCallback {
     pub facility: LogFacility,
 
     /// Name of the function being suppressed/folded.
-    #[cef_ext_field(flexString2)]
+    #[cef_ext_field(flexString1)]
     pub function_name: String,
 
     /// Number of times it was suppressed.
