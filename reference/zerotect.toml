@@ -1,4 +1,5 @@
 verbosity = 0
+hostname = 'hostname'
 
 [auto_configure]
 exception_trace = true

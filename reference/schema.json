@@ -20,6 +20,12 @@
             }
           ]
         },
+        "hostname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "timestamp": {
           "description": "This is universal and important for all events. They occur at a time.",
           "type": "string",
@@ -579,6 +585,12 @@
                 {
                   "$ref": "#/definitions/EventType"
                 }
+              ]
+            },
+            "hostname": {
+              "type": [
+                "string",
+                "null"
               ]
             },
             "timestamp": {

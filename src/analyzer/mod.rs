@@ -407,6 +407,7 @@ mod test {
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
@@ -420,6 +421,7 @@ mod test {
         match event.as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -461,6 +463,7 @@ mod test {
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
@@ -474,6 +477,7 @@ mod test {
         match event.as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -518,6 +522,7 @@ mod test {
         let register1 = match events_iter.next().unwrap().as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -534,6 +539,7 @@ mod test {
         let register2 = match events_iter.next().unwrap().as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -550,6 +556,7 @@ mod test {
         let register3 = match events_iter.next().unwrap().as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -588,6 +595,7 @@ mod test {
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
@@ -601,6 +609,7 @@ mod test {
         match event.as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,
@@ -713,6 +722,7 @@ mod test {
                         r#"{
                     "version":"V1",
                     "timestamp":"2020-08-31T16:21:34.078978600Z",
+                    "hostname":"nonexistent",
                     "event":{
                         "type":"LinuxKernelTrap",
                         "level":"Info",
@@ -748,6 +758,7 @@ mod test {
                         r#"{
                     "version":"V1",
                     "timestamp":"2020-08-31T16:21:34.100803600Z",
+                    "hostname":"nonexistent",
                     "event":{
                         "type":"LinuxKernelTrap",
                         "level":"Info",
@@ -784,6 +795,7 @@ mod test {
                         r#"{
                         "version":"V1",
                         "timestamp":"2020-08-31T16:21:34.122534600Z",
+                        "hostname":"nonexistent",
                         "event":{
                             "type":"LinuxKernelTrap",
                             "level":"Info",
@@ -819,6 +831,7 @@ mod test {
                         r#"{
                         "version":"V1",
                         "timestamp":"2020-08-31T16:21:34.144860600Z",
+                        "hostname":"nonexistent",
                         "event":{
                             "type":"LinuxKernelTrap",
                             "level":"Info",
@@ -855,6 +868,7 @@ mod test {
                         r#"{
                         "version":"V1",
                         "timestamp":"2020-08-31T16:21:34.166785600Z",
+                        "hostname":"nonexistent",
                         "event":{
                             "type":"LinuxKernelTrap",
                             "level":"Info","facility":"Kern",
@@ -925,6 +939,7 @@ mod test {
 
         Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
+            hostname: Some("nonexistent".to_owned()),
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 level: events::LogLevel::Info,
                 facility: events::LogFacility::Kern,

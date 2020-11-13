@@ -479,6 +479,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -503,6 +504,7 @@ mod test {
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -527,6 +529,7 @@ mod test {
 
         let event3 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -551,9 +554,13 @@ mod test {
             }),
         });
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            None,
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -663,10 +670,7 @@ mod test {
                         "use_of_reserved_bit": false,
                         "instruction_fetch": true,
                         "protection_keys_block_access": false
-                    },
-                    "file": null,
-                    "vmasize": null,
-                    "vmastart": null
+                    }
                 }
             }"#
             )
@@ -686,6 +690,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -710,6 +715,7 @@ mod test {
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -732,9 +738,13 @@ mod test {
             }),
         });
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            None,
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -803,10 +813,7 @@ mod test {
                         "use_of_reserved_bit": false,
                         "instruction_fetch": false,
                         "protection_keys_block_access": false
-                    },
-                    "file": null,
-                    "vmastart": null,
-                    "vmasize": null
+                    }
                 }
             }"#
             )
@@ -825,6 +832,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -851,6 +859,7 @@ mod test {
 
         let event2 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -875,9 +884,13 @@ mod test {
             }),
         });
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            None,
+        )
+        .unwrap();
 
         let maybe_segfault = parser.next();
         assert!(maybe_segfault.is_some());
@@ -948,10 +961,7 @@ mod test {
                         "use_of_reserved_bit": false,
                         "instruction_fetch": false,
                         "protection_keys_block_access": false
-                    },
-                    "vmastart": null,
-                    "vmasize": null,
-                    "file": null
+                    }
                 }
             }"#
             )
@@ -973,6 +983,7 @@ mod test {
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
+            hostname: Some("testhost".to_owned()),
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -995,9 +1006,13 @@ mod test {
             }),
         });
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            Some("testhost".to_owned()),
+        )
+        .unwrap();
 
         let maybe_gpf = parser.next();
         assert!(maybe_gpf.is_some());
@@ -1033,6 +1048,7 @@ mod test {
                 r#"{
                 "version": "V1",
                 "timestamp": "1970-01-05T09:01:24.605Z",
+                "hostname": "testhost",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -1073,15 +1089,20 @@ mod test {
             message: String::from("potentially unexpected fatal signal 11."),
         })];
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            Some("testhost2".to_owned()),
+        )
+        .unwrap();
         let sig11 = parser.next();
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
             Arc::new(events::Version::V1 {
                 timestamp,
+                hostname: Some("testhost2".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: events::LogFacility::Kern,
                     level: events::LogLevel::Warning,
@@ -1123,6 +1144,7 @@ mod test {
                 Box::new(kmsgs.clone().into_iter()),
                 Duration::from_secs(1),
                 0,
+                None,
             )
             .unwrap();
             let sig11 = parser.next();
@@ -1132,6 +1154,7 @@ mod test {
                 sig11.unwrap(),
                 Arc::new(events::Version::V1 {
                     timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
@@ -1183,6 +1206,7 @@ mod test {
                 Box::new(kmsgs.into_iter()),
                 Duration::from_secs(1),
                 0,
+                None,
             )
             .unwrap();
             let sig11 = parser.next();
@@ -1191,6 +1215,7 @@ mod test {
                 sig11.unwrap(),
                 Arc::new(events::Version::V1 {
                     timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
@@ -1240,6 +1265,7 @@ mod test {
                 kt.unwrap().as_ref(),
                 events::Version::V1 {
                     timestamp: _,
+                    hostname: None,
                     event: events::EventType::LinuxKernelTrap(_),
                 }
             );
@@ -1258,9 +1284,13 @@ mod test {
             }),
         ];
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            None,
+        )
+        .unwrap();
 
         thread::spawn(move || {
             let maybe_segfault = parser.next();
@@ -1270,6 +1300,7 @@ mod test {
                 segfault,
                 Arc::new(events::Version::V1 {
                     timestamp,
+                    hostname: None,
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                         facility: events::LogFacility::Kern,
                         level: events::LogLevel::Warning,
@@ -1311,15 +1342,20 @@ mod test {
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
         })];
 
-        let mut parser =
-            EventParser::from_kmsg_iterator(Box::new(kmsgs.into_iter()), Duration::from_secs(1), 0)
-                .unwrap();
+        let mut parser = EventParser::from_kmsg_iterator(
+            Box::new(kmsgs.into_iter()),
+            Duration::from_secs(1),
+            0,
+            None,
+        )
+        .unwrap();
         let suppressed_callback = parser.next();
         assert!(suppressed_callback.is_some());
         assert_eq!(
             suppressed_callback.unwrap(),
             Arc::new(events::Version::V1 {
                 timestamp,
+                hostname: None,
                 event: events::EventType::LinuxSuppressedCallback(
                     events::LinuxSuppressedCallback {
                         facility: events::LogFacility::Kern,

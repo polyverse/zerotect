@@ -323,6 +323,7 @@ mod test {
         let event = match rand::random::<bool>() {
             true => Arc::new(events::Version::V1 {
                 timestamp,
+                hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                     facility: events::LogFacility::User,
                     level: events::LogLevel::Info,
@@ -339,6 +340,7 @@ mod test {
             }),
             false => Arc::new(events::Version::V1 {
                 timestamp,
+                hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: events::LogFacility::User,
                     level: events::LogLevel::Info,

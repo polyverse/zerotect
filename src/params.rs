@@ -1799,6 +1799,7 @@ mod test {
     #[test]
     fn generate_reference_toml_config_file() {
         let config_expected = ZerotectParams {
+            hostname: Some("hostname".to_owned()),
             auto_configure: AutoConfigure {
                 exception_trace: true,
                 fatal_signals: true,
@@ -1853,6 +1854,14 @@ mod test {
 
     fn random_config_format() -> ZerotectParams {
         ZerotectParams {
+            hostname: match rand::thread_rng().gen_range(0, 2) {
+                0 => None,
+                1 => Some(format!(
+                    "RandomHostname{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                )),
+                _ => None,
+            },
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),

@@ -64,6 +64,7 @@ pub enum Version {
         timestamp: DateTime<Utc>,
 
         #[cef_ext_field(dhost)]
+        #[serde(skip_serializing_if = "Option::is_none")]
         hostname: Option<String>,
 
         /// Platform records fields specific to a specific mechanism/platform.
@@ -350,14 +351,17 @@ pub struct LinuxKernelTrap {
 
     /// (Optional) File in which the trap occurred (could be the main executable or library).
     #[cef_ext_field(fname)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
 
     /// (Optional) The Virtual Memory Address where this file (main executable or library) was mapped (with ASLR could be arbitrary).
     #[cef_ext_field(cn2)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vmastart: Option<usize>,
 
     /// (Optional) The Virtual Memory Size of this file's mapping.
     #[cef_ext_field(cn3)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vmasize: Option<usize>,
 }
 
@@ -783,7 +787,7 @@ mod test {
     #[test]
     fn measure_size_of_event() {
         // You can decide when to use Version and when to use Event = Arc'd Version
-        assert_eq!(168, mem::size_of::<Version>());
+        assert_eq!(192, mem::size_of::<Version>());
         assert_eq!(8, mem::size_of::<Event>());
     }
 }

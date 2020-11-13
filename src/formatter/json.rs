@@ -23,6 +23,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
+            hostname: Some("hostnamejson".to_owned()),
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -49,7 +50,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"LinuxKernelTrap\",\"level\":\"Warning\",\"facility\":\"Kern\",\"trap\":{\"type\":\"Segfault\",\"location\":0},\"procname\":\"a.out\",\"pid\":36275,\"ip\":0,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}"
+            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"hostname\":\"hostnamejson\",\"event\":{\"type\":\"LinuxKernelTrap\",\"level\":\"Warning\",\"facility\":\"Kern\",\"trap\":{\"type\":\"Segfault\",\"location\":0},\"procname\":\"a.out\",\"pid\":36275,\"ip\":0,\"sp\":140726083244224,\"errcode\":{\"reason\":\"NoPageFound\",\"access_type\":\"Read\",\"access_mode\":\"User\",\"use_of_reserved_bit\":false,\"instruction_fetch\":false,\"protection_keys_block_access\":false},\"file\":\"a.out\",\"vmastart\":94677333766144,\"vmasize\":4096}}"
         );
     }
 
@@ -59,6 +60,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
+            hostname: Some("hostnamejson".to_owned()),
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -71,7 +73,7 @@ mod test {
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"LinuxFatalSignal\",\"level\":\"Warning\",\"facility\":\"Kern\",\"signal\":\"SIGSEGV\",\"stack_dump\":{}}}"
+            "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"hostname\":\"hostnamejson\",\"event\":{\"type\":\"LinuxFatalSignal\",\"level\":\"Warning\",\"facility\":\"Kern\",\"signal\":\"SIGSEGV\",\"stack_dump\":{}}}"
         );
     }
 
@@ -81,6 +83,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
+            hostname: None,
             event: events::EventType::LinuxSuppressedCallback(events::LinuxSuppressedCallback {
                 facility: events::LogFacility::Kern,
                 level: events::LogLevel::Warning,
@@ -100,6 +103,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
+            hostname: Some("hostnamejson".to_owned()),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: "/sys/module/printk/parameters/time".to_owned(),
                 expected_value: "Y".to_owned(),
@@ -109,7 +113,7 @@ mod test {
 
         let formatter = JsonFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"ConfigMismatch\",\"key\":\"/sys/module/printk/parameters/time\",\"expected_value\":\"Y\",\"observed_value\":\"N\"}}");
+        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"hostname\":\"hostnamejson\",\"event\":{\"type\":\"ConfigMismatch\",\"key\":\"/sys/module/printk/parameters/time\",\"expected_value\":\"Y\",\"observed_value\":\"N\"}}");
     }
 
     #[test]
@@ -118,6 +122,7 @@ mod test {
 
         let event1 = events::Version::V1 {
             timestamp,
+            hostname: Some("hostnamejson".to_owned()),
             event: events::EventType::RegisterProbe(events::RegisterProbe {
                 register: "RIP".to_owned(),
                 message: "Instruction pointer".to_owned(),
@@ -128,6 +133,6 @@ mod test {
 
         let formatter = JsonFormatter {};
 
-        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"event\":{\"type\":\"RegisterProbe\",\"register\":\"RIP\",\"message\":\"Instruction pointer\",\"procname\":\"nginx\",\"justification\":{\"FullEvents\":[]}}}");
+        assert_eq!(formatter.format(&event1).unwrap(), "{\"version\":\"V1\",\"timestamp\":\"1970-01-06T11:03:24.323Z\",\"hostname\":\"hostnamejson\",\"event\":{\"type\":\"RegisterProbe\",\"register\":\"RIP\",\"message\":\"Instruction pointer\",\"procname\":\"nginx\",\"justification\":{\"FullEvents\":[]}}}");
     }
 }
