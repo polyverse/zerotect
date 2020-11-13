@@ -35,6 +35,7 @@ pub struct EventParser {
     timeout_kmsg_iter: TimeoutIterator<kmsg::KMsgPtr>,
     flush_timeout: Duration,
     verbosity: u8,
+    hostname: Option<String>,
 }
 
 impl EventParser {
@@ -42,6 +43,7 @@ impl EventParser {
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsgPtr> + Send>,
         flush_timeout: Duration,
         verbosity: u8,
+        hostname: Option<String>
     ) -> Result<EventParser, EventParserError> {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
 
@@ -49,16 +51,21 @@ impl EventParser {
             timeout_kmsg_iter,
             flush_timeout,
             verbosity,
+            hostname,
         })
     }
 
     fn parse_next_event(&mut self) -> Result<events::Version, EventParserError> {
+        // we'll need to borrow and capture this in closures multiple times.
+        // Make a one-time clone so we don't borrow self over and over again.
+        let hostname = self.hostname.clone();
+
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
         loop {
             if let Some(kmsg_entry) = self.timeout_kmsg_iter.next() {
-                if let Some(e) = EventParser::parse_finite_kmsg_to_event(&kmsg_entry)
-                    .or_else(|| self.parse_fatal_signal(&kmsg_entry))
+                if let Some(e) = EventParser::parse_finite_kmsg_to_event(&kmsg_entry, &hostname)
+                    .or_else(|| self.parse_fatal_signal(&kmsg_entry, &hostname))
                 {
                     return Ok(e);
                 }
@@ -71,9 +78,9 @@ impl EventParser {
         }
     }
 
-    fn parse_finite_kmsg_to_event(kmsg_entry: &kmsg::KMsg) -> Option<events::Version> {
-        EventParser::parse_callbacks_suppressed(kmsg_entry)
-            .or_else(|| EventParser::parse_kernel_trap(kmsg_entry))
+    fn parse_finite_kmsg_to_event(kmsg_entry: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
+        EventParser::parse_callbacks_suppressed(kmsg_entry, hostname)
+            .or_else(|| EventParser::parse_kernel_trap(kmsg_entry, hostname))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -85,7 +92,7 @@ impl EventParser {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(km: &kmsg::KMsg) -> Option<events::Version> {
+    fn parse_kernel_trap(km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -145,6 +152,7 @@ impl EventParser {
 
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
+                    hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
                         facility: km.facility,
                         level: km.level,
@@ -210,7 +218,7 @@ impl EventParser {
     // Signal Printed here: https://github.com/torvalds/linux/blob/master/kernel/signal.c#L1239
     // ---------------------------------------------------------------
     // potentially unexpected fatal signal 11.
-    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg) -> Option<events::Version> {
+    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
@@ -221,11 +229,12 @@ impl EventParser {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Version::V1 {
                         timestamp: km.timestamp,
+                        hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                             facility: km.facility,
                             level: km.level,
                             signal,
-                            stack_dump: self.parse_stack_dump(),
+                            stack_dump: self.parse_stack_dump(hostname),
                         }),
                     });
                 } else {
@@ -264,7 +273,7 @@ impl EventParser {
     // FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
     // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
-    fn parse_stack_dump(&mut self) -> BTreeMap<String, String> {
+    fn parse_stack_dump(&mut self, hostname: &Option<String>) -> BTreeMap<String, String> {
         // Not implemented
         let mut sd = BTreeMap::<String, String>::new();
 
@@ -276,7 +285,7 @@ impl EventParser {
                 Ok(peek_kmsg) => {
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if EventParser::parse_finite_kmsg_to_event(peek_kmsg).is_some() {
+                    if EventParser::parse_finite_kmsg_to_event(peek_kmsg, hostname).is_some() {
                         return sd;
                     }
 
@@ -368,7 +377,7 @@ impl EventParser {
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
-    fn parse_callbacks_suppressed(km: &kmsg::KMsg) -> Option<events::Version> {
+    fn parse_callbacks_suppressed(km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
                 r"(?x)^
@@ -389,6 +398,7 @@ impl EventParser {
             ) {
                 return Some(events::Version::V1 {
                     timestamp: km.timestamp,
+                    hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
                         events::LinuxSuppressedCallback {
                             facility: km.facility,

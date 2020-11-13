@@ -20,6 +20,9 @@ const AUTO_CONFIGURE: &str = "auto-configure";
 
 const GOBBLE_OLD_EVENTS_FLAG: &str = "gobble-old-events";
 
+// Explicitly specify hostname
+const HOSTNAME_FLAG: &str = "hostname";
+
 /// Polycorder always takes the JSON log format
 const POLYCORDER_OUTPUT_FLAG: &str = "polycorder";
 const NODE_ID_FLAG: &str = "node";
@@ -247,6 +250,9 @@ pub struct MonitorConfig {
 pub struct ZerotectParams {
     pub verbosity: u8,
 
+    //hostname
+    pub hostname: Option<String>,
+
     // auto-configure system
     pub auto_configure: AutoConfigure,
 
@@ -276,6 +282,7 @@ pub struct ZerotectParams {
 #[derive(Deserialize)]
 pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
+    pub hostname: Option<String>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
     pub analytics: Option<AnalyticsConfigOptions>,
@@ -488,6 +495,13 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .conflicts_with_all(&[AUTO_CONFIGURE, CONSOLE_OUTPUT_FLAG, POLYCORDER_OUTPUT_FLAG, NODE_ID_FLAG, "verbose"])
                             .help("Read configuration from a TOML-formatted file. When specified, all other command-line arguments are ignored. (NOTE: Considerably more options can be configured in the file than through CLI arguments.)"))
 
+                        // hostname
+                        .arg(Arg::with_name(HOSTNAME_FLAG)
+                            .long(HOSTNAME_FLAG)
+                            .value_name("hostname")
+                            .takes_value(true)
+                            .help("Provide an explicit hostname for events generated from this zerotect instance. By default host name is picked up from /etc/hostname or /proc/sys/kernel/hostname in that order."))
+
                         // configure automatically
                         .arg(Arg::with_name(AUTO_CONFIGURE)
                             .long(AUTO_CONFIGURE)
@@ -661,6 +675,11 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         },
     };
 
+    let hostname = match matches.value_of(HOSTNAME_FLAG) {
+        Some(hostnamestr) => Some(hostnamestr.to_owned()),
+        None => default_hostname(),
+    };
+
     let verbosity = u8::try_from(matches.occurrences_of("verbose"))?;
 
     let analytics = AnalyticsConfig {
@@ -822,6 +841,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
 
     Ok(ZerotectParams {
         verbosity,
+        hostname,
         auto_configure,
         analytics,
         monitor,
@@ -841,6 +861,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
 
     let params = ZerotectParams {
         verbosity: zerotect_param_options.verbosity.unwrap_or(0),
+        hostname: zerotect_param_options.hostname.or_else(default_hostname),
         auto_configure: match zerotect_param_options.auto_configure {
             Some(ac) => AutoConfigure {
                 exception_trace: ac.exception_trace.unwrap_or(false),
@@ -952,6 +973,20 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
 
     Ok(params)
 }
+
+
+/// Retrieves a hostname from the system
+fn default_hostname() -> Option<String> {
+    // try to read from /etc/hostname first
+    match fs::read_to_string("/etc/hostname") {
+        Ok(etchostname) => Some(etchostname),
+        Err(_) => match fs::read_to_string("/proc/sys/kernel/hostname") {
+            Ok(prochostname) => Some(prochostname),
+            Err(_) => None,
+        },
+    }
+}
+
 
 fn auto_configure_flag(values: clap::Values, value: &str) -> Result<bool, ParsingError> {
     let mut seen_before: bool = false;

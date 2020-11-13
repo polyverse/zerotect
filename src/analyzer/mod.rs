@@ -191,10 +191,12 @@ impl Analyzer {
                 Ok(event) => match event.as_ref() {
                     events::Version::V1 {
                         timestamp,
+                        hostname: _,
                         event: events::EventType::LinuxKernelTrap(lkt),
                     } => self.buffer_event(*timestamp, lkt.procname.clone(), event),
                     events::Version::V1 {
                         timestamp,
+                        hostname: _,
                         event: events::EventType::LinuxFatalSignal(lfs),
                     } => {
                         if let Some(comm) = lfs.stack_dump.get("Comm") {
@@ -357,6 +359,7 @@ mod test {
         assert_matches!(event.as_ref(),
             events::Version::V1{
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::RegisterProbe(events::RegisterProbe{
                     register: _,
                     message: _,
@@ -370,6 +373,7 @@ mod test {
         match event.as_ref() {
             events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event:
                     events::EventType::RegisterProbe(events::RegisterProbe {
                         register,

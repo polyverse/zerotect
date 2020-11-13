@@ -19,6 +19,7 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct MonitorConfig {
     pub verbosity: u8,
+    pub hostname: Option<String>,
     pub gobble_old_events: bool,
 }
 
@@ -72,7 +73,7 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
     };
 
     let event_iterator =
-        EventParser::from_kmsg_iterator(kmsg_iterator, Duration::from_secs(1), mc.verbosity)?;
+        EventParser::from_kmsg_iterator(kmsg_iterator, Duration::from_secs(1), mc.verbosity, mc.hostname)?;
 
     // infinite iterator
     for event in event_iterator {

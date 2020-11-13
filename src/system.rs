@@ -115,12 +115,14 @@ pub fn ensure_linux() -> Result<(), OperatingSystemValidationError> {
 
 pub fn modify_environment(
     auto_configure: &params::AutoConfigure,
+    hostname: &Option<String>,
 ) -> Result<Vec<events::Event>, SystemCtlError> {
     let mut env_events = Vec::<events::Event>::new();
 
     eprintln!("Configuring kernel paramters as requested...");
     if auto_configure.exception_trace {
         let maybe_event = ensure_systemctl(
+            hostname,
             EXCEPTION_TRACE_CTLNAME,
             bool_to_0_1_string(auto_configure.exception_trace),
         )?;
@@ -131,6 +133,7 @@ pub fn modify_environment(
 
     if auto_configure.fatal_signals {
         let maybe_event = ensure_systemctl(
+            hostname,
             PRINT_FATAL_SIGNALS_CTLNAME,
             bool_to_0_1_string(auto_configure.fatal_signals),
         )?;
@@ -144,6 +147,7 @@ pub fn modify_environment(
 
         env_events.push(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
+            hostname: hostname.clone(),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: rmesg::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
                 expected_value: "Y".to_owned(),
@@ -155,7 +159,7 @@ pub fn modify_environment(
     Ok(env_events)
 }
 
-fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event>, SystemCtlError> {
+fn ensure_systemctl(hostname: &Option<String>, ctlstr: &str, valuestr: &str) -> Result<Option<events::Event>, SystemCtlError> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr)?;
@@ -168,6 +172,7 @@ fn ensure_systemctl(ctlstr: &str, valuestr: &str) -> Result<Option<events::Event
         ctl.set_value_string(valuestr)?;
         Ok(Some(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
+            hostname: hostname.clone(),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
                 key: ctlstr.to_owned(),
                 expected_value: valuestr.to_owned(),

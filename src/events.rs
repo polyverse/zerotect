@@ -63,6 +63,9 @@ pub enum Version {
         #[cef_ext_gobble]
         timestamp: DateTime<Utc>,
 
+        #[cef_ext_field(dhost)]
+        hostname: Option<String>,
+
         /// Platform records fields specific to a specific mechanism/platform.
         // For this variant, inherit the other three headers from the event field
         #[cef_inherit(CefHeaderDeviceEventClassID, CefHeaderName, CefHeaderSeverity)]
@@ -74,7 +77,7 @@ pub enum Version {
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            Version::V1 { timestamp, event } => write!(f, "Event<V1,{}>::{}", timestamp, event),
+            Version::V1 { timestamp, hostname, event } => write!(f, "Event<V1,{},{}>::{}", hostname.as_ref().unwrap_or(&"".to_owned()), timestamp, event),
         }
     }
 }

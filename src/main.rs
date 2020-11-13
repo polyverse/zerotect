@@ -54,10 +54,11 @@ fn main() {
 
     let auto_configure_env = zerotect_config.auto_configure;
     let config_event_sink = monitor_sink.clone();
+    let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
     let env_thread_result = thread::Builder::new()
         .name("Environment Configuration Thread".to_owned())
-        .spawn(move || configure_environment(auto_configure_env, config_event_sink));
+        .spawn(move || configure_environment(auto_configure_env, chostname, config_event_sink));
 
     if let Err(e) = env_thread_result {
         eprintln!("An error occurred spawning the thread to continually ensure configuration settings/flags: {}", e);
@@ -66,11 +67,13 @@ fn main() {
 
     let mverbosity = zerotect_config.verbosity;
     let mc = zerotect_config.monitor;
+    let mhostname = zerotect_config.hostname.clone();
     let monitor_thread_result = thread::Builder::new()
         .name("Event Monitoring Thread".to_owned())
         .spawn(move || {
             let mc = monitor::MonitorConfig {
                 verbosity: mverbosity,
+                hostname: mhostname,
                 gobble_old_events: mc.gobble_old_events,
             };
             if let Err(e) = monitor::monitor(mc, monitor_sink) {
@@ -173,10 +176,11 @@ fn optional_analyzer(
 
 fn configure_environment(
     auto_config: params::AutoConfigure,
+    hostname: Option<String>,
     config_event_sink: Sender<events::Event>,
 ) {
     // initialize the system with config
-    if let Err(e) = system::modify_environment(&auto_config) {
+    if let Err(e) = system::modify_environment(&auto_config, &hostname) {
         eprintln!(
             "Error modifying the system settings to enable monitoring (as commanded): {}",
             e
@@ -187,7 +191,7 @@ fn configure_environment(
     // let the first time go from config-mismatch event reporting
     loop {
         // reinforce the system with config
-        match system::modify_environment(&auto_config) {
+        match system::modify_environment(&auto_config, &hostname) {
             Err(e) => {
                 eprintln!(
                     "Error modifying the system settings to enable monitoring (as commanded): {}",

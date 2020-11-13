@@ -25,11 +25,13 @@ pub fn close_by_register_detect(
     for (_, event) in eventslist.iter() {
         if let events::Version::V1 {
             timestamp: _,
+            hostname: _,
             event: events::EventType::LinuxFatalSignal(lfs),
         } = event.as_ref()
         {
             if let Some(events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::LinuxFatalSignal(prev_lfs),
             }) = maybe_prev_event.map(|x| &(**x))
             {
@@ -73,6 +75,7 @@ pub fn close_by_register_detect(
         return Some((
             Arc::new(events::Version::V1 {
                 timestamp: Utc::now(),
+                hostname: common::get_first_event_hostname(&close_by_register),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: register.to_owned(),
                     message: message.to_owned(),
@@ -101,6 +104,7 @@ fn justify(
                 match e.as_ref() {
                     events::Version::V1 {
                         timestamp: _,
+                        hostname: _,
                         event: events::EventType::LinuxFatalSignal(lfs),
                     } => lfs.stack_dump.get(register).cloned(),
 

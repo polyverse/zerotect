@@ -23,11 +23,13 @@ pub fn close_by_ip_detect(
     for (_, event) in eventslist.iter() {
         if let events::Version::V1 {
             timestamp: _,
+            hostname: _,
             event: events::EventType::LinuxKernelTrap(lkt),
         } = event.as_ref()
         {
             if let Some(events::Version::V1 {
                 timestamp: _,
+                hostname: _,
                 event: events::EventType::LinuxKernelTrap(prev_lkt),
             }) = maybe_prev_event.map(|x| &(**x))
             {
@@ -59,6 +61,7 @@ pub fn close_by_ip_detect(
         return Some((
             Arc::new(events::Version::V1 {
                 timestamp: Utc::now(),
+                hostname: common::get_first_event_hostname(&close_by_ip),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: "ip".to_owned(),
                     message: "Instruction Pointer probe".to_owned(),
@@ -86,6 +89,7 @@ fn justify(
                 match e.as_ref() {
                     events::Version::V1 {
                         timestamp: _,
+                        hostname: _,
                         event: events::EventType::LinuxKernelTrap(lkt),
                     } => Some(format!("{}", lkt.ip)),
 
