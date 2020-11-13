@@ -1854,14 +1854,10 @@ mod test {
 
     fn random_config_format() -> ZerotectParams {
         ZerotectParams {
-            hostname: match rand::thread_rng().gen_range(0, 2) {
-                0 => None,
-                1 => Some(format!(
+            hostname: Some(format!(
                     "RandomHostname{}",
                     rand::thread_rng().gen_range(0, 32000)
                 )),
-                _ => None,
-            },
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
