@@ -43,7 +43,7 @@ impl EventParser {
         kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsgPtr> + Send>,
         flush_timeout: Duration,
         verbosity: u8,
-        hostname: Option<String>
+        hostname: Option<String>,
     ) -> Result<EventParser, EventParserError> {
         let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
 
@@ -78,7 +78,10 @@ impl EventParser {
         }
     }
 
-    fn parse_finite_kmsg_to_event(kmsg_entry: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
+    fn parse_finite_kmsg_to_event(
+        kmsg_entry: &kmsg::KMsg,
+        hostname: &Option<String>,
+    ) -> Option<events::Version> {
         EventParser::parse_callbacks_suppressed(kmsg_entry, hostname)
             .or_else(|| EventParser::parse_kernel_trap(kmsg_entry, hostname))
     }
@@ -218,7 +221,11 @@ impl EventParser {
     // Signal Printed here: https://github.com/torvalds/linux/blob/master/kernel/signal.c#L1239
     // ---------------------------------------------------------------
     // potentially unexpected fatal signal 11.
-    fn parse_fatal_signal(&mut self, km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
+    fn parse_fatal_signal(
+        &mut self,
+        km: &kmsg::KMsg,
+        hostname: &Option<String>,
+    ) -> Option<events::Version> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
@@ -377,7 +384,10 @@ impl EventParser {
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
-    fn parse_callbacks_suppressed(km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
+    fn parse_callbacks_suppressed(
+        km: &kmsg::KMsg,
+        hostname: &Option<String>,
+    ) -> Option<events::Version> {
         lazy_static! {
             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
                 r"(?x)^

@@ -159,7 +159,11 @@ pub fn modify_environment(
     Ok(env_events)
 }
 
-fn ensure_systemctl(hostname: &Option<String>, ctlstr: &str, valuestr: &str) -> Result<Option<events::Event>, SystemCtlError> {
+fn ensure_systemctl(
+    hostname: &Option<String>,
+    ctlstr: &str,
+    valuestr: &str,
+) -> Result<Option<events::Event>, SystemCtlError> {
     eprintln!("==> Ensuring {} is set to {}", ctlstr, valuestr);
 
     let ctl = sysctl::Ctl::new(ctlstr)?;

@@ -1,13 +1,20 @@
+use crate::events;
 use num::{Integer, Unsigned};
 use std::any::type_name;
 use std::fmt::Display;
 use std::str::FromStr;
-use crate::events;
 
 pub fn get_first_event_hostname(events: &[events::Event]) -> Option<String> {
-    events.get(0).map(|e| match e.as_ref() {
-        events::Version::V1{timestamp: _, hostname, event: _} => hostname.clone(),
-    }).flatten()
+    events
+        .get(0)
+        .map(|e| match e.as_ref() {
+            events::Version::V1 {
+                timestamp: _,
+                hostname,
+                event: _,
+            } => hostname.clone(),
+        })
+        .flatten()
 }
 
 pub fn parse_fragment<N: FromStr>(frag: &str) -> Option<N>

@@ -72,8 +72,12 @@ pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), Mon
         }
     };
 
-    let event_iterator =
-        EventParser::from_kmsg_iterator(kmsg_iterator, Duration::from_secs(1), mc.verbosity, mc.hostname)?;
+    let event_iterator = EventParser::from_kmsg_iterator(
+        kmsg_iterator,
+        Duration::from_secs(1),
+        mc.verbosity,
+        mc.hostname,
+    )?;
 
     // infinite iterator
     for event in event_iterator {

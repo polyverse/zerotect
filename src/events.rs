@@ -77,7 +77,17 @@ pub enum Version {
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            Version::V1 { timestamp, hostname, event } => write!(f, "Event<V1,{},{}>::{}", hostname.as_ref().unwrap_or(&"".to_owned()), timestamp, event),
+            Version::V1 {
+                timestamp,
+                hostname,
+                event,
+            } => write!(
+                f,
+                "Event<V1,{},{}>::{}",
+                hostname.as_ref().unwrap_or(&"".to_owned()),
+                timestamp,
+                event
+            ),
         }
     }
 }
@@ -251,7 +261,7 @@ impl Display for EventType {
 ///
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
-#[cef_ext_values(cs1Label="register")]
+#[cef_ext_values(cs1Label = "register")]
 pub struct RegisterProbe {
     /// Which register was being probed?
     #[cef_ext_field(cs1)]
@@ -301,7 +311,11 @@ impl rust_cef::CefExtensions for RegisterProbeJustification {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cef_ext_values(cn2Label = "vmastart", cn3Label = "vmasize", flexString2Label = "signal")]
+#[cef_ext_values(
+    cn2Label = "vmastart",
+    cn3Label = "vmasize",
+    flexString2Label = "signal"
+)]
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered

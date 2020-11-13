@@ -974,7 +974,6 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
     Ok(params)
 }
 
-
 /// Retrieves a hostname from the system
 fn default_hostname() -> Option<String> {
     // try to read from /etc/hostname first
@@ -986,7 +985,6 @@ fn default_hostname() -> Option<String> {
         },
     }
 }
-
 
 fn auto_configure_flag(values: clap::Values, value: &str) -> Result<bool, ParsingError> {
     let mut seen_before: bool = false;
