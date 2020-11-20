@@ -52,7 +52,11 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
-pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), EmitterError> {
+pub fn emit(
+    ec: EmitterConfig,
+    source: Receiver<events::Event>,
+    hostname: Option<String>,
+) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];
@@ -66,7 +70,7 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), Em
     }
     if let Some(sc) = ec.syslog {
         eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
-        emitters.push(Box::new(syslogger::new(sc)?));
+        emitters.push(Box::new(syslogger::new(sc, hostname)?));
     }
     if let Some(lfc) = ec.logfile {
         eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");

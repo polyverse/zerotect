@@ -96,6 +96,7 @@ fn main() {
     let polycorder = zerotect_config.polycorder;
     let syslog = zerotect_config.syslog;
     let logfile = zerotect_config.logfile;
+    let ehostname = zerotect_config.hostname;
 
     let emitter_thread_result = thread::Builder::new()
         .name("Event Emitter Thread".to_owned())
@@ -107,7 +108,7 @@ fn main() {
                 syslog,
                 logfile,
             };
-            if let Err(e) = emitter::emit(ec, emitter_source) {
+            if let Err(e) = emitter::emit(ec, emitter_source, ehostname) {
                 eprintln!("Error launching Emitter: {}", e);
                 process::exit(1);
             }
