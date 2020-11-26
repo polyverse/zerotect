@@ -26,10 +26,14 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
-
+use std::error::Error;
 use std::process;
 
-fn main() {
+use tokio::time::sleep;
+
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = system::ensure_linux() {
         eprintln!(
             "Error ensuring the operating system we're running on is Linux: {}",
@@ -56,39 +60,22 @@ fn main() {
     let config_event_sink = monitor_sink.clone();
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let env_thread_result = thread::Builder::new()
-        .name("Environment Configuration Thread".to_owned())
-        .spawn(move || configure_environment(auto_configure_env, chostname, config_event_sink));
-
-    if let Err(e) = env_thread_result {
-        eprintln!("An error occurred spawning the thread to continually ensure configuration settings/flags: {}", e);
-        process::exit(1);
-    }
+    let _env_joinhandle = tokio::spawn(async move {configure_environment(auto_configure_env, chostname, config_event_sink).await});
 
     let mverbosity = zerotect_config.verbosity;
     let mc = zerotect_config.monitor;
     let mhostname = zerotect_config.hostname.clone();
-    let monitor_thread_result = thread::Builder::new()
-        .name("Event Monitoring Thread".to_owned())
-        .spawn(move || {
-            let mc = monitor::MonitorConfig {
-                verbosity: mverbosity,
-                hostname: mhostname,
-                gobble_old_events: mc.gobble_old_events,
-            };
-            if let Err(e) = monitor::monitor(mc, monitor_sink) {
-                eprintln!("Error launching Monitor: {}", e);
-                process::exit(1);
-            }
-        });
-
-    let monitor_handle = match monitor_thread_result {
-        Ok(mh) => mh,
-        Err(e) => {
-            eprintln!("An error occurred spawning the monitoring thread: {}", e);
+    let monitor_joinhandle = tokio::spawn(async move || {
+        let mc = monitor::MonitorConfig {
+            verbosity: mverbosity,
+            hostname: mhostname,
+            gobble_old_events: mc.gobble_old_events,
+        };
+        if let Err(e) = monitor::monitor(mc, monitor_sink).await {
+            eprintln!("Error launching Monitor: {}", e);
             process::exit(1);
         }
-    };
+    });
 
     // split these up before a move
     let everbosity = zerotect_config.verbosity;
@@ -133,6 +120,8 @@ fn main() {
             .join()
             .expect("Unable to join on the analyzer thread");
     }
+
+    Ok(())
 }
 
 fn optional_analyzer(
@@ -174,13 +163,13 @@ fn optional_analyzer(
     (monitor_sink, emitter_source, Some(analyzer_handle))
 }
 
-fn configure_environment(
+async fn configure_environment(
     auto_config: params::AutoConfigure,
     hostname: Option<String>,
     config_event_sink: Sender<events::Event>,
 ) {
     // initialize the system with config
-    if let Err(e) = system::modify_environment(&auto_config, &hostname) {
+    if let Err(e) = system::modify_environment(&auto_config, &hostname).await {
         eprintln!(
             "Error modifying the system settings to enable monitoring (as commanded): {}",
             e
@@ -191,7 +180,7 @@ fn configure_environment(
     // let the first time go from config-mismatch event reporting
     loop {
         // reinforce the system with config
-        match system::modify_environment(&auto_config, &hostname) {
+        match system::modify_environment(&auto_config, &hostname).await {
             Err(e) => {
                 eprintln!(
                     "Error modifying the system settings to enable monitoring (as commanded): {}",
@@ -214,6 +203,6 @@ fn configure_environment(
         }
 
         // ensure configuratione very five minutes.
-        thread::sleep(Duration::from_secs(300));
+        sleep(Duration::from_secs(300)).await;
     }
 }

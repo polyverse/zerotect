@@ -113,7 +113,7 @@ pub fn ensure_linux() -> Result<(), OperatingSystemValidationError> {
     Ok(())
 }
 
-pub fn modify_environment(
+pub async fn modify_environment(
     auto_configure: &params::AutoConfigure,
     hostname: &Option<String>,
 ) -> Result<Vec<events::Event>, SystemCtlError> {

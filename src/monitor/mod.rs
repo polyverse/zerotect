@@ -42,7 +42,7 @@ impl From<EventParserError> for MonitorError {
     }
 }
 
-pub fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), MonitorError> {
+pub async fn monitor(mc: MonitorConfig, sink: Sender<events::Event>) -> Result<(), MonitorError> {
     if mc.verbosity > 0 {
         eprintln!("Monitor: Reading and parsing relevant kernel messages...");
     }
