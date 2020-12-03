@@ -10,6 +10,7 @@ use std::sync::mpsc::Receiver;
 
 mod console;
 mod filelogger;
+mod pagerduty;
 mod polycorder;
 mod syslogger;
 
@@ -24,6 +25,7 @@ pub struct EmitterConfig {
     pub polycorder: Option<params::PolycorderConfig>,
     pub syslog: Option<params::SyslogConfig>,
     pub logfile: Option<params::LogFileConfig>,
+    pub pagerduty_routing_key: Option<String>,
 }
 
 #[derive(Debug)]
@@ -52,6 +54,12 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
+impl From<pagerduty::PagerDutyError> for EmitterError {
+    fn from(err: pagerduty::PagerDutyError) -> EmitterError {
+        EmitterError(format!("pagerduty::PagerDutyError: {}", err))
+    }
+}
+
 pub fn emit(
     ec: EmitterConfig,
     source: Receiver<events::Event>,
@@ -75,6 +83,10 @@ pub fn emit(
     if let Some(lfc) = ec.logfile {
         eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");
         emitters.push(Box::new(filelogger::new(lfc)?));
+    }
+    if let Some(prk) = ec.pagerduty_routing_key {
+        eprintln!("Emitter: Initialized PagerDuty emitter. Expect messages to be sent to a PagerDuty Service.");
+        emitters.push(Box::new(pagerduty::new(prk)?));
     }
 
     if emitters.is_empty() {

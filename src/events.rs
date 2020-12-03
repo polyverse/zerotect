@@ -75,6 +75,29 @@ pub enum Version {
     },
 }
 
+impl Version {
+    pub fn get_hostname(&self) -> &Option<String> {
+        match self {
+            Self::V1 {
+                timestamp: _,
+                hostname,
+                event: _,
+            } => hostname,
+        }
+    }
+
+    /// if true, the event is not raw, but rather an analyzed detection
+    pub fn is_analyzed(&self) -> bool {
+        match self {
+            Self::V1 {
+                timestamp: _,
+                hostname: _,
+                event,
+            } => matches!(event, EventType::RegisterProbe(_)),
+        }
+    }
+}
+
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {

@@ -97,6 +97,7 @@ fn main() {
     let syslog = zerotect_config.syslog;
     let logfile = zerotect_config.logfile;
     let ehostname = zerotect_config.hostname;
+    let pagerduty_routing_key = zerotect_config.pagerduty_routing_key;
 
     let emitter_thread_result = thread::Builder::new()
         .name("Event Emitter Thread".to_owned())
@@ -107,6 +108,7 @@ fn main() {
                 polycorder,
                 syslog,
                 logfile,
+                pagerduty_routing_key,
             };
             if let Err(e) = emitter::emit(ec, emitter_source, ehostname) {
                 eprintln!("Error launching Emitter: {}", e);

@@ -7,13 +7,7 @@ use std::str::FromStr;
 pub fn get_first_event_hostname(events: &[events::Event]) -> Option<String> {
     events
         .get(0)
-        .map(|e| match e.as_ref() {
-            events::Version::V1 {
-                timestamp: _,
-                hostname,
-                event: _,
-            } => hostname.clone(),
-        })
+        .map(|e| e.as_ref().get_hostname().to_owned())
         .flatten()
 }
 
