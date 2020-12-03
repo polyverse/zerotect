@@ -175,7 +175,7 @@ impl Display for EventType {
             }) => {
                 write!(f,
                     "In process {}, Register {} found close to each other {} times indicating: {}. The set of events that justify this analyzed event are: {:?}", procname, register, justification.len(), message, justification)
-            },
+            }
             EventType::LinuxKernelTrap(LinuxKernelTrap {
                 level,
                 facility,

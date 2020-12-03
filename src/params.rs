@@ -49,6 +49,9 @@ const SYSLOG_POSSIBLE_DESTINATIONS: &[&str] = &[
     SYSLOG_DESTINATION_UDP,
 ];
 
+/// PagerDuty Output (format is always JSON)
+const PAGERDUTY_OUTPUT_FLAG: &str = "pagerduty";
+
 const SYSLOG_UNIX_SOCKET_PATH: &str = "syslog-unix-socket-path";
 const SYSLOG_SERVER_ADDR: &str = "syslog-server";
 const SYSLOG_LOCAL_ADDR: &str = "syslog-local";
@@ -251,6 +254,9 @@ pub struct ZerotectParams {
     //hostname
     pub hostname: Option<String>,
 
+    // pagerduty routing key
+    pub pagerduty_routing_key: Option<String>,
+
     // auto-configure system
     pub auto_configure: AutoConfigure,
 
@@ -281,6 +287,7 @@ pub struct ZerotectParams {
 pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
     pub hostname: Option<String>,
+    pub pagerduty_routing_key: Option<String>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
     pub analytics: Option<AnalyticsConfigOptions>,
@@ -523,6 +530,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .help("Prints all monitored data to the console in the specified format."))
 
                         // polycorder output
+                        .arg(Arg::with_name(PAGERDUTY_OUTPUT_FLAG)
+                            .long(PAGERDUTY_OUTPUT_FLAG)
+                            .value_name("routing_key")
+                            .takes_value(true)
+                            .empty_values(false)
+                            .help("Sends analyzed detections as Alerts to PagerDuty and routed based on the integration key provided."))
+
+                        // polycorder output
                         .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
                             .long(POLYCORDER_OUTPUT_FLAG)
                             .value_name("authkey")
@@ -714,6 +729,10 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         None => None,
     };
 
+    let pagerduty_routing_key = matches
+        .value_of(PAGERDUTY_OUTPUT_FLAG)
+        .map(|x| x.to_owned());
+
     // First we need a polycorder auth key - either from CLI and then the file as
     // the secondary source.
     let polycorder = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
@@ -837,6 +856,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         polycorder,
         syslog,
         logfile,
+        pagerduty_routing_key,
     })
 }
 
@@ -956,6 +976,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 rotation_file_max_size: lfc.rotation_file_max_size,
             })
         },
+        pagerduty_routing_key: zerotect_param_options.pagerduty_routing_key,
     };
 
     Ok(params)
@@ -1039,6 +1060,8 @@ mod test {
             OsString::from("1"),
             OsString::from("--log-file-rotation-max-size"),
             OsString::from("10"),
+            OsString::from("--pagerduty"),
+            OsString::from("routing_key"),
         ];
 
         let config = parse_args(Some(args)).unwrap();
@@ -1071,6 +1094,8 @@ mod test {
 
         // analytics should be enabled by default
         assert_eq!(AnalyticsMode::Passthrough, config.analytics.mode);
+
+        assert_eq!(Some("routing_key".to_owned()), config.pagerduty_routing_key);
     }
 
     #[test]
@@ -1351,6 +1376,7 @@ mod test {
     fn toml_parse_all_direct() {
         let tomlcontents = r#"
         verbosity = 40
+        pagerduty_routing_key = 'routing_key5'
 
         [auto_configure]
         exception_trace = true
@@ -1392,6 +1418,11 @@ mod test {
         let config = parse_config_file(&toml_file).unwrap();
 
         assert_eq!(40, config.verbosity);
+
+        assert_eq!(
+            Some("routing_key5".to_owned()),
+            config.pagerduty_routing_key
+        );
 
         //enabled by default always
         assert_eq!(AnalyticsMode::Detected, config.analytics.mode);
@@ -1464,6 +1495,7 @@ mod test {
     fn toml_parse_all_through_args() {
         let tomlcontents = r#"
         verbosity = 7
+        pagerduty_routing_key = 'routing_key6'
 
         [auto_configure]
         exception_trace = true
@@ -1528,6 +1560,11 @@ mod test {
         assert_eq!(true, config.console.is_some());
         assert_eq!(true, config.polycorder.is_some());
         assert_eq!(7, config.verbosity);
+
+        assert_eq!(
+            Some("routing_key6".to_owned()),
+            config.pagerduty_routing_key
+        );
 
         let cc = config.console.unwrap();
         assert_eq!(OutputFormat::Text, cc.format);
@@ -1815,6 +1852,7 @@ mod test {
                 rotation_file_count: Some(1),
                 rotation_file_max_size: Some(20),
             }),
+            pagerduty_routing_key: Some("routing_key".to_owned()),
             verbosity: 0,
         };
 
@@ -1932,6 +1970,13 @@ mod test {
                         false => None,
                     },
                 }),
+                false => None,
+            },
+            pagerduty_routing_key: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(format!(
+                    "routingkey{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                )),
                 false => None,
             },
             verbosity: rand::thread_rng().gen_range(0, 250),

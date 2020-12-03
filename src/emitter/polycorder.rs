@@ -16,9 +16,9 @@ use crate::events;
 use crate::params;
 
 const AUTHORIZATION: &str = "authorization";
-const CONTENT_ENCODING: &str = "content-encoding";
 const CONTENT_TYPE: &str = "content-type";
 const USER_AGENT: &str = "user-agent";
+const CONTENT_ENCODING: &str = "content-encoding";
 
 const POLYCORDER_PUBLISH_ENDPOINT: &str = "https://polycorder.polyverse.com/v1/events";
 const GZIP_THRESHOLD_BYTES: usize = 512;

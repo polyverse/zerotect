@@ -1,5 +1,6 @@
 verbosity = 0
 hostname = 'hostname'
+pagerduty_routing_key = 'routing_key'
 
 [auto_configure]
 exception_trace = true
