@@ -37,7 +37,7 @@ If you need help with this integration, please contact support@polyverse.com.
 1. Install Zerotect on any host with the following command:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s -- --pagerduty <integration key>
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --pagerduty <integration key>
 ```
 
 #### How to Uninstall
@@ -45,5 +45,5 @@ curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/instal
 1. Uninstall Zerotect by running this command:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s -- --uninstall
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --uninstall
 ```
