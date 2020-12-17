@@ -57,7 +57,7 @@ To that end Zerotect supports a number of outbound integrations (i.e. where it s
 
 [Zerotect on ArcSight Marketplace](https://marketplace.microfocus.com/arcsight/content/zerotect)
 
-Zerotect sends events to ArcSight through the Syslog SmartConnector. It is easy to configure in a single command. For more details read the [Administration Guide](/integrations/MicrofocusArcSight/MF_Polyverse_ZeroTect_0.4_ArcSight_CEF_Integration_Guide_2020.pdf).
+Zerotect sends events to ArcSight through the Syslog SmartConnector. It is easy to configure in a single command. For more details read the [Administration Guide](/integrations/ArcSight/MF_Polyverse_ZeroTect_0.4_ArcSight_CEF_Integration_Guide_2020.pdf).
 
 ### PagerDuty
 
