@@ -12,7 +12,7 @@
   * [Recommended usage](#recommended-usage)
     * [Understanding the minimal configuration](#understanding-the-minimal-configuration)
   * [All CLI options](#all-cli-options)
-* [Partners/Integrations](#partners-integrations)
+* [Partners/Integrations](#partnersintegrations)
   * [Micro Focus ArcSight](#micro-focus-arcsight)
   * [PagerDuty](#pagerduty)
 * [Zerotect Log](#zerotect-log)
