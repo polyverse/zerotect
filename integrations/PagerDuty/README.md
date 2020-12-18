@@ -47,3 +47,36 @@ curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/instal
 ```.bash
 curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --uninstall
 ```
+
+## Testing PagerDuty integration
+
+[Polyverse](https://polyverse.com) hosts an [online blind-rop attack demo](https://polyverse.com/learn/blind-rop/), which can be used to test incidents being raised in PagerDuty.
+
+Note that this demo intentionally raises a LOT of incidents (it uses half a dozen attack techniques in one demo.) In reality you won't see more than one or two incidents as most zero-day attacks don't progress that rapidly and don't use all the techniques.
+
+This is how you can run your own Blind-ROP attack and alert it in PagerDuty:
+
+1. Go to this URL:
+[https://polyverse.com/learn/blind-rop/](https://polyverse.com/learn/blind-rop/)
+
+2. Press “Start Scenario”:
+![PagerDuty Demo Step 2](pagerduty-demo-step-2.png)
+
+3. Run the install command: `curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --pagerduty cc00d5d00fd64703bb6a7872a6aee978`
+![PagerDuty Demo Step 3](pagerduty-demo-step-3.png)
+
+4. Run: `systemctl restart zerotect`
+![PagerDuty Demo Step 4](pagerduty-demo-step-4.png)
+
+5. Then start a vulnerable nginx by clicking on that gray text on the left side:
+![PagerDuty Demo Step 5](pagerduty-demo-step-5.png)
+
+6. Scroll down and press continue…
+![PagerDuty Demo Step 6](pagerduty-demo-step-6.png)
+
+7. Start the attack by clicking on this gray area on the left
+![PagerDuty Demo Step 7](pagerduty-demo-step-7.png)
+
+And at this point just wait…. And the attack will generate alerts.
+
+Every once in a while the step 2 will say, “Not Vulnerable”, so just repeat the steps in that case.
