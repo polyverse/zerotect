@@ -62,7 +62,7 @@ This is how you can run your own Blind-ROP attack and alert it in PagerDuty:
 2. Press “Start Scenario”:
 ![PagerDuty Demo Step 2](pagerduty-demo-step-2.png)
 
-3. Run the install command: `curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --pagerduty cc00d5d00fd64703bb6a7872a6aee978`
+3. Run the install command: `curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --pagerduty <integration key>`
 ![PagerDuty Demo Step 3](pagerduty-demo-step-3.png)
 
 4. Run: `systemctl restart zerotect`
@@ -76,6 +76,9 @@ This is how you can run your own Blind-ROP attack and alert it in PagerDuty:
 
 7. Start the attack by clicking on this gray area on the left
 ![PagerDuty Demo Step 7](pagerduty-demo-step-7.png)
+
+8. Watch the attack happen...
+![PagerDuty Demo Step 8](pagerduty-demo-step-8.png)
 
 And at this point just wait…. And the attack will generate alerts.
 
