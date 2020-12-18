@@ -74,7 +74,7 @@ This is how you can run your own Blind-ROP attack and alert it in PagerDuty:
 6. Scroll down and press continue…
 ![PagerDuty Demo Step 6](pagerduty-demo-step-6.png)
 
-7. Start the attack by clicking on this gray area on the left:
+7. Start the attack by clicking on this gray area on the left
 ![PagerDuty Demo Step 7](pagerduty-demo-step-7.png)
 
 8. Watch the attack happen...
