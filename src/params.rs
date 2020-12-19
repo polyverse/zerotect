@@ -49,10 +49,12 @@ const SYSLOG_POSSIBLE_DESTINATIONS: &[&str] = &[
     SYSLOG_DESTINATION_UDP,
 ];
 
+/// PagerDuty Output (format is always JSON)
+const PAGERDUTY_OUTPUT_FLAG: &str = "pagerduty";
+
 const SYSLOG_UNIX_SOCKET_PATH: &str = "syslog-unix-socket-path";
 const SYSLOG_SERVER_ADDR: &str = "syslog-server";
 const SYSLOG_LOCAL_ADDR: &str = "syslog-local";
-const SYSLOG_HOSTNAME: &str = "syslog-hostname";
 
 /// When set, log to a log file (with an optional format parameter)
 const LOGFILE_PATH_FLAG: &str = "log-file-path";
@@ -129,7 +131,6 @@ pub struct SyslogConfig {
     pub path: Option<String>,
     pub server: Option<String>,
     pub local: Option<String>,
-    pub hostname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, EnumString)]
@@ -253,6 +254,9 @@ pub struct ZerotectParams {
     //hostname
     pub hostname: Option<String>,
 
+    // pagerduty routing key
+    pub pagerduty_routing_key: Option<String>,
+
     // auto-configure system
     pub auto_configure: AutoConfigure,
 
@@ -283,6 +287,7 @@ pub struct ZerotectParams {
 pub struct ZerotectParamOptions {
     pub verbosity: Option<u8>,
     pub hostname: Option<String>,
+    pub pagerduty_routing_key: Option<String>,
 
     pub auto_configure: Option<AutoConfigureOptions>,
     pub analytics: Option<AnalyticsConfigOptions>,
@@ -525,6 +530,14 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .help("Prints all monitored data to the console in the specified format."))
 
                         // polycorder output
+                        .arg(Arg::with_name(PAGERDUTY_OUTPUT_FLAG)
+                            .long(PAGERDUTY_OUTPUT_FLAG)
+                            .value_name("routing_key")
+                            .takes_value(true)
+                            .empty_values(false)
+                            .help("Sends analyzed detections as Alerts to PagerDuty and routed based on the integration key provided."))
+
+                        // polycorder output
                         .arg(Arg::with_name(POLYCORDER_OUTPUT_FLAG)
                             .long(POLYCORDER_OUTPUT_FLAG)
                             .value_name("authkey")
@@ -565,12 +578,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .case_insensitive(true)
                             .requires(SYSLOG_OUTPUT_FLAG)
                             .help("The syslog destination type. If a destination is selected, the destination configuration flags are explicitly required and defaults are not used."))
-                        //syslog hostname (optional)
-                        .arg(Arg::with_name(SYSLOG_HOSTNAME)
-                            .long(SYSLOG_HOSTNAME)
-                            .value_name("hostname")
-                            .requires(SYSLOG_DESTINATION_FLAG)
-                            .help("The syslog tcp server addr to send to. (usually ip:port)"))
                         // syslog tcp options
                         .arg(Arg::with_name(SYSLOG_SERVER_ADDR)
                             .long(SYSLOG_SERVER_ADDR)
@@ -580,7 +587,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_TCP),
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP)
                             ])
-                            .help("The syslog udp server addr to send to. (usually ip:port)"))
+                            .help("The syslog tcp or udp server addr to send syslog events to to (when the destination is TCP or UDP.) (usually ip:port)"))
                         // syslog udp options
                         .arg(Arg::with_name(SYSLOG_LOCAL_ADDR)
                             .long(SYSLOG_LOCAL_ADDR)
@@ -589,7 +596,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .required_ifs(&[
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UDP)
                             ])
-                            .help("The syslog udp local addr to bind to. (usually ip:port)"))
+                            .help("The syslog udp local addr to bind to (when the destination is UDP.) (usually ip:port)"))
                         //syslog unix socket path
                         .arg(Arg::with_name(SYSLOG_UNIX_SOCKET_PATH)
                             .long(SYSLOG_UNIX_SOCKET_PATH)
@@ -598,7 +605,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             .required_ifs(&[
                                 (SYSLOG_DESTINATION_FLAG, SYSLOG_DESTINATION_UNIX)
                             ])
-                            .help("The unix socket to send to. (usually /dev/log or /var/run/syslog)"))
+                            .help("The unix socket to send to (when the destination is UNIX.) (usually /dev/log or /var/run/syslog)"))
 
                         // logfile output format
                         .arg(Arg::with_name(LOGFILE_FORMAT_FLAG)
@@ -722,6 +729,10 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         None => None,
     };
 
+    let pagerduty_routing_key = matches
+        .value_of(PAGERDUTY_OUTPUT_FLAG)
+        .map(|x| x.to_owned());
+
     // First we need a polycorder auth key - either from CLI and then the file as
     // the secondary source.
     let polycorder = match matches.value_of(POLYCORDER_OUTPUT_FLAG) {
@@ -768,7 +779,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                             path: Some(pathstr.to_owned()),
                             local: None,
                             server: None,
-                            hostname: matches.value_of(SYSLOG_HOSTNAME).map(ToOwned::to_owned),
                         }),
                     }
                     SYSLOG_DESTINATION_TCP => match matches.value_of(SYSLOG_SERVER_ADDR) {
@@ -779,7 +789,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                                 path: None,
                                 local: None,
                                 server: Some(server_addr.to_owned()),
-                                hostname: matches.value_of(SYSLOG_HOSTNAME).map(ToOwned::to_owned),
                         }),
                     }
                     SYSLOG_DESTINATION_UDP => match matches.value_of(SYSLOG_SERVER_ADDR) {
@@ -792,7 +801,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                                     path: None,
                                     local: Some(local_addr.to_owned()),
                                     server: Some(server_addr.to_owned()),
-                                    hostname: matches.value_of(SYSLOG_HOSTNAME).map(ToOwned::to_owned),
                             }),
                         }
                     },
@@ -805,7 +813,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
                     path: None,
                     local: None,
                     server: None,
-                    hostname: matches.value_of(SYSLOG_HOSTNAME).map(ToOwned::to_owned),
                 }),
             },
             Err(e) => {
@@ -849,6 +856,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         polycorder,
         syslog,
         logfile,
+        pagerduty_routing_key,
     })
 }
 
@@ -948,7 +956,6 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                     None => SyslogDestination::Default,
                     Some(formatstr) => SyslogDestination::from_str(formatstr.to_ascii_lowercase().as_str())?,
                 },
-                hostname: sco.hostname,
                 server: sco.server,
                 local: sco.local,
                 path: sco.path,
@@ -969,6 +976,7 @@ pub fn parse_config_file(filepath: &str) -> Result<ZerotectParams, ParsingError>
                 rotation_file_max_size: lfc.rotation_file_max_size,
             })
         },
+        pagerduty_routing_key: zerotect_param_options.pagerduty_routing_key,
     };
 
     Ok(params)
@@ -1040,8 +1048,6 @@ mod test {
             OsString::from("cef"),
             OsString::from("--syslog-destination"),
             OsString::from("udp"),
-            OsString::from("--syslog-hostname"),
-            OsString::from("testhost"),
             OsString::from("--syslog-server"),
             OsString::from("127.0.0.1:5"),
             OsString::from("--syslog-local"),
@@ -1054,6 +1060,8 @@ mod test {
             OsString::from("1"),
             OsString::from("--log-file-rotation-max-size"),
             OsString::from("10"),
+            OsString::from("--pagerduty"),
+            OsString::from("routing_key"),
         ];
 
         let config = parse_args(Some(args)).unwrap();
@@ -1075,7 +1083,6 @@ mod test {
 
         let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Udp, sc.destination);
-        assert_eq!(Some("testhost".to_owned()), sc.hostname);
         assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:2".to_owned()), sc.local);
 
@@ -1087,6 +1094,8 @@ mod test {
 
         // analytics should be enabled by default
         assert_eq!(AnalyticsMode::Passthrough, config.analytics.mode);
+
+        assert_eq!(Some("routing_key".to_owned()), config.pagerduty_routing_key);
     }
 
     #[test]
@@ -1246,8 +1255,6 @@ mod test {
             OsString::from("cef"),
             OsString::from("--syslog-destination"),
             OsString::from("tcp"),
-            OsString::from("--syslog-hostname"),
-            OsString::from("testhost"),
             OsString::from("--syslog-server"),
             OsString::from("127.0.0.1:5"),
         ];
@@ -1256,7 +1263,6 @@ mod test {
 
         let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Tcp, sc.destination);
-        assert_eq!(Some("testhost".to_owned()), sc.hostname);
         assert_eq!(Some("127.0.0.1:5".to_owned()), sc.server);
         assert_eq!(None, sc.local);
     }
@@ -1278,7 +1284,6 @@ mod test {
         let sc = config.syslog.unwrap();
         assert_eq!(SyslogDestination::Unix, sc.destination);
         assert_eq!(Some("/some/socket/path".to_owned()), sc.path);
-        assert_eq!(None, sc.hostname);
         assert_eq!(None, sc.local);
     }
 
@@ -1351,7 +1356,6 @@ mod test {
         assert_eq!(SyslogDestination::Default, sc.destination);
         assert_eq!(None, sc.path);
         assert_eq!(None, sc.server);
-        assert_eq!(None, sc.hostname);
         assert_eq!(None, sc.local);
     }
 
@@ -1372,6 +1376,7 @@ mod test {
     fn toml_parse_all_direct() {
         let tomlcontents = r#"
         verbosity = 40
+        pagerduty_routing_key = 'routing_key5'
 
         [auto_configure]
         exception_trace = true
@@ -1414,6 +1419,11 @@ mod test {
 
         assert_eq!(40, config.verbosity);
 
+        assert_eq!(
+            Some("routing_key5".to_owned()),
+            config.pagerduty_routing_key
+        );
+
         //enabled by default always
         assert_eq!(AnalyticsMode::Detected, config.analytics.mode);
         assert_eq!(
@@ -1441,7 +1451,6 @@ mod test {
         assert_eq!(Some("/dev/log".to_owned()), sc.path);
         assert_eq!(Some("127.0.0.1:834".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:342".to_owned()), sc.local);
-        assert_eq!(Some("ohi;afs".to_owned()), sc.hostname);
 
         let lfc = config.logfile.unwrap();
         assert_eq!(OutputFormat::Text, lfc.format);
@@ -1486,6 +1495,7 @@ mod test {
     fn toml_parse_all_through_args() {
         let tomlcontents = r#"
         verbosity = 7
+        pagerduty_routing_key = 'routing_key6'
 
         [auto_configure]
         exception_trace = true
@@ -1551,6 +1561,11 @@ mod test {
         assert_eq!(true, config.polycorder.is_some());
         assert_eq!(7, config.verbosity);
 
+        assert_eq!(
+            Some("routing_key6".to_owned()),
+            config.pagerduty_routing_key
+        );
+
         let cc = config.console.unwrap();
         assert_eq!(OutputFormat::Text, cc.format);
 
@@ -1566,7 +1581,6 @@ mod test {
         assert_eq!(Some("/dev/log/something/else".to_owned()), sc.path);
         assert_eq!(Some("127.0.0.1:345".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:468".to_owned()), sc.local);
-        assert_eq!(Some(".kndv;afs".to_owned()), sc.hostname);
 
         let lfc = config.logfile.unwrap();
         assert_eq!(OutputFormat::JSON, lfc.format);
@@ -1830,7 +1844,6 @@ mod test {
                 destination: SyslogDestination::Udp,
                 local: Some("# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)".to_owned()),
                 server: Some("# applicable to tcp and udp - the host:port to send syslog to (i.e. 127.0.0.1:601 or 127.0.0.1:514)".to_owned()),
-                hostname: Some("# applicable to tcp and udp hostname for long entries".to_owned()),
                 path: Some("# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)".to_owned()),
             }),
             logfile: Some(LogFileConfig{
@@ -1839,6 +1852,7 @@ mod test {
                 rotation_file_count: Some(1),
                 rotation_file_max_size: Some(20),
             }),
+            pagerduty_routing_key: Some("routing_key".to_owned()),
             verbosity: 0,
         };
 
@@ -1855,9 +1869,9 @@ mod test {
     fn random_config_format() -> ZerotectParams {
         ZerotectParams {
             hostname: Some(format!(
-                    "RandomHostname{}",
-                    rand::thread_rng().gen_range(0, 32000)
-                )),
+                "RandomHostname{}",
+                rand::thread_rng().gen_range(0, 32000)
+            )),
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
                 fatal_signals: rand::thread_rng().gen_bool(0.5),
@@ -1937,13 +1951,6 @@ mod test {
                         )),
                         false => None,
                     },
-                    hostname: match rand::thread_rng().gen_bool(0.5) {
-                        true => Some(format!(
-                            "RandomHostname{}",
-                            rand::thread_rng().gen_range(0, 32000)
-                        )),
-                        false => None,
-                    },
                 }),
                 false => None,
             },
@@ -1963,6 +1970,13 @@ mod test {
                         false => None,
                     },
                 }),
+                false => None,
+            },
+            pagerduty_routing_key: match rand::thread_rng().gen_bool(0.5) {
+                true => Some(format!(
+                    "routingkey{}",
+                    rand::thread_rng().gen_range(0, 32000)
+                )),
                 false => None,
             },
             verbosity: rand::thread_rng().gen_range(0, 250),

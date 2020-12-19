@@ -36,13 +36,13 @@ curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/instal
 To uninstall zerotect:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s -- --uninstall
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --uninstall
 ```
 
 To get all supported options:
 
 ```.bash
-curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sh -s -- --help
+curl -s -L https://github.com/polyverse/zerotect/releases/latest/download/install.sh | sudo sh -s -- --help
 ```
 
 ## First-Principles Install

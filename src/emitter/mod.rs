@@ -10,6 +10,7 @@ use std::sync::mpsc::Receiver;
 
 mod console;
 mod filelogger;
+mod pagerduty;
 mod polycorder;
 mod syslogger;
 
@@ -24,6 +25,7 @@ pub struct EmitterConfig {
     pub polycorder: Option<params::PolycorderConfig>,
     pub syslog: Option<params::SyslogConfig>,
     pub logfile: Option<params::LogFileConfig>,
+    pub pagerduty_routing_key: Option<String>,
 }
 
 #[derive(Debug)]
@@ -52,7 +54,17 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
-pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), EmitterError> {
+impl From<pagerduty::PagerDutyError> for EmitterError {
+    fn from(err: pagerduty::PagerDutyError) -> EmitterError {
+        EmitterError(format!("pagerduty::PagerDutyError: {}", err))
+    }
+}
+
+pub fn emit(
+    ec: EmitterConfig,
+    source: Receiver<events::Event>,
+    hostname: Option<String>,
+) -> Result<(), EmitterError> {
     eprintln!("Emitter: Initializing...");
 
     let mut emitters: Vec<Box<dyn Emitter>> = vec![];
@@ -66,11 +78,15 @@ pub fn emit(ec: EmitterConfig, source: Receiver<events::Event>) -> Result<(), Em
     }
     if let Some(sc) = ec.syslog {
         eprintln!("Emitter: Initialized Syslog emitter. Expect messages to be sent to Syslog.");
-        emitters.push(Box::new(syslogger::new(sc)?));
+        emitters.push(Box::new(syslogger::new(sc, hostname)?));
     }
     if let Some(lfc) = ec.logfile {
         eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");
         emitters.push(Box::new(filelogger::new(lfc)?));
+    }
+    if let Some(prk) = ec.pagerduty_routing_key {
+        eprintln!("Emitter: Initialized PagerDuty emitter. Expect messages to be sent to a PagerDuty Service.");
+        emitters.push(Box::new(pagerduty::new(prk)?));
     }
 
     if emitters.is_empty() {

@@ -69,12 +69,20 @@ create_zerotect_conf() {
         mkdir -p -m 755 "$tomldir"
     fi
 
-        if [ "$POLYCORDER_AUTH_KEY" = "" ] && [ "$LOG_FILE_PATH" = "" ] && [ "$SYSLOG_DEFAULT" = "" ]; then
+    tomlcontents=$(printf "\n")
+
+    if [ "$POLYCORDER_AUTH_KEY" = "" ] && [ "$LOG_FILE_PATH" = "" ] && [ "$SYSLOG_DEFAULT" = "" ] && [ "$PAGERDUTY_INTEGRATION_KEY" = "" ]; then
         LOG_FILE_PATH="$default_log_file"
         printf "   |--> NOTE: No parameters provided, so defaulting to a log file at: $LOG_FILE_PATH\n"
     fi
 
-    tomlcontents=$(printf "[auto_configure]")
+    if [ "$PAGERDUTY_INTEGRATION_KEY" != "" ]; then
+        printf "   |--> Sending detected events to PagerDuty\n"
+        tomlcontents=$(printf "${tomlcontents}\npagerduty_routing_key = '$PAGERDUTY_INTEGRATION_KEY'")
+        tomlcontents=$(printf "${tomlcontents}\n ")
+    fi
+
+    tomlcontents=$(printf "${tomlcontents}\n[auto_configure]")
     tomlcontents=$(printf "${tomlcontents}\nexception_trace = true")
     tomlcontents=$(printf "${tomlcontents}\nfatal_signals = true")
     tomlcontents=$(printf "${tomlcontents}\nklog_include_timestamp = true")
@@ -188,6 +196,8 @@ upstart_create_job_file() {
 
     printf " |--> Starting zerotect now\n"
     initctl start zerotect
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    initctl restart zerotect
 }
 
 upstart_status() {
@@ -268,6 +278,8 @@ systemd_create_unit_file() {
 
     printf " |--> Starting zerotect now\n"
     systemctl start zerotect
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    systemctl restart zerotect
 }
 
 systemd_status() {
@@ -355,6 +367,8 @@ openrc_create_init_file() {
 
     printf " |--> Starting zerotect now\n"
     rc-service zerotect start
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    rc-service zerotect restart
 }
 
 openrc_status() {
@@ -400,6 +414,7 @@ print_usage() {
     printf " -l|--log-file <path>                  : Writes zerotect logs to file provided at path.\n"
     printf " -s|--syslog                           : Sends zerotect logs to syslog at standard Unix sockets, i.e. /dev/log and\n"
     printf "                                        /var/run/syslog in that order, TCP port (601) or UDP port (514).\n"
+    printf " --pagerduty <integration key>         : The PagerDuty integration key allows zerotect to send detected events to PagerDuty.\n"
     printf " --uninstall                           : Removes zerotect from this system.\n"
     printf "\n NOTE: If no arguments are provided, '--log-file /var/log/zerotect.log' is assumed.\n"
 }
@@ -430,6 +445,10 @@ while [ "$#" -gt 0 ]; do
     -s|--syslog)
       SYSLOG_DEFAULT=true
       shift
+      ;;
+    --pagerduty)
+      PAGERDUTY_INTEGRATION_KEY=$2
+      shift 2
       ;;
     -h|--help)
       printf "\n"

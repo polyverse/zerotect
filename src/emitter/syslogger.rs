@@ -54,11 +54,11 @@ impl emitter::Emitter for SysLogger {
     }
 }
 
-pub fn new(sc: SyslogConfig) -> Result<SysLogger, SysLoggerError> {
+pub fn new(sc: SyslogConfig, hostname: Option<String>) -> Result<SysLogger, SysLoggerError> {
     let pid = getpid_safe();
     let syslog_formatter = Formatter3164 {
         facility: Facility::LOG_USER,
-        hostname: sc.hostname,
+        hostname,
         process: "zerotect".to_owned(),
         pid,
     };

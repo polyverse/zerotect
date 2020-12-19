@@ -19,3 +19,7 @@ Cargo.lock
 
 # Any a.outs
 a.out
+
+
+# MacOS
+.DS_Store
