@@ -196,6 +196,8 @@ upstart_create_job_file() {
 
     printf " |--> Starting zerotect now\n"
     initctl start zerotect
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    initctl restart zerotect
 }
 
 upstart_status() {
@@ -276,6 +278,8 @@ systemd_create_unit_file() {
 
     printf " |--> Starting zerotect now\n"
     systemctl start zerotect
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    systemctl restart zerotect
 }
 
 systemd_status() {
@@ -363,6 +367,8 @@ openrc_create_init_file() {
 
     printf " |--> Starting zerotect now\n"
     rc-service zerotect start
+    printf "   |--> Restarting zerotect (if it was already started and this is a reinstall)\n"
+    rc-service zerotect restart
 }
 
 openrc_status() {
