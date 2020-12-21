@@ -60,22 +60,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config_event_sink = monitor_sink.clone();
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let _env_joinhandle = tokio::spawn(async move {configure_environment(auto_configure_env, chostname, config_event_sink).await});
+    let env_future = configure_environment(auto_configure_env, chostname, config_event_sink);
 
-    let mverbosity = zerotect_config.verbosity;
-    let mc = zerotect_config.monitor;
-    let mhostname = zerotect_config.hostname.clone();
-    let monitor_joinhandle = tokio::spawn(async move || {
-        let mc = monitor::MonitorConfig {
-            verbosity: mverbosity,
-            hostname: mhostname,
-            gobble_old_events: mc.gobble_old_events,
-        };
-        if let Err(e) = monitor::monitor(mc, monitor_sink).await {
-            eprintln!("Error launching Monitor: {}", e);
-            process::exit(1);
-        }
-    });
+    let mc = monitor::MonitorConfig {
+        verbosity: zerotect_config.verbosity,
+        hostname: zerotect_config.hostname.clone(),
+        gobble_old_events: zerotect_config.monitor.gobble_old_events,
+    };
+    let monitor_future = monitor::monitor(mc, monitor_sink);
 
     // split these up before a move
     let everbosity = zerotect_config.verbosity;
@@ -111,10 +103,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    eprintln!("Waiting indefinitely until monitor and emitter exit....");
-    monitor_handle
-        .join()
-        .expect("Unable to join on the monitoring thread");
+    eprintln!("Waiting indefinitely until environment monitor, event monitor, analyzer and emitter exit....");
+    tokio::try_join!(env_future, monitor_future);
+
     emitter_handle
         .join()
         .expect("Unable to join on the emitter thread");
@@ -170,39 +161,20 @@ async fn configure_environment(
     auto_config: params::AutoConfigure,
     hostname: Option<String>,
     config_event_sink: Sender<events::Event>,
-) {
+) -> Result<()> {
     // initialize the system with config
-    if let Err(e) = system::modify_environment(&auto_config, &hostname).await {
-        eprintln!(
-            "Error modifying the system settings to enable monitoring (as commanded): {}",
-            e
-        );
-        process::exit(1);
-    }
+    system::modify_environment(&auto_config, &hostname).await?
 
     // let the first time go from config-mismatch event reporting
     loop {
         // reinforce the system with config
-        match system::modify_environment(&auto_config, &hostname).await {
-            Err(e) => {
-                eprintln!(
-                    "Error modifying the system settings to enable monitoring (as commanded): {}",
-                    e
-                );
-                process::exit(1);
-            }
-            Ok(events) => {
-                for event in events.into_iter() {
-                    eprintln!(
-                        "System Configuration Thread: Configuration not stable. {}",
-                        &event
-                    );
-                    if let Err(e) = config_event_sink.send(event) {
-                        eprintln!("System Configuration Thread: Unable to send config event to the event emitter. This should never fail. Thread aborting. {}", e);
-                        process::exit(1);
-                    }
-                }
-            }
+        let events = system::modify_environment(&auto_config, &hostname).await?
+        for event in events.into_iter() {
+            eprintln!(
+                "System Configuration Thread: Configuration not stable. {}",
+                &event
+            );
+            config_event_sink.send(event)?
         }
 
         // ensure configuratione very five minutes.
