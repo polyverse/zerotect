@@ -142,14 +142,14 @@ pub async fn modify_environment(
         }
     }
 
-    if auto_configure.klog_include_timestamp && !rmesg::kernel_log_timestamps_enabled()? {
-        rmesg::kernel_log_timestamps_enable(true)?;
+    if auto_configure.klog_include_timestamp && !rmesg::klogctl::klog_timestamps_enabled()? {
+        rmesg::klogctl::klog_timestamps_enable(true)?;
 
         env_events.push(Arc::new(events::Version::V1 {
             timestamp: Utc::now(),
             hostname: hostname.clone(),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
-                key: rmesg::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
+                key: rmesg::klogctl::SYS_MODULE_PRINTK_PARAMETERS_TIME.to_owned(),
                 expected_value: "Y".to_owned(),
                 observed_value: "N".to_owned(),
             }),

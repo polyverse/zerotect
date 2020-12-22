@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
+use rmesg::entry;
 
 #[cfg(test)]
 use schemars::JsonSchema;
@@ -344,10 +345,10 @@ impl rust_cef::CefExtensions for RegisterProbeJustification {
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     #[cef_ext_field(flexString2)]
     pub trap: KernelTrapType,
@@ -393,10 +394,10 @@ pub struct LinuxKernelTrap {
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxFatalSignal {
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     /// The type of Fatal triggered
     #[cef_ext_field(flexString2)]
@@ -424,10 +425,10 @@ impl Display for LinuxFatalSignal {
 #[cfg_attr(test, derive(JsonSchema, Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     /// Name of the function being suppressed/folded.
     #[cef_ext_field(flexString1)]

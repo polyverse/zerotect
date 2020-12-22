@@ -161,14 +161,14 @@ async fn configure_environment(
     auto_config: params::AutoConfigure,
     hostname: Option<String>,
     config_event_sink: Sender<events::Event>,
-) -> Result<()> {
+) -> Result<(), system::SystemCtlError> {
     // initialize the system with config
-    system::modify_environment(&auto_config, &hostname).await?
+    system::modify_environment(&auto_config, &hostname).await?;
 
     // let the first time go from config-mismatch event reporting
     loop {
         // reinforce the system with config
-        let events = system::modify_environment(&auto_config, &hostname).await?
+        let events = system::modify_environment(&auto_config, &hostname).await?;
         for event in events.into_iter() {
             eprintln!(
                 "System Configuration Thread: Configuration not stable. {}",
@@ -180,4 +180,6 @@ async fn configure_environment(
         // ensure configuratione very five minutes.
         sleep(Duration::from_secs(300)).await;
     }
+
+    Ok(())
 }

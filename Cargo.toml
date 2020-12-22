@@ -16,13 +16,13 @@ num = "0.3.1"
 lazy_static = "1.4.0"
 num-traits = "0.2"
 num-derive = "0.3.3"
-timeout-iterator = "0.5.0"
+timeout-iterator = { version = "1.0.0", features = ["async"] }
 serde = { version = "1.0.118", features = ["derive", "rc"] }
 serde_json = { version = "1.0.60", features = ["arbitrary_precision"]}
 chrono = { version = "0.4", features = ["serde", "std"] }
 toml = "0.5.8"
 http = "0.2.2"
-rmesg = "0.8.0"
+rmesg = {version = "1.0.1", features = ["async", "ptr"]}
 libflate = "1.0.3"
 rust-cef-derive = "0.1.3"
 rust-cef = "0.1.3"

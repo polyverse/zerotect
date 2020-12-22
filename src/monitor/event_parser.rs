@@ -2,7 +2,6 @@
 
 use crate::common;
 use crate::events;
-use crate::monitor::kmsg;
 
 use num::FromPrimitive;
 use regex::Regex;
@@ -11,8 +10,11 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use std::time::Duration;
-
-use timeout_iterator::TimeoutIterator;
+use timeout_iterator::asynchronous::TimeoutStream;
+use core::pin::Pin;
+use futures::stream::Stream;
+use futures::task::{Context, Poll};
+use futures::StreamExt;
 
 #[derive(Debug)]
 pub struct EventParserError(String);
@@ -22,68 +24,59 @@ impl Display for EventParserError {
         write!(f, "EventParserError:: {}", &self.0)
     }
 }
-impl From<timeout_iterator::TimeoutIteratorError> for EventParserError {
-    fn from(err: timeout_iterator::TimeoutIteratorError) -> EventParserError {
-        EventParserError(format!(
-            "Inner timeout_iterator::TimeoutIteratorError :: {}",
+impl From<timeout_iterator::error::Error> for EventParserError {
+    fn from(err: timeout_iterator::error::Error) -> Self {
+        Self(format!(
+            "Inner timeout_iterator::TimeoutStream :: {}",
             err
         ))
     }
 }
 
 pub struct EventParser {
-    timeout_kmsg_iter: TimeoutIterator<kmsg::KMsgPtr>,
-    flush_timeout: Duration,
+    entries: Box<dyn Stream<Item = rmesg::entry::Entry>>,
     verbosity: u8,
     hostname: Option<String>,
 }
 
 impl EventParser {
-    pub fn from_kmsg_iterator(
-        kmsg_iter: Box<dyn Iterator<Item = kmsg::KMsgPtr> + Send>,
+    pub async fn new(
         flush_timeout: Duration,
         verbosity: u8,
         hostname: Option<String>,
     ) -> Result<EventParser, EventParserError> {
-        let timeout_kmsg_iter = TimeoutIterator::from_item_iterator(kmsg_iter)?;
+        let entries = TimeoutStream::with_stream(rmesg::logs_iter(rmesg::Backend::Default, false, false).await?).await?;
 
         Ok(EventParser {
-            timeout_kmsg_iter,
-            flush_timeout,
+            entries,
             verbosity,
             hostname,
         })
     }
 
-    fn parse_next_event(&mut self) -> Result<events::Version, EventParserError> {
+    async fn parse_next_event(&mut self) -> Result<events::Version, EventParserError> {
         // we'll need to borrow and capture this in closures multiple times.
         // Make a one-time clone so we don't borrow self over and over again.
         let hostname = self.hostname.clone();
 
         // find the next event (we don't use a for loop because we don't want to move
         // the iterator outside of self. We only want to move next() values out of the iterator.
-        loop {
-            if let Some(kmsg_entry) = self.timeout_kmsg_iter.next() {
-                if let Some(e) = EventParser::parse_finite_kmsg_to_event(&kmsg_entry, &hostname)
-                    .or_else(|| self.parse_fatal_signal(&kmsg_entry, &hostname))
-                {
-                    return Ok(e);
-                }
-            // only break if the underlying iterator quit on us
-            } else {
-                return Err(EventParserError(
-                    "Exited /dev/kmsg iterator unexpectedly.".to_owned(),
-                ));
+        if let Some(rmesg_entry) = self.entries.next().await? {
+            if let Some(e) = EventParser::parse_finite_kmsg_to_event(&rmesg_entry, &hostname)
+                .or_else(|| self.parse_fatal_signal(&rmesg_entry, &hostname))
+            {
+                return Ok(e);
             }
+        // only break if the underlying iterator quit on us
         }
     }
 
     fn parse_finite_kmsg_to_event(
-        kmsg_entry: &kmsg::KMsg,
+        rmesg_entry: rmesg::entry::Entry,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
-        EventParser::parse_callbacks_suppressed(kmsg_entry, hostname)
-            .or_else(|| EventParser::parse_kernel_trap(kmsg_entry, hostname))
+        EventParser::parse_callbacks_suppressed(rmesg_entry, hostname)
+            .or_else(|| EventParser::parse_kernel_trap(rmesg_entry, hostname))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -95,7 +88,7 @@ impl EventParser {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(km: &kmsg::KMsg, hostname: &Option<String>) -> Option<events::Version> {
+    fn parse_kernel_trap(rmesg_entry: rmesg::entry::Entry, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -124,7 +117,7 @@ impl EventParser {
 
         }
 
-        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(km.message.as_str()) {
+        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(rmesg_entry.message.as_str()) {
             if let (
                 procname,
                 Some(pid),
@@ -154,11 +147,11 @@ impl EventParser {
                     };
 
                 return Some(events::Version::V1 {
-                    timestamp: km.timestamp,
+                    timestamp: rmesg_entry.timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                        facility: km.facility,
-                        level: km.level,
+                        facility: rmesg_entry.facility,
+                        level: rmesg_entry.level,
                         trap,
                         procname: procname.to_owned(),
                         pid,
@@ -223,23 +216,23 @@ impl EventParser {
     // potentially unexpected fatal signal 11.
     fn parse_fatal_signal(
         &mut self,
-        km: &kmsg::KMsg,
+        rmesg_entry: rmesg::entry::Entry,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
-        if let Some(fatal_signal_parts) = RE_FATAL_SIGNAL.captures(km.message.as_str()) {
+        if let Some(fatal_signal_parts) = RE_FATAL_SIGNAL.captures(rmesg_entry.message.as_str()) {
             if let Some(signalnum) =
                 common::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
             {
                 if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
                     return Some(events::Version::V1 {
-                        timestamp: km.timestamp,
+                        timestamp: rmesg_entry.timestamp,
                         hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                            facility: km.facility,
-                            level: km.level,
+                            facility: rmesg_entry.facility,
+                            level: rmesg_entry.level,
                             signal,
                             stack_dump: self.parse_stack_dump(hostname),
                         }),
@@ -288,7 +281,7 @@ impl EventParser {
         loop {
             let maybe_peek_msg = self.timeout_kmsg_iter.peek_timeout(self.flush_timeout);
             // peek next line, and if it has a colon, take it
-            let km = match maybe_peek_msg {
+            let rmesg_entry = match maybe_peek_msg {
                 Ok(peek_kmsg) => {
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
@@ -312,7 +305,7 @@ impl EventParser {
             // since all other paths have exited
 
             // split message parts on whitespace
-            let parts: Vec<_> = km.message.split(|c| c == ' ').collect();
+            let parts: Vec<_> = rmesg_entry.message.split(|c| c == ' ').collect();
 
             // consume kmsg key->value one by one (don't split all at once)
             // maintain state as we iterate
@@ -326,11 +319,11 @@ impl EventParser {
                     if let Some(v) = value {
                         if let Some(k) = key {
                             if self.verbosity > 1 {
-                                eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                                eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, rmesg_entry.message);
                             }
                             sd.insert(k, v);
                         } else if self.verbosity > 0 {
-                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", km.message);
+                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", rmesg_entry.message);
                         }
 
                         // Key becomes this part, minus the :
@@ -374,7 +367,7 @@ impl EventParser {
             // cleanup last value - if it comes in a pair
             if let (Some(k), Some(v)) = (key, value) {
                 if self.verbosity > 1 {
-                    eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, km.message);
+                    eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, rmesg_entry.message);
                 }
                 sd.insert(k, v);
             }
@@ -385,7 +378,7 @@ impl EventParser {
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
     fn parse_callbacks_suppressed(
-        km: &kmsg::KMsg,
+        rmesg_entry: rmesg::entry::Entry,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
@@ -401,18 +394,18 @@ impl EventParser {
             .unwrap();
         }
 
-        if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(km.message.as_str()) {
+        if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(rmesg_entry.message.as_str()) {
             if let (function_name, Some(count)) = (
                 &dmesg_parts["function"],
                 common::parse_fragment::<usize>(&dmesg_parts["count"]),
             ) {
                 return Some(events::Version::V1 {
-                    timestamp: km.timestamp,
+                    timestamp: rmesg_entry.timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
                         events::LinuxSuppressedCallback {
-                            facility: km.facility,
-                            level: km.level,
+                            facility: rmesg_entry.facility,
+                            level: rmesg_entry.level,
                             function_name: function_name.to_owned(),
                             count,
                         },
@@ -425,23 +418,18 @@ impl EventParser {
     }
 }
 
-impl Iterator for EventParser {
+impl Stream for EventParser {
     // we will be counting with usize
     type Item = events::Event;
 
-    // next() is the only required method
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.parse_next_event() {
-            Ok(version) => Some(Arc::new(version)),
-            Err(err) => {
-                eprintln!(
-                    "Monitor: Error iterating over events from the dmesg parser: {}",
-                    err
-                );
-                None
-            }
-        }
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<<Self as Stream>::Item>> {
+        self.as_mut().parse_next_event();
+        Poll::Pending
     }
+
 }
 
 /**********************************************************************************/
