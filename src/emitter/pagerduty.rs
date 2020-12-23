@@ -2,10 +2,10 @@
 
 use crate::emitter;
 use crate::events;
-use chrono::Utc;
 use pagerduty_rs::eventsv2;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub enum PagerDutyError {
@@ -46,7 +46,7 @@ impl emitter::Emitter for PagerDuty {
                 payload: eventsv2::AlertTriggerPayload {
                     summary: "Zerotect detected anomaly".to_owned(),
                     source,
-                    timestamp: Some(Utc::now()),
+                    timestamp: Some(OffsetDateTime::now_utc()),
                     severity: eventsv2::Severity::Warning,
                     component: None,
                     group: None,

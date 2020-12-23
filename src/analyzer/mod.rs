@@ -7,7 +7,6 @@ mod eventbuffer;
 use crate::events;
 use crate::params;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use eventbuffer::EventBuffer;
 use std::convert::TryInto;
 use std::error;
@@ -17,6 +16,7 @@ use std::process;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
+use time::OffsetDateTime;
 
 use close_by_ip_detect::close_by_ip_detect;
 use close_by_register_detect::close_by_register_detect;
@@ -172,7 +172,7 @@ impl Analyzer {
         }
     }
 
-    fn buffer_event(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
+    fn buffer_event(&mut self, timestamp: OffsetDateTime, procname: String, event: events::Event) {
         // Append event to to end of buffer
         self.event_buffer.insert(timestamp, procname, event);
         self.detected_since_last_add = false;
@@ -260,7 +260,7 @@ pub fn analyze(
     let collection_timeout = Duration::from_secs(config.collection_timeout_seconds);
     let max_event_count = config.max_event_count;
     let event_drop_count = config.event_drop_count;
-    let event_lifetime = ChronoDuration::seconds(config.event_lifetime_seconds.try_into()?);
+    let event_lifetime = Duration::from_secs(config.event_lifetime_seconds);
     let justification_kind = config.justification;
 
     if let Err(e) = thread::Builder::new()
@@ -323,7 +323,6 @@ pub fn analyze(
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::Utc;
     use rand::Rng;
     use serde_json::{from_str, from_value};
     use std::collections::BTreeMap;
@@ -938,7 +937,7 @@ mod test {
         }
 
         Arc::new(events::Version::V1 {
-            timestamp: Utc::now(),
+            timestamp: OffsetDateTime::now_utc(),
             hostname: Some("nonexistent".to_owned()),
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 level: events::LogLevel::Info,

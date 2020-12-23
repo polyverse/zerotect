@@ -1,7 +1,9 @@
 // Copyright (c) 2019 Polyverse Corporation
+// Copyright (c) 2019 Polyverse Corporation
 
 use crate::common;
 use crate::events;
+use crate::system;
 
 use num::FromPrimitive;
 use regex::Regex;
@@ -9,74 +11,151 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use timeout_iterator::asynchronous::TimeoutStream;
 use core::pin::Pin;
 use futures::stream::Stream;
 use futures::task::{Context, Poll};
 use futures::StreamExt;
+use rmesg::error::RMesgError;
+use rmesg::entry::Entry;
+use std::ops::Add;
+use time::OffsetDateTime;
 
 #[derive(Debug)]
-pub struct EventParserError(String);
-impl Error for EventParserError {}
-impl Display for EventParserError {
+pub enum RawEventStreamError {
+    UnderlyingStreamClosed,
+    UnderlyingStreamedItemError(RMesgError),
+    TimeoutStreamError(timeout_iterator::error::Error),
+    SystemConfigError(system::SystemConfigError),
+    Generic(String)
+}
+impl Error for RawEventStreamError {}
+impl Display for RawEventStreamError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        write!(f, "EventParserError:: {}", &self.0)
+        match self {
+            Self::UnderlyingStreamClosed => write!(f, "Underlying stream that provided Log Entries to be parsed closed"),
+            Self::TimeoutStreamError(err) => write!(f, "TimeoutStreamError: {}", err),
+            Self::SystemConfigError(err) => write!(f, "SystemConfigError: {}", err),
+            Self::UnderlyingStreamedItemError(err) => write!(f, "UnderlyingStreamedItemError: {}", err),
+            Self::Generic(s) => write!(f, "{}", s),
+        }
     }
 }
-impl From<timeout_iterator::error::Error> for EventParserError {
+impl From<timeout_iterator::error::Error> for RawEventStreamError {
     fn from(err: timeout_iterator::error::Error) -> Self {
-        Self(format!(
-            "Inner timeout_iterator::TimeoutStream :: {}",
-            err
-        ))
+        Self::TimeoutStreamError(err)
+    }
+}
+impl From<RMesgError> for RawEventStreamError {
+    fn from(err: RMesgError) -> Self {
+        Self::UnderlyingStreamedItemError(err)
+    }
+}
+impl From<system::SystemConfigError> for RawEventStreamError {
+    fn from(err: system::SystemConfigError) -> Self {
+        Self::SystemConfigError(err)
     }
 }
 
-pub struct EventParser {
-    entries: Box<dyn Stream<Item = rmesg::entry::Entry>>,
+#[derive(Clone)]
+pub struct RawEventStreamConfig {
+    pub verbosity: u8,
+    pub hostname: Option<String>,
+    pub gobble_old_events: bool,
+}
+
+type TimeoutStreamItem = Result<Entry, RMesgError>;
+
+pub struct RawEventStream {
+    entries: TimeoutStream<TimeoutStreamItem, Pin<Box<dyn Stream<Item = TimeoutStreamItem>>>>,
     verbosity: u8,
     hostname: Option<String>,
+    flush_timeout: Duration,
+
+    // What was the time when the system started?
+    // we need this to set timestamps of events
+    system_start_time: OffsetDateTime,
+
+    // only read events from this time on
+    event_stream_start_time: OffsetDateTime,
 }
 
-impl EventParser {
-    pub async fn new(
-        flush_timeout: Duration,
-        verbosity: u8,
-        hostname: Option<String>,
-    ) -> Result<EventParser, EventParserError> {
+impl RawEventStream {
+    pub async fn new(c: RawEventStreamConfig) -> Result<RawEventStream, RawEventStreamError> {
+        if c.verbosity > 0 {
+            eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
+        }
+
         let entries = TimeoutStream::with_stream(rmesg::logs_iter(rmesg::Backend::Default, false, false).await?).await?;
 
-        Ok(EventParser {
+        let system_start_time = system::system_start_time()?;
+
+        // Start processing events from system start? Or when zerotect was started?
+        let event_stream_start_time = match c.gobble_old_events {
+            true => system_start_time,
+            false => OffsetDateTime::now_utc(),
+        };
+
+        Ok(RawEventStream {
             entries,
-            verbosity,
-            hostname,
+            verbosity: c.verbosity,
+            hostname: c.hostname,
+            flush_timeout: Duration::from_secs(1),
+            system_start_time,
+            event_stream_start_time,
         })
     }
 
-    async fn parse_next_event(&mut self) -> Result<events::Version, EventParserError> {
+    async fn parse_next_event(&mut self) -> Result<events::Version, RawEventStreamError> {
         // we'll need to borrow and capture this in closures multiple times.
         // Make a one-time clone so we don't borrow self over and over again.
         let hostname = self.hostname.clone();
 
-        // find the next event (we don't use a for loop because we don't want to move
-        // the iterator outside of self. We only want to move next() values out of the iterator.
-        if let Some(rmesg_entry) = self.entries.next().await? {
-            if let Some(e) = EventParser::parse_finite_kmsg_to_event(&rmesg_entry, &hostname)
-                .or_else(|| self.parse_fatal_signal(&rmesg_entry, &hostname))
-            {
-                return Ok(e);
+        // Loop until either:
+        // 1. We find a legit event and can return it
+        // 2. We get an error parsing an event
+        // 3. The underlying stream closes and returns a None
+        loop {
+            match self.entries.next().await {
+                Some(Ok(entry)) => {
+                    let entry_timestamp = match entry.timestamp_from_system_start {
+                        Some(timestamp_from_system_start) => self.system_start_time.add(timestamp_from_system_start),
+                        None => continue, // ignore events without timestamp
+                    };
+
+                    // skip events older than when a stream should start
+                    if entry_timestamp < self.event_stream_start_time {
+                        continue;
+                    }
+
+                    match RawEventStream::parse_finite_kmsg_to_event(&entry, &entry_timestamp, &hostname)
+                        .or_else(|| self.parse_fatal_signal(&entry, &entry_timestamp, &hostname)) {
+                        Some(e) => return Ok(e),
+
+                        // next entry wasn't a legit event... keep looping
+                        // since the stream hasn't returned None, don't return None
+                        // to indicate ending of upstream stream
+                        None => continue,
+                    }
+                },
+
+                // If Iterated Item had an error, propagate up
+                Some(Err(e)) => return Err(e.into()),
+
+                // If iterator returned None, we're done
+                None => return Err(RawEventStreamError::UnderlyingStreamClosed),
             }
-        // only break if the underlying iterator quit on us
         }
     }
 
     fn parse_finite_kmsg_to_event(
-        rmesg_entry: rmesg::entry::Entry,
+        rmesg_entry: &rmesg::entry::Entry,
+        entry_timestamp: &OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
-        EventParser::parse_callbacks_suppressed(rmesg_entry, hostname)
-            .or_else(|| EventParser::parse_kernel_trap(rmesg_entry, hostname))
+        RawEventStream::parse_callbacks_suppressed(rmesg_entry, entry_timestamp, hostname)
+            .or_else(|| RawEventStream::parse_kernel_trap(rmesg_entry, entry_timestamp, hostname))
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -88,7 +167,7 @@ impl EventParser {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(rmesg_entry: rmesg::entry::Entry, hostname: &Option<String>) -> Option<events::Version> {
+    fn parse_kernel_trap(rmesg_entry: &rmesg::entry::Entry, entry_timestamp: &OffsetDateTime, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -129,7 +208,7 @@ impl EventParser {
             ) = (
                 &dmesg_parts["procname"],
                 common::parse_fragment::<usize>(&dmesg_parts["pid"]),
-                EventParser::parse_kernel_trap_type(&dmesg_parts["message"]),
+                RawEventStream::parse_kernel_trap_type(&dmesg_parts["message"]),
                 common::parse_hex::<usize>(&dmesg_parts["ip"]),
                 common::parse_hex::<usize>(&dmesg_parts["sp"]),
                 common::parse_hex::<usize>(&dmesg_parts["errcode"]),
@@ -216,7 +295,8 @@ impl EventParser {
     // potentially unexpected fatal signal 11.
     fn parse_fatal_signal(
         &mut self,
-        rmesg_entry: rmesg::entry::Entry,
+        rmesg_entry: &rmesg::entry::Entry,
+        entry_timestamp: &OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
@@ -285,7 +365,7 @@ impl EventParser {
                 Ok(peek_kmsg) => {
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if EventParser::parse_finite_kmsg_to_event(peek_kmsg, hostname).is_some() {
+                    if RawEventStream::parse_finite_kmsg_to_event(peek_kmsg, hostname).is_some() {
                         return sd;
                     }
 
@@ -378,7 +458,8 @@ impl EventParser {
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
     fn parse_callbacks_suppressed(
-        rmesg_entry: rmesg::entry::Entry,
+        rmesg_entry: &rmesg::entry::Entry,
+        entry_timestamp: &OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
@@ -418,27 +499,12 @@ impl EventParser {
     }
 }
 
-impl Stream for EventParser {
-    // we will be counting with usize
-    type Item = events::Event;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<<Self as Stream>::Item>> {
-        self.as_mut().parse_next_event();
-        Poll::Pending
-    }
-
-}
-
 /**********************************************************************************/
 // Tests! Tests! Tests!
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::{TimeZone, Utc};
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
     use std::thread;
@@ -542,7 +608,7 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -726,7 +792,7 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -872,7 +938,7 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -994,7 +1060,7 @@ mod test {
             }),
         });
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -1077,7 +1143,7 @@ mod test {
             message: String::from("potentially unexpected fatal signal 11."),
         })];
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -1128,7 +1194,7 @@ mod test {
 
         {
             // Validate when new kmsg's stop coming in (at timeout).
-            let mut parser = EventParser::from_kmsg_iterator(
+            let mut parser = RawEventStream::from_kmsg_iterator(
                 Box::new(kmsgs.clone().into_iter()),
                 Duration::from_secs(1),
                 0,
@@ -1190,7 +1256,7 @@ mod test {
             // Validate when new kmsg's stop bring KV/pairs
             kmsgs.push(boxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
 
-            let mut parser = EventParser::from_kmsg_iterator(
+            let mut parser = RawEventStream::from_kmsg_iterator(
                 Box::new(kmsgs.into_iter()),
                 Duration::from_secs(1),
                 0,
@@ -1272,7 +1338,7 @@ mod test {
             }),
         ];
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -1330,7 +1396,7 @@ mod test {
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
         })];
 
-        let mut parser = EventParser::from_kmsg_iterator(
+        let mut parser = RawEventStream::from_kmsg_iterator(
             Box::new(kmsgs.into_iter()),
             Duration::from_secs(1),
             0,
@@ -1356,7 +1422,7 @@ mod test {
         )
     }
 
-    fn boxed_kmsg(timestamp: chrono::DateTime<Utc>, message: String) -> Box<kmsg::KMsg> {
+    fn boxed_kmsg(timestamp: OffsetDateTime, message: String) -> Box<kmsg::KMsg> {
         Box::new(kmsg::KMsg {
             facility: events::LogFacility::Kern,
             level: events::LogLevel::Warning,
@@ -1366,7 +1432,7 @@ mod test {
     }
 
     fn boxed_kmsgs(
-        timestamp: chrono::DateTime<Utc>,
+        timestamp: OffsetDateTime,
         messages: Vec<String>,
     ) -> Vec<Box<kmsg::KMsg>> {
         messages

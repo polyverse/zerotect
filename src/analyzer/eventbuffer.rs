@@ -1,10 +1,11 @@
 use crate::events;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use time::OffsetDateTime;
+use std::time::Duration;
 
-type TimestampedEvent = (DateTime<Utc>, events::Event);
+type TimestampedEvent = (OffsetDateTime, events::Event);
 pub type TimestampedEventList = VecDeque<TimestampedEvent>;
 type ProcNameToTimestampedEventsMap = HashMap<String, TimestampedEventList>;
 
@@ -15,7 +16,7 @@ pub struct EventBuffer {
     list_capacity: usize,
 
     max_event_count: usize,
-    event_lifetime: ChronoDuration,
+    event_lifetime: Duration,
     event_drop_count: usize,
 
     cached_len: usize,
@@ -32,7 +33,7 @@ impl EventBuffer {
         verbosity: u8,
         max_event_count: usize,
         event_drop_count: usize,
-        event_lifetime: ChronoDuration,
+        event_lifetime: Duration,
     ) -> EventBuffer {
         EventBuffer {
             _verbosity: verbosity,
@@ -45,7 +46,7 @@ impl EventBuffer {
         }
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, String, VecDeque<(DateTime<Utc>, events::Event)>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, String, VecDeque<(OffsetDateTime, events::Event)>> {
         self.hashlist.iter_mut()
     }
 
@@ -68,7 +69,7 @@ impl EventBuffer {
         total_len
     }
 
-    pub fn insert(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
+    pub fn insert(&mut self, timestamp: OffsetDateTime, procname: String, event: events::Event) {
         // so we don't double-borrow self
         let list_capacity = self.list_capacity;
 
@@ -112,7 +113,7 @@ impl EventBuffer {
             return;
         }
 
-        let mut priority_removal_map = BTreeMap::<DateTime<Utc>, String>::new();
+        let mut priority_removal_map = BTreeMap::<OffsetDateTime, String>::new();
 
         // populate the removal map with timestamp -> procname (the oldest timestamp in each procname)
         for (procname, eventlist) in self.hashlist.iter() {
@@ -158,7 +159,7 @@ impl EventBuffer {
     fn remove_expired_events(&mut self) {
         // At what time do events expire?
         // make this mutable so comparison below works
-        let mut event_expiry_time = Utc::now() - self.event_lifetime;
+        let mut event_expiry_time = OffsetDateTime::now_utc() - self.event_lifetime;
 
         // for each procname in event list
         for (_, eventlist) in (&mut self.hashlist).iter_mut() {
@@ -224,7 +225,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_single_proc_all_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for _ in 0..10 {
@@ -244,7 +245,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_multiple_procs_single_event() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for i in 0..10 {
@@ -264,7 +265,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_multiple_procs_multiple_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for i in 0..5 {
@@ -299,7 +300,7 @@ mod test {
 
     #[test]
     fn ensure_expiry_multiple_procs_multiple_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(2));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for i in 0..9 {
@@ -318,7 +319,7 @@ mod test {
         assert_eq!(0, eb.hashlist.len());
     }
 
-    fn create_event(procname: String) -> (DateTime<Utc>, String, events::Event) {
+    fn create_event(procname: String) -> (OffsetDateTime, String, events::Event) {
         let timestamp = Utc::now();
         let event = match rand::random::<bool>() {
             true => Arc::new(events::Version::V1 {

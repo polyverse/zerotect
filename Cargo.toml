@@ -19,7 +19,6 @@ num-derive = "0.3.3"
 timeout-iterator = { version = "1.0.0", features = ["async"] }
 serde = { version = "1.0.118", features = ["derive", "rc"] }
 serde_json = { version = "1.0.60", features = ["arbitrary_precision"]}
-chrono = { version = "0.4", features = ["serde", "std"] }
 toml = "0.5.8"
 http = "0.2.2"
 rmesg = {version = "1.0.1", features = ["async", "ptr"]}
@@ -31,8 +30,14 @@ libc = "0.2.81"
 file-rotate-record-boundary = "0.3.0"
 ureq = "1.5.4"
 futures = "0.3.8"
-tokio = { version = "0.3.6", features = ["rt-multi-thread", "macros", "time"] }
-pagerduty-rs = "0.0.1"
+pagerduty-rs = "0.1.0"
+time = {version = "0.2.23", features = ["std", "serde"] }
+
+
+# Because Rust is old enough to have dependency hell now
+# https://github.com/hyperium/hyper/issues/2302
+# Before fixing here - fix PagerDuty crate and them bump this one up
+tokio = { version = "0.2.24", features = ["rt-thread", "macros", "time"] }
 
 [dependencies.clap]
 version = "2.33.3"

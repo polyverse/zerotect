@@ -2,13 +2,13 @@ use crate::common;
 use crate::events;
 use crate::params;
 
-use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::Arc;
+use time::OffsetDateTime;
 
 pub fn close_by_register_detect(
     procname: &str,
-    eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
+    eventslist: &VecDeque<(OffsetDateTime, events::Event)>,
     register: &str,
     register_max_distance: usize,
     justification_threshold: usize,
@@ -74,7 +74,7 @@ pub fn close_by_register_detect(
     if close_by_register.len() > justification_threshold {
         return Some((
             Arc::new(events::Version::V1 {
-                timestamp: Utc::now(),
+                timestamp: OffsetDateTime::now_utc(),
                 hostname: common::get_first_event_hostname(&close_by_register),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: register.to_owned(),

@@ -18,20 +18,42 @@ mod common;
 mod emitter;
 mod events;
 mod formatter;
-mod monitor;
+mod raw_event_stream;
 mod params;
 mod system;
 
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender, error::SendError};
 use std::thread;
 use std::time::Duration;
 use std::error::Error;
 use std::process;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use tokio::time::sleep;
 
-
+#[derive(Debug)]
+pub struct MainError(String);
+impl Error for MainError {}
+impl Display for MainError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "MainError:: {}", self.0)
+    }
+}
+impl From<SendError<events::Event>> for MainError {
+    fn from(err: SendError<events::Event>) -> Self {
+        Self(format!("Inner SendError<events::Event> :: {}", err))
+    }
+}
+impl From<system::SystemConfigError> for MainError {
+    fn from(err: system::SystemConfigError) -> Self {
+        Self(format!("Inner system::SystemConfigError :: {}", err))
+    }
+}
+impl From<raw_event_stream::RawEventStreamError> for MainError {
+    fn from(err: raw_event_stream::RawEventStreamError) -> Self {
+        Self(format!("Inner raw_event_stream::RawEventStreamError :: {}", err))
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = system::ensure_linux() {
@@ -53,22 +75,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let (monitor_sink, emitter_source, maybe_analyzer_handle) =
-        optional_analyzer(zerotect_config.verbosity, zerotect_config.analytics);
+//    let (monitor_sink, emitter_source, maybe_analyzer_handle) =
+//        optional_analyzer(zerotect_config.verbosity, zerotect_config.analytics);
 
     let auto_configure_env = zerotect_config.auto_configure;
-    let config_event_sink = monitor_sink.clone();
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let env_future = configure_environment(auto_configure_env, chostname, config_event_sink);
+    let env_events_stream = system::EnvironmentConfigurator::new(auto_configure_env, chostname);
 
-    let mc = monitor::MonitorConfig {
+    let resc = raw_event_stream::RawEventStreamConfig {
         verbosity: zerotect_config.verbosity,
         hostname: zerotect_config.hostname.clone(),
         gobble_old_events: zerotect_config.monitor.gobble_old_events,
     };
-    let monitor_future = monitor::monitor(mc, monitor_sink);
+    let res = raw_event_stream::RawEventStream::new(resc);
 
+    /*
     // split these up before a move
     let everbosity = zerotect_config.verbosity;
     let console = zerotect_config.console;
@@ -114,28 +136,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .join()
             .expect("Unable to join on the analyzer thread");
     }
+    */
 
     Ok(())
 }
 
+/*
 fn optional_analyzer(
     verbosity: u8,
     ac: params::AnalyticsConfig,
 ) -> (
-    Sender<events::Event>,
-    Receiver<events::Event>,
+    UnboundedSender<events::Event>,
+    UnboundedReceiver<events::Event>,
     Option<thread::JoinHandle<()>>,
 ) {
-    let (monitor_sink, analyzer_source): (Sender<events::Event>, Receiver<events::Event>) =
-        mpsc::channel();
+    let (monitor_sink, analyzer_source): (UnboundedSender<events::Event>, UnboundedReceiver<events::Event>) =
+        unbounded_channel();
 
     if ac.mode == params::AnalyticsMode::Off {
         // if analytics is disabled, short-circuit the first channel between monitor and emitter
         return (monitor_sink, analyzer_source, None);
     }
 
-    let (analyzer_sink, emitter_source): (Sender<events::Event>, Receiver<events::Event>) =
-        mpsc::channel();
+    let (analyzer_sink, emitter_source): (UnboundedSender<events::Event>, UnboundedReceiver<events::Event>) =
+        unbounded_channel();
 
     let analyzer_thread_result = thread::Builder::new()
         .name("Event Analyzer Thread".to_owned())
@@ -156,30 +180,4 @@ fn optional_analyzer(
 
     (monitor_sink, emitter_source, Some(analyzer_handle))
 }
-
-async fn configure_environment(
-    auto_config: params::AutoConfigure,
-    hostname: Option<String>,
-    config_event_sink: Sender<events::Event>,
-) -> Result<(), system::SystemCtlError> {
-    // initialize the system with config
-    system::modify_environment(&auto_config, &hostname).await?;
-
-    // let the first time go from config-mismatch event reporting
-    loop {
-        // reinforce the system with config
-        let events = system::modify_environment(&auto_config, &hostname).await?;
-        for event in events.into_iter() {
-            eprintln!(
-                "System Configuration Thread: Configuration not stable. {}",
-                &event
-            );
-            config_event_sink.send(event)?
-        }
-
-        // ensure configuratione very five minutes.
-        sleep(Duration::from_secs(300)).await;
-    }
-
-    Ok(())
-}
+*/

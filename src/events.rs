@@ -1,12 +1,12 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
 use rmesg::entry;
+use time::OffsetDateTime;
 
 #[cfg(test)]
 use schemars::JsonSchema;
@@ -62,7 +62,7 @@ pub enum Version {
     V1 {
         /// This is universal and important for all events. They occur at a time.
         #[cef_ext_gobble]
-        timestamp: DateTime<Utc>,
+        timestamp: OffsetDateTime,
 
         #[cef_ext_field(dhost)]
         #[serde(skip_serializing_if = "Option::is_none")]
