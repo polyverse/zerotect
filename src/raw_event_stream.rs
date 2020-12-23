@@ -129,14 +129,15 @@ impl RawEventStream {
                         continue;
                     }
 
-                    match RawEventStream::parse_finite_kmsg_to_event(&entry, &entry_timestamp, &hostname)
-                        .or_else(|| self.parse_fatal_signal(&entry, &entry_timestamp, &hostname)) {
+                    match RawEventStream::parse_finite_kmsg_to_event(&entry, entry_timestamp, &hostname).await {
                         Some(e) => return Ok(e),
-
-                        // next entry wasn't a legit event... keep looping
-                        // since the stream hasn't returned None, don't return None
-                        // to indicate ending of upstream stream
-                        None => continue,
+                        None => match self.parse_fatal_signal(&entry, entry_timestamp, &hostname).await {
+                            Some(e) => return Ok(e),
+                            // next entry wasn't a legit event... keep looping
+                            // since the stream hasn't returned None, don't return None
+                            // to indicate ending of upstream stream
+                            None => continue,
+                        },
                     }
                 },
 
@@ -149,13 +150,15 @@ impl RawEventStream {
         }
     }
 
-    fn parse_finite_kmsg_to_event(
-        rmesg_entry: &rmesg::entry::Entry,
-        entry_timestamp: &OffsetDateTime,
+    async fn parse_finite_kmsg_to_event(
+        entry: &rmesg::entry::Entry,
+        entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
-        RawEventStream::parse_callbacks_suppressed(rmesg_entry, entry_timestamp, hostname)
-            .or_else(|| RawEventStream::parse_kernel_trap(rmesg_entry, entry_timestamp, hostname))
+        match RawEventStream::parse_callbacks_suppressed(entry, entry_timestamp, hostname).await {
+            Some(e) => Some(e),
+            None => RawEventStream::parse_kernel_trap(entry, entry_timestamp, hostname).await
+        }
     }
 
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
@@ -167,7 +170,7 @@ impl RawEventStream {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap(rmesg_entry: &rmesg::entry::Entry, entry_timestamp: &OffsetDateTime, hostname: &Option<String>) -> Option<events::Version> {
+    async fn parse_kernel_trap(entry: &rmesg::entry::Entry, entry_timestamp: OffsetDateTime, hostname: &Option<String>) -> Option<events::Version> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -196,8 +199,10 @@ impl RawEventStream {
 
         }
 
-        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(rmesg_entry.message.as_str()) {
+        if let Some(dmesg_parts) = RE_WITHOUT_LOCATION.captures(entry.message.as_str()) {
             if let (
+                Some(facility),
+                Some(level),
                 procname,
                 Some(pid),
                 Some(trap),
@@ -206,9 +211,11 @@ impl RawEventStream {
                 Some(errcode),
                 maybelocation,
             ) = (
+                entry.facility,
+                entry.level,
                 &dmesg_parts["procname"],
                 common::parse_fragment::<usize>(&dmesg_parts["pid"]),
-                RawEventStream::parse_kernel_trap_type(&dmesg_parts["message"]),
+                RawEventStream::parse_kernel_trap_type(&dmesg_parts["message"]).await,
                 common::parse_hex::<usize>(&dmesg_parts["ip"]),
                 common::parse_hex::<usize>(&dmesg_parts["sp"]),
                 common::parse_hex::<usize>(&dmesg_parts["errcode"]),
@@ -226,11 +233,11 @@ impl RawEventStream {
                     };
 
                 return Some(events::Version::V1 {
-                    timestamp: rmesg_entry.timestamp,
+                    timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                        facility: rmesg_entry.facility,
-                        level: rmesg_entry.level,
+                        facility: facility,
+                        level: level,
                         trap,
                         procname: procname.to_owned(),
                         pid,
@@ -251,7 +258,7 @@ impl RawEventStream {
     // Parsing based on: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/kernel/traps.c#n230
     // Parses this basic structure:
     // a.out[33629]: <some text> ip 0000556b4c03c603 sp 00007ffe55496510 error 4 in a.out[556b4c03c000+1000]
-    fn parse_kernel_trap_type(trap_string: &str) -> Option<events::KernelTrapType> {
+    async fn parse_kernel_trap_type(trap_string: &str) -> Option<events::KernelTrapType> {
         lazy_static! {
             static ref RE_SEGFAULT: Regex = Regex::new(
                 r"(?x)^
@@ -293,10 +300,10 @@ impl RawEventStream {
     // Signal Printed here: https://github.com/torvalds/linux/blob/master/kernel/signal.c#L1239
     // ---------------------------------------------------------------
     // potentially unexpected fatal signal 11.
-    fn parse_fatal_signal(
+    async fn parse_fatal_signal(
         &mut self,
         rmesg_entry: &rmesg::entry::Entry,
-        entry_timestamp: &OffsetDateTime,
+        entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
@@ -306,15 +313,15 @@ impl RawEventStream {
             if let Some(signalnum) =
                 common::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
             {
-                if let Some(signal) = events::FatalSignalType::from_u8(signalnum) {
+                if let (Some(facility), Some(level), Some(signal)) = (rmesg_entry.facility, rmesg_entry.level, events::FatalSignalType::from_u8(signalnum)) {
                     return Some(events::Version::V1 {
-                        timestamp: rmesg_entry.timestamp,
+                        timestamp: entry_timestamp,
                         hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                            facility: rmesg_entry.facility,
-                            level: rmesg_entry.level,
+                            facility: facility,
+                            level: level,
                             signal,
-                            stack_dump: self.parse_stack_dump(hostname),
+                            stack_dump: self.parse_stack_dump(hostname).await,
                         }),
                     });
                 } else {
@@ -353,39 +360,45 @@ impl RawEventStream {
     // FS:  00007fd15e0e7500(0000) GS:ffff9b08ffd00000(0000) knlGS:0000000000000000
     // CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
     // CR2: 0000000000000000 CR3: 0000000132d26005 CR4: 00000000000606a0
-    fn parse_stack_dump(&mut self, hostname: &Option<String>) -> BTreeMap<String, String> {
+    async fn parse_stack_dump(&mut self, hostname: &Option<String>) -> BTreeMap<String, String> {
         // Not implemented
         let mut sd = BTreeMap::<String, String>::new();
 
         // the various branches of the loop will terminate...
-        loop {
-            let maybe_peek_msg = self.timeout_kmsg_iter.peek_timeout(self.flush_timeout);
+        loop { ;
             // peek next line, and if it has a colon, take it
-            let rmesg_entry = match maybe_peek_msg {
-                Ok(peek_kmsg) => {
+            let entry = match self.entries.peek_timeout(self.flush_timeout).await {
+                Ok(Ok(peek_entry)) => {
+                    let peek_entry_timestamp = match peek_entry.timestamp_from_system_start {
+                        Some(timestamp_from_system_start) => self.system_start_time.add(timestamp_from_system_start),
+                        None => return sd, // no timestamp? That ends the loop!
+                    };
+
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if RawEventStream::parse_finite_kmsg_to_event(peek_kmsg, hostname).is_some() {
+                    if RawEventStream::parse_finite_kmsg_to_event(peek_entry, peek_entry_timestamp, hostname).await.is_some() {
                         return sd;
                     }
 
-                    if !peek_kmsg.message.contains(':') {
+                    if !peek_entry.message.contains(':') {
                         // if no ":", then this isn't part of all the KV pairs
                         return sd;
                     } else {
-                        self.timeout_kmsg_iter.next().unwrap()
+                        // consume next since it worked.
+                        // double-unwrap since we matched for Ok(Ok(_)) above
+                        self.entries.next().await.unwrap().unwrap()
                     }
                 }
                 // if error peeking, return what we have...
                 // error might be a timeout or something else.
-                Err(_) => return sd,
+                _ => return sd,
             };
 
             // now operate on the owned KMsg line
             // since all other paths have exited
 
             // split message parts on whitespace
-            let parts: Vec<_> = rmesg_entry.message.split(|c| c == ' ').collect();
+            let parts: Vec<_> = entry.message.split(|c| c == ' ').collect();
 
             // consume kmsg key->value one by one (don't split all at once)
             // maintain state as we iterate
@@ -399,11 +412,11 @@ impl RawEventStream {
                     if let Some(v) = value {
                         if let Some(k) = key {
                             if self.verbosity > 1 {
-                                eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, rmesg_entry.message);
+                                eprintln!("Monitor:: parse_stack_dump:: Adding K/V pair: ({}, {}). Log Line: {}", &k, &v, entry.message);
                             }
                             sd.insert(k, v);
                         } else if self.verbosity > 0 {
-                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", rmesg_entry.message);
+                            eprintln!("Monitor:: parse_stack_dump:: For this line, transitioned to value without a key. Some data might not be parsed. Log Line: {}", entry.message);
                         }
 
                         // Key becomes this part, minus the :
@@ -447,7 +460,7 @@ impl RawEventStream {
             // cleanup last value - if it comes in a pair
             if let (Some(k), Some(v)) = (key, value) {
                 if self.verbosity > 1 {
-                    eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, rmesg_entry.message);
+                    eprintln!("Monitor:: parse_stack_dump:: Adding Final K/V pair: ({}, {}). Log Line: {}", &k, &v, entry.message);
                 }
                 sd.insert(k, v);
             }
@@ -457,9 +470,9 @@ impl RawEventStream {
     // Parsing based on: https://github.com/torvalds/linux/blob/9331b6740f86163908de69f4008e434fe0c27691/lib/ratelimit.c#L51
     // Parses this basic structure:
     // ====> <function name>: 9 callbacks suppressed
-    fn parse_callbacks_suppressed(
+    async fn parse_callbacks_suppressed(
         rmesg_entry: &rmesg::entry::Entry,
-        entry_timestamp: &OffsetDateTime,
+        entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Version> {
         lazy_static! {
@@ -476,17 +489,19 @@ impl RawEventStream {
         }
 
         if let Some(dmesg_parts) = RE_CALLBACKS_SUPPRESSED.captures(rmesg_entry.message.as_str()) {
-            if let (function_name, Some(count)) = (
+            if let (Some(level), Some(facility), function_name, Some(count)) = (
+                rmesg_entry.level,
+                rmesg_entry.facility,
                 &dmesg_parts["function"],
                 common::parse_fragment::<usize>(&dmesg_parts["count"]),
             ) {
                 return Some(events::Version::V1 {
-                    timestamp: rmesg_entry.timestamp,
+                    timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
                         events::LinuxSuppressedCallback {
-                            facility: rmesg_entry.facility,
-                            level: rmesg_entry.level,
+                            facility: facility,
+                            level: level,
                             function_name: function_name.to_owned(),
                             count,
                         },

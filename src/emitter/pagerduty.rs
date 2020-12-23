@@ -2,7 +2,7 @@
 
 use crate::emitter;
 use crate::events;
-use pagerduty_rs::eventsv2;
+use pagerduty_rs::asynchronous::*;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use time::OffsetDateTime;
@@ -29,8 +29,9 @@ pub struct PagerDuty {
     eventsv2: eventsv2::EventsV2,
 }
 
+#[async_trait]
 impl emitter::Emitter for PagerDuty {
-    fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) {
         if !event.as_ref().is_analyzed() {
             return;
         };
@@ -58,7 +59,7 @@ impl emitter::Emitter for PagerDuty {
                 dedup_key: None,
                 client: Some("Zerotect".to_owned()),
                 client_url: Some("https://github.com/polyverse/zerotect".to_owned()),
-            }));
+            })).await;
 
         if let Err(err) = result {
             eprintln!(

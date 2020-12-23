@@ -4,14 +4,16 @@ use crate::emitter;
 use crate::events;
 use crate::formatter::{new as new_formatter, Formatter};
 use crate::params;
+use async_trait::async_trait;
 
 pub struct Console {
     config: params::ConsoleConfig,
     formatter: Box<dyn Formatter>,
 }
 
+#[async_trait]
 impl emitter::Emitter for Console {
-    fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) {
         match self.formatter.format(event) {
             Ok(formattedstr) => println!("{}", formattedstr),
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),

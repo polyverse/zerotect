@@ -14,9 +14,10 @@ mod pagerduty;
 mod polycorder;
 mod syslogger;
 
+#[async_trait]
 pub trait Emitter {
     // Emit this event synchronously (blocks current thread)
-    fn emit(&mut self, event: &events::Event);
+    async fn emit(&mut self, event: &events::Event) !;
 }
 
 pub struct EmitterConfig {
@@ -60,7 +61,7 @@ impl From<pagerduty::PagerDutyError> for EmitterError {
     }
 }
 
-pub fn emit(
+pub async fn emit(
     ec: EmitterConfig,
     source: Receiver<events::Event>,
     hostname: Option<String>,

@@ -38,8 +38,9 @@ struct Report<'l> {
     events: &'l Vec<events::Event>,
 }
 
+#[async_trait]
 impl emitter::Emitter for Polycorder {
-    fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) {
         if let Err(e) = self.sender.send(event.clone()) {
             eprintln!("Polycorder: Error queing event to Polycorder: {}", e);
         }

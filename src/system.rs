@@ -16,7 +16,13 @@ use futures::stream::Stream;
 use core::future::Future;
 use core::pin::Pin;
 use futures::task::{Context, Poll};
-use tokio::time::{sleep, Sleep};
+
+// Change to below once we upgrade to Tokio 0.3.x which is gated
+// on hyper: https://github.com/hyperium/hyper/issues/2302
+//use tokio::time::{sleep, Sleep};
+// Workaround for tokio 0.2.24 that keeps all inline code identical:
+use tokio::time::{delay_for as sleep, Delay as Sleep};
+
 use std::time::Duration;
 use time::OffsetDateTime;
 
@@ -72,17 +78,17 @@ pub struct EnvironmentConfigurator {
     sleep_future: Option<Sleep>,
 }
 impl EnvironmentConfigurator {
-    pub fn new(auto_config: params::AutoConfigure, hostname: Option<String>) {
-        EnvironmentConfigurator {
+    pub fn new(auto_config: params::AutoConfigure, hostname: Option<String>) -> Self {
+        Self {
             auto_config,
             sleep_interval: Duration::from_secs(300),
             hostname,
             change_events: Vec::new(),
-            sleep_future: None,
+            sleep_future: Option::<Sleep>::None,
         }
     }
 
-    fn enforce_config(&mut self) {
+    fn enforce_config(&mut self) -> Result<(), SystemConfigError> {
         // if not sleeping.. reinforce the system with config
         let events = modify_environment(&self.auto_config, &self.hostname)?;
         for event in events.into_iter() {
@@ -92,10 +98,12 @@ impl EnvironmentConfigurator {
             );
             self.change_events.push(event);
         }
+
+        Ok(())
     }
 }
 impl Stream for EnvironmentConfigurator {
-    type Item = events::Event;
+    type Item = Result<events::Event, SystemConfigError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::option::Option<<Self as Stream>::Item>> {
 
@@ -115,10 +123,12 @@ impl Stream for EnvironmentConfigurator {
         }
 
         // enforce configuration
-        self.enforce_config();
+        if let Err(e) = self.enforce_config() {
+            return Poll::Ready(Some(Err(e)));
+        }
 
         // entries empty? then go to sleep...
-        if self.entries.is_empty() {
+        if self.change_events.is_empty() {
             let mut sf = sleep(self.sleep_interval);
             match Future::poll(Pin::new(&mut sf), cx) {
                 Poll::Pending => {
@@ -126,13 +136,13 @@ impl Stream for EnvironmentConfigurator {
                     return Poll::Pending;
                 },
                 Poll::Ready(_) => {
-                    eprintln!("Sleep future did not return Poll::Pending as expected despite being asked to sleep for {}", self.sleep_interval);
+                    eprintln!("Sleep future did not return Poll::Pending as expected despite being asked to sleep for {:?}", self.sleep_interval);
                     return Poll::Pending;
                 }
             }
         }
 
-        Poll::Ready(Some(Ok(self.entries.remove(0))))
+        Poll::Ready(Some(Ok(self.change_events.remove(0))))
     }
 }
 /*
@@ -155,7 +165,7 @@ async fn configure_environment(
 */
 
 pub fn system_start_time() -> Result<OffsetDateTime, SystemConfigError> {
-    let system_uptime_nanos: i64 = (system_uptime_secs()? * 1000000000.0) as i64;
+    let system_uptime_nanos: u64 = (system_uptime_secs()? * 1000000000.0) as u64;
     Ok(OffsetDateTime::now_utc().sub(Duration::from_nanos(system_uptime_nanos)))
 }
 

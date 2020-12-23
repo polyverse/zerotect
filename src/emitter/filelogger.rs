@@ -38,8 +38,9 @@ pub struct FileLogger {
     writer: Box<dyn Write>,
 }
 
+#[async_trait]
 impl emitter::Emitter for FileLogger {
-    fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) {
         match self.event_formatter.format(event) {
             Ok(formattedstr) => match self.writer.write_fmt(format_args!("{}\n", formattedstr)) {
                 Ok(()) => {}

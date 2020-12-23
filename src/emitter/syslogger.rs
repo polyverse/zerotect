@@ -38,8 +38,9 @@ pub struct SysLogger {
     inner_logger: Logger<LoggerBackend, Formatter3164>,
 }
 
+#[async_trait]
 impl emitter::Emitter for SysLogger {
-    fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) {
         match self.event_formatter.format(event) {
             Ok(formattedstr) => {
                 if let Err(e) = self.inner_logger.info(&formattedstr) {
