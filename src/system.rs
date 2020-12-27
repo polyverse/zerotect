@@ -70,7 +70,7 @@ pub struct EnvironmentConfigurator {
     sleep_interval: Duration,
     hostname: Option<String>,
     change_events: Vec<events::Event>,
-    sleep_future: Option<Sleep>,
+    sleep_future: Option<Pin<Box<Sleep>>>,
 }
 impl EnvironmentConfigurator {
     pub fn new(auto_config: params::AutoConfigure, hostname: Option<String>) -> Self {
@@ -79,7 +79,7 @@ impl EnvironmentConfigurator {
             sleep_interval: Duration::from_secs(300),
             hostname,
             change_events: Vec::new(),
-            sleep_future: Option::<Sleep>::None,
+            sleep_future: None,
         }
     }
 
@@ -104,7 +104,7 @@ impl Stream for EnvironmentConfigurator {
 
         // if already sleeping... handle that.
         if let Some(mut sf) = self.sleep_future.take() {
-            match Future::poll(Pin::new(&mut sf), cx) {
+            match Future::poll(sf.as_mut(), cx) {
                 // still sleeping? Go back to sleep.
                 Poll::Pending => {
                     // put the future back in
@@ -125,9 +125,10 @@ impl Stream for EnvironmentConfigurator {
         // entries empty? then go to sleep...
         if self.change_events.is_empty() {
             let mut sf = sleep(self.sleep_interval);
-            match Future::poll(Pin::new(&mut sf), cx) {
+            let mut pinned_sf = Box::pin(sf);
+            match Future::poll(pinned_sf.as_mut(), cx) {
                 Poll::Pending => {
-                    self.sleep_future = Some(sf);
+                    self.sleep_future = Some(pinned_sf);
                     return Poll::Pending;
                 },
                 Poll::Ready(_) => {
