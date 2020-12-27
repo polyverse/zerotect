@@ -365,7 +365,7 @@ impl RawEventStream {
         let mut sd = BTreeMap::<String, String>::new();
 
         // the various branches of the loop will terminate...
-        loop { ;
+        loop {
             // peek next line, and if it has a colon, take it
             let entry = match self.entries.peek_timeout(self.flush_timeout).await {
                 Ok(Ok(peek_entry)) => {

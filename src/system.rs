@@ -16,12 +16,7 @@ use futures::stream::Stream;
 use core::future::Future;
 use core::pin::Pin;
 use futures::task::{Context, Poll};
-
-// Change to below once we upgrade to Tokio 0.3.x which is gated
-// on hyper: https://github.com/hyperium/hyper/issues/2302
-//use tokio::time::{sleep, Sleep};
-// Workaround for tokio 0.2.24 that keeps all inline code identical:
-use tokio::time::{delay_for as sleep, Delay as Sleep};
+use tokio::time::{sleep, Sleep};
 
 use std::time::Duration;
 use time::OffsetDateTime;
