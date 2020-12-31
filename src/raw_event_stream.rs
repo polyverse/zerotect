@@ -23,7 +23,6 @@ use std::{
 };
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
-use std::ops::Sub;
 
 pub async fn new(
     c: RawEventStreamConfig,
@@ -578,6 +577,8 @@ mod test {
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
     use futures::stream::iter;
+    use std::ops::Sub;
+    use std::convert::TryInto;
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {
@@ -1423,69 +1424,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn is_sendable() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(57533475000000 + 372850970000000);
-        let kmsgs = vec![
-            rmesg::entry::Entry{
-                facility: Some(rmesg::entry::LogFacility::Kern),
-                level: Some(rmesg::entry::LogLevel::Warning),
-                timestamp_from_system_start: Some(timestamp_from_system_start(timestamp)),
-                sequence_num: None,
-                message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            },
-        ];
-
-            let mut parser = Box::pin(new_with_rmesg_stream(
-                RawEventStreamConfig{
-                    verbosity: 0,
-                    hostname: None,
-                    gobble_old_events: false,
-                    flush_timeout: Duration::from_secs(1),
-                },
-                Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
-            ).await
-            .unwrap());
-
-        thread::spawn(move || {
-            let maybe_segfault = parser.next().await;
-            assert!(maybe_segfault.is_some());
-            let segfault = maybe_segfault.unwrap();
-            assert_eq!(
-                segfault,
-                Arc::new(events::Version::V1 {
-                    timestamp,
-                    hostname: None,
-                    event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                        facility: rmesg::entry::LogFacility::Kern,
-                        level: rmesg::entry::LogLevel::Warning,
-                        trap: events::KernelTrapType::Segfault { location: 0 },
-                        procname: String::from("a.out"),
-                        pid: 36075,
-                        ip: 0x0000561bc8d8f12e,
-                        sp: 0x00007ffd5833d0c0,
-                        errcode: events::SegfaultErrorCode {
-                            reason: events::SegfaultReason::NoPageFound,
-                            access_type: events::SegfaultAccessType::Read,
-                            access_mode: events::SegfaultAccessMode::User,
-                            use_of_reserved_bit: false,
-                            instruction_fetch: false,
-                            protection_keys_block_access: false,
-                        },
-                        file: Some(String::from("a.out")),
-                        vmastart: Some(0x561bc8d8f000),
-                        vmasize: Some(0x1000),
-                    }),
-                })
-            );
-        });
-
-        assert!(
-            true,
-            "If this compiles, EventParser is Send-able across threads."
-        );
-    }
-
-    #[tokio::test]
     async fn can_parse_suppressed_callback() {
         let timestamp = OffsetDateTime::from_unix_timestamp_nanos(803835000000 + 372850970000000);
 
@@ -1546,9 +1484,9 @@ mod test {
 
     fn timestamp_from_system_start(timestamp: OffsetDateTime) -> Duration {
         lazy_static! {
-            static let ref system_start = system::system_start_time().unwrap();
+            static ref system_start: OffsetDateTime = system::system_start_time().unwrap();
         }
 
-        timestamp.sub(system_start)
+        timestamp.sub(*system_start).try_into().unwrap()
     }
 }

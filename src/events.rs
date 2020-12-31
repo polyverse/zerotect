@@ -9,8 +9,6 @@ use strum_macros::EnumString;
 use time::OffsetDateTime;
 
 #[cfg(test)]
-use schemars::JsonSchema;
-#[cfg(test)]
 use serde::Deserialize;
 
 pub type Event = Arc<Version>;
