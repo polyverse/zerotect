@@ -2,27 +2,32 @@
 
 use crate::emitter;
 use crate::events;
-use crate::formatter::{new as new_formatter, Formatter};
+use crate::formatter::new as new_formatter;
 use crate::params;
-use async_trait::async_trait;
+use tokio::sync::broadcast;
 
-pub struct Console {
+pub async fn emit_forever(
     config: params::ConsoleConfig,
-    formatter: Box<dyn Formatter>,
-}
-
-#[async_trait]
-impl emitter::Emitter for Console {
-    async fn emit(&mut self, event: &events::Event) -> emitter::EmitFuture{
-        match self.formatter.format(event) {
-            Ok(formattedstr) => println!("{}", formattedstr),
-            Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),
-        }
-    }
-}
-
-pub async fn new(config: params::ConsoleConfig) -> Console {
+    mut source: broadcast::Receiver<events::Event>,
+) -> Result<(), emitter::EmitterError> {
     let formatter = new_formatter(&config.format);
 
-    Console { config, formatter }
+    loop {
+        match source.recv().await {
+            Ok(event) => match formatter.format(&event) {
+                Ok(formattedstr) => println!("{}", formattedstr),
+                Err(e) => eprintln!(
+                    "Console Logger: Ignoring error formatting event to {:?}: {}",
+                    config.format, e
+                ),
+            },
+            Err(broadcast::error::RecvError::Lagged(count)) => eprintln!(
+                "Console emitter is lagging behind generated events. {} events have been dropped.",
+                count
+            ),
+            Err(broadcast::error::RecvError::Closed) => {
+                panic!("Console emitter event source closed. Panicking and exiting.")
+            }
+        }
+    }
 }

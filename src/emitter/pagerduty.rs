@@ -6,7 +6,7 @@ use pagerduty_rs::asynchronous::*;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use time::OffsetDateTime;
-use async_trait::async_trait;
+use tokio::sync::broadcast;
 
 #[derive(Debug)]
 pub enum PagerDutyError {
@@ -26,53 +26,60 @@ impl From<eventsv2::EventsV2Error> for PagerDutyError {
     }
 }
 
-pub struct PagerDuty {
-    eventsv2: eventsv2::EventsV2,
-}
+pub async fn emit_forever(
+    routing_key: String,
+    source: broadcast::Receiver<events::Event>,
+) -> Result<PagerDuty, PagerDutyError> {
+    let eventsv2 = eventsv2::EventsV2::new(routing_key, Some("zerotect".to_owned()))?;
 
-#[async_trait]
-impl emitter::Emitter for PagerDuty {
-    async fn emit(&mut self, event: &events::Event) {
-        if !event.as_ref().is_analyzed() {
-            return;
-        };
+    loop {
+        match source.recv().await {
+            Ok(event) => {
+                if !event.as_ref().is_analyzed() {
+                    return;
+                };
 
-        let source = match event.as_ref().get_hostname() {
-            Some(h) => h.to_owned(),
-            None => "unknown".to_owned(),
-        };
+                let source = match event.as_ref().get_hostname() {
+                    Some(h) => h.to_owned(),
+                    None => "unknown".to_owned(),
+                };
 
-        let result = self
-            .eventsv2
-            .event(eventsv2::Event::AlertTrigger(eventsv2::AlertTrigger {
-                payload: eventsv2::AlertTriggerPayload {
-                    summary: "Zerotect detected anomaly".to_owned(),
-                    source,
-                    timestamp: Some(OffsetDateTime::now_utc()),
-                    severity: eventsv2::Severity::Warning,
-                    component: None,
-                    group: None,
-                    class: None,
-                    custom_details: Some(event.as_ref()),
-                },
-                images: None,
-                links: None,
-                dedup_key: None,
-                client: Some("Zerotect".to_owned()),
-                client_url: Some("https://github.com/polyverse/zerotect".to_owned()),
-            })).await;
+                let result = eventsv2
+                    .event(eventsv2::Event::AlertTrigger(eventsv2::AlertTrigger {
+                        payload: eventsv2::AlertTriggerPayload {
+                            summary: "Zerotect detected anomaly".to_owned(),
+                            source,
+                            timestamp: Some(OffsetDateTime::now_utc()),
+                            severity: eventsv2::Severity::Warning,
+                            component: None,
+                            group: None,
+                            class: None,
+                            custom_details: Some(event.as_ref()),
+                        },
+                        images: None,
+                        links: None,
+                        dedup_key: None,
+                        client: Some("Zerotect".to_owned()),
+                        client_url: Some("https://github.com/polyverse/zerotect".to_owned()),
+                    }))
+                    .await;
 
-        if let Err(err) = result {
-            eprintln!(
-                "Error when writing event to pager duty. Not retrying. {}",
-                err
-            );
+                if let Err(err) = result {
+                    eprintln!(
+                        "Error when writing event to pager duty. Not retrying. {}",
+                        err
+                    );
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(count)) => {
+                eprintln!(
+                    "PagerDuty is lagging behind generated events. {} events have been dropped.",
+                    count
+                )
+            }
+            Err(broadcast::error::RecvError::Closed) => {
+                panic!("PagerDuty event source closed. Panicking and exiting.")
+            }
         }
     }
-}
-
-pub async fn new(routing_key: String) -> Result<PagerDuty, PagerDutyError> {
-    Ok(PagerDuty {
-        eventsv2: eventsv2::EventsV2::new(routing_key, Some("zerotect".to_owned()))?,
-    })
 }

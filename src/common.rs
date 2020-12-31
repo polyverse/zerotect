@@ -1,5 +1,4 @@
 use crate::events;
-use core::pin::Pin;
 use futures::Stream;
 use num::{Integer, Unsigned};
 use std::any::type_name;

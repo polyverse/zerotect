@@ -15,7 +15,7 @@ extern crate assert_matches;
 
 mod analyzer;
 mod common;
-//mod emitter;
+mod emitter;
 mod events;
 mod formatter;
 mod params;
@@ -26,11 +26,7 @@ use core::pin::Pin;
 use futures::stream::Stream;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::{process, thread, time::Duration};
-use tokio::{
-    sync::mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
-    time::sleep,
-};
+use std::process;
 use tokio_stream::StreamExt;
 
 #[derive(Debug)]
@@ -39,11 +35,6 @@ impl Error for MainError {}
 impl Display for MainError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "MainError:: {}", self.0)
-    }
-}
-impl From<SendError<events::Event>> for MainError {
-    fn from(err: SendError<events::Event>) -> Self {
-        Self(format!("Inner SendError<events::Event> :: {}", err))
     }
 }
 impl From<system::SystemConfigError> for MainError {
@@ -109,94 +100,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ),
         };
 
-    /*
     // split these up before a move
-    let everbosity = zerotect_config.verbosity;
-    let console = zerotect_config.console;
-    let polycorder = zerotect_config.polycorder;
-    let syslog = zerotect_config.syslog;
-    let logfile = zerotect_config.logfile;
-    let ehostname = zerotect_config.hostname;
-    let pagerduty_routing_key = zerotect_config.pagerduty_routing_key;
-
-    let emitter_thread_result = thread::Builder::new()
-        .name("Event Emitter Thread".to_owned())
-        .spawn(move || {
-            let ec = emitter::EmitterConfig {
-                verbosity: everbosity,
-                console,
-                polycorder,
-                syslog,
-                logfile,
-                pagerduty_routing_key,
-            };
-            if let Err(e) = emitter::emit(ec, emitter_source, ehostname) {
-                eprintln!("Error launching Emitter: {}", e);
-                process::exit(1);
-            }
-        });
-
-    let emitter_handle = match emitter_thread_result {
-        Ok(eh) => eh,
-        Err(e) => {
-            eprintln!("An error occurred spawning the emitter thread: {}", e);
-            process::exit(1);
-        }
+    let ec = emitter::EmitterConfig {
+        verbosity: zerotect_config.verbosity,
+        console: zerotect_config.console,
+        polycorder: zerotect_config.polycorder,
+        syslog: zerotect_config.syslog,
+        logfile: zerotect_config.logfile,
+        pagerduty_routing_key: zerotect_config.pagerduty_routing_key,
     };
 
-    eprintln!("Waiting indefinitely until environment monitor, event monitor, analyzer and emitter exit....");
-    tokio::try_join!(env_future, monitor_future);
-
-    emitter_handle
-        .join()
-        .expect("Unable to join on the emitter thread");
-    if let Some(analyzer_handle) = maybe_analyzer_handle {
-        analyzer_handle
-            .join()
-            .expect("Unable to join on the analyzer thread");
-    }
-    */
+    emitter::emit_forever(ec, analyzed_stream, zerotect_config.hostname).await?;
 
     Ok(())
 }
-
-/*
-fn optional_analyzer(
-    verbosity: u8,
-    ac: params::AnalyticsConfig,
-) -> (
-    UnboundedSender<events::Event>,
-    UnboundedReceiver<events::Event>,
-    Option<thread::JoinHandle<()>>,
-) {
-    let (monitor_sink, analyzer_source): (UnboundedSender<events::Event>, UnboundedReceiver<events::Event>) =
-        unbounded_channel();
-
-    if ac.mode == params::AnalyticsMode::Off {
-        // if analytics is disabled, short-circuit the first channel between monitor and emitter
-        return (monitor_sink, analyzer_source, None);
-    }
-
-    let (analyzer_sink, emitter_source): (UnboundedSender<events::Event>, UnboundedReceiver<events::Event>) =
-        unbounded_channel();
-
-    let analyzer_thread_result = thread::Builder::new()
-        .name("Event Analyzer Thread".to_owned())
-        .spawn(move || {
-            if let Err(e) = analyzer::analyze(verbosity, ac, analyzer_source, analyzer_sink) {
-                eprintln!("Error launching Analyzer: {}", e);
-                process::exit(1);
-            }
-        });
-
-    let analyzer_handle = match analyzer_thread_result {
-        Ok(ah) => ah,
-        Err(e) => {
-            eprintln!("An error occurred spawning the analyzer thread: {}", e);
-            process::exit(1);
-        }
-    };
-
-    (monitor_sink, emitter_source, Some(analyzer_handle))
-}
-*/

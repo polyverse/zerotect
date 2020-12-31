@@ -8,7 +8,6 @@ use crate::system;
 use core::pin::Pin;
 use futures::{
     stream::{self, Stream},
-    task::{Context, Poll},
     StreamExt,
 };
 use num::FromPrimitive;
@@ -20,7 +19,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     ops::Add,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;

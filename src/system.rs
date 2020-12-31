@@ -17,7 +17,6 @@ use std::str;
 use std::sync::Arc;
 use sys_info::os_type;
 use sysctl::Sysctl;
-use tokio::sync::broadcast;
 use tokio::time::{sleep, Sleep};
 
 use std::time::Duration;
