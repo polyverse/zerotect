@@ -13,7 +13,7 @@ pub struct Console {
 
 #[async_trait]
 impl emitter::Emitter for Console {
-    async fn emit(&mut self, event: &events::Event) {
+    async fn emit(&mut self, event: &events::Event) -> emitter::EmitFuture{
         match self.formatter.format(event) {
             Ok(formattedstr) => println!("{}", formattedstr),
             Err(e) => eprintln!("Error formatting event to {:?}: {}", self.config.format, e),
@@ -21,7 +21,7 @@ impl emitter::Emitter for Console {
     }
 }
 
-pub fn new(config: params::ConsoleConfig) -> Console {
+pub async fn new(config: params::ConsoleConfig) -> Console {
     let formatter = new_formatter(&config.format);
 
     Console { config, formatter }

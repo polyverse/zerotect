@@ -15,21 +15,23 @@ extern crate assert_matches;
 
 mod analyzer;
 mod common;
-mod emitter;
+//mod emitter;
 mod events;
 mod formatter;
-mod raw_event_stream;
 mod params;
+mod raw_event_stream;
 mod system;
 
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender, error::SendError};
-use std::thread;
-use std::time::Duration;
+use core::pin::Pin;
+use futures::stream::Stream;
 use std::error::Error;
-use std::process;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-
-use tokio::time::sleep;
+use std::{process, thread, time::Duration};
+use tokio::{
+    sync::mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
+    time::sleep,
+};
+use tokio_stream::StreamExt;
 
 #[derive(Debug)]
 pub struct MainError(String);
@@ -51,9 +53,13 @@ impl From<system::SystemConfigError> for MainError {
 }
 impl From<raw_event_stream::RawEventStreamError> for MainError {
     fn from(err: raw_event_stream::RawEventStreamError) -> Self {
-        Self(format!("Inner raw_event_stream::RawEventStreamError :: {}", err))
+        Self(format!(
+            "Inner raw_event_stream::RawEventStreamError :: {}",
+            err
+        ))
     }
 }
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = system::ensure_linux() {
@@ -75,20 +81,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         },
     };
 
-//    let (monitor_sink, emitter_source, maybe_analyzer_handle) =
-//        optional_analyzer(zerotect_config.verbosity, zerotect_config.analytics);
-
     let auto_configure_env = zerotect_config.auto_configure;
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let env_events_stream = system::EnvironmentConfigurator::new(auto_configure_env, chostname);
+    let config_events_stream = system::EnvironmentConfigurator::new(auto_configure_env, chostname);
 
     let resc = raw_event_stream::RawEventStreamConfig {
         verbosity: zerotect_config.verbosity,
         hostname: zerotect_config.hostname.clone(),
         gobble_old_events: zerotect_config.monitor.gobble_old_events,
     };
-    let res = raw_event_stream::RawEventStream::new(resc);
+    let os_event_stream = raw_event_stream::new(resc).await?;
+
+    // get a unified stream of all incoming events...
+    let events_stream = Box::pin(os_event_stream.merge(config_events_stream));
+
+    let analyzed_stream: Pin<Box<dyn Stream<Item = events::Event>>> =
+        match zerotect_config.analytics.mode {
+            params::AnalyticsMode::Off => events_stream,
+            _ => Box::pin(
+                analyzer::new(
+                    zerotect_config.verbosity,
+                    zerotect_config.analytics,
+                    events_stream,
+                )
+                .await?,
+            ),
+        };
 
     /*
     // split these up before a move

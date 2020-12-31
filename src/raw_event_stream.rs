@@ -5,22 +5,61 @@ use crate::common;
 use crate::events;
 use crate::system;
 
+use core::pin::Pin;
+use futures::{
+    stream::{self, Stream},
+    task::{Context, Poll},
+    StreamExt,
+};
 use num::FromPrimitive;
 use regex::Regex;
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use timeout_iterator::asynchronous::TimeoutStream;
-use core::pin::Pin;
-use futures::stream::Stream;
-use futures::task::{Context, Poll};
-use futures::StreamExt;
-use rmesg::error::RMesgError;
-use rmesg::entry::Entry;
-use std::ops::Add;
+use rmesg::{entry::Entry, error::RMesgError};
+use std::{
+    collections::BTreeMap,
+    error::Error,
+    fmt::{Display, Formatter, Result as FmtResult},
+    ops::Add,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use time::OffsetDateTime;
+use timeout_iterator::asynchronous::TimeoutStream;
+
+pub async fn new(
+    c: RawEventStreamConfig,
+) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
+    if c.verbosity > 0 {
+        eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
+    }
+
+    let entries = TimeoutStream::with_stream(
+        rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
+    )
+    .await?;
+
+    let system_start_time = system::system_start_time()?;
+
+    // Start processing events from system start? Or when zerotect was started?
+    let event_stream_start_time = match c.gobble_old_events {
+        true => system_start_time,
+        false => OffsetDateTime::now_utc(),
+    };
+
+    let res = RawEventStream {
+        entries,
+        verbosity: c.verbosity,
+        hostname: c.hostname,
+        flush_timeout: Duration::from_secs(1),
+        system_start_time,
+        event_stream_start_time,
+    };
+
+    let s = common::result_stream_exit_on_error(stream::unfold(res, |mut res| async move {
+        Some((res.parse_next_event().await, res))
+    }));
+
+    Ok(s)
+}
 
 #[derive(Debug)]
 pub enum RawEventStreamError {
@@ -28,16 +67,21 @@ pub enum RawEventStreamError {
     UnderlyingStreamedItemError(RMesgError),
     TimeoutStreamError(timeout_iterator::error::Error),
     SystemConfigError(system::SystemConfigError),
-    Generic(String)
+    Generic(String),
 }
 impl Error for RawEventStreamError {}
 impl Display for RawEventStreamError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            Self::UnderlyingStreamClosed => write!(f, "Underlying stream that provided Log Entries to be parsed closed"),
+            Self::UnderlyingStreamClosed => write!(
+                f,
+                "Underlying stream that provided Log Entries to be parsed closed"
+            ),
             Self::TimeoutStreamError(err) => write!(f, "TimeoutStreamError: {}", err),
             Self::SystemConfigError(err) => write!(f, "SystemConfigError: {}", err),
-            Self::UnderlyingStreamedItemError(err) => write!(f, "UnderlyingStreamedItemError: {}", err),
+            Self::UnderlyingStreamedItemError(err) => {
+                write!(f, "UnderlyingStreamedItemError: {}", err)
+            }
             Self::Generic(s) => write!(f, "{}", s),
         }
     }
@@ -82,32 +126,7 @@ pub struct RawEventStream {
 }
 
 impl RawEventStream {
-    pub async fn new(c: RawEventStreamConfig) -> Result<RawEventStream, RawEventStreamError> {
-        if c.verbosity > 0 {
-            eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
-        }
-
-        let entries = TimeoutStream::with_stream(rmesg::logs_iter(rmesg::Backend::Default, false, false).await?).await?;
-
-        let system_start_time = system::system_start_time()?;
-
-        // Start processing events from system start? Or when zerotect was started?
-        let event_stream_start_time = match c.gobble_old_events {
-            true => system_start_time,
-            false => OffsetDateTime::now_utc(),
-        };
-
-        Ok(RawEventStream {
-            entries,
-            verbosity: c.verbosity,
-            hostname: c.hostname,
-            flush_timeout: Duration::from_secs(1),
-            system_start_time,
-            event_stream_start_time,
-        })
-    }
-
-    async fn parse_next_event(&mut self) -> Result<events::Version, RawEventStreamError> {
+    async fn parse_next_event(&mut self) -> Result<events::Event, RawEventStreamError> {
         // we'll need to borrow and capture this in closures multiple times.
         // Make a one-time clone so we don't borrow self over and over again.
         let hostname = self.hostname.clone();
@@ -120,7 +139,9 @@ impl RawEventStream {
             match self.entries.next().await {
                 Some(Ok(entry)) => {
                     let entry_timestamp = match entry.timestamp_from_system_start {
-                        Some(timestamp_from_system_start) => self.system_start_time.add(timestamp_from_system_start),
+                        Some(timestamp_from_system_start) => {
+                            self.system_start_time.add(timestamp_from_system_start)
+                        }
                         None => continue, // ignore events without timestamp
                     };
 
@@ -129,9 +150,18 @@ impl RawEventStream {
                         continue;
                     }
 
-                    match RawEventStream::parse_finite_kmsg_to_event(&entry, entry_timestamp, &hostname).await {
+                    match RawEventStream::parse_finite_kmsg_to_event(
+                        &entry,
+                        entry_timestamp,
+                        &hostname,
+                    )
+                    .await
+                    {
                         Some(e) => return Ok(e),
-                        None => match self.parse_fatal_signal(&entry, entry_timestamp, &hostname).await {
+                        None => match self
+                            .parse_fatal_signal(&entry, entry_timestamp, &hostname)
+                            .await
+                        {
                             Some(e) => return Ok(e),
                             // next entry wasn't a legit event... keep looping
                             // since the stream hasn't returned None, don't return None
@@ -139,7 +169,7 @@ impl RawEventStream {
                             None => continue,
                         },
                     }
-                },
+                }
 
                 // If Iterated Item had an error, propagate up
                 Some(Err(e)) => return Err(e.into()),
@@ -154,10 +184,10 @@ impl RawEventStream {
         entry: &rmesg::entry::Entry,
         entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
-    ) -> Option<events::Version> {
+    ) -> Option<events::Event> {
         match RawEventStream::parse_callbacks_suppressed(entry, entry_timestamp, hostname).await {
             Some(e) => Some(e),
-            None => RawEventStream::parse_kernel_trap(entry, entry_timestamp, hostname).await
+            None => RawEventStream::parse_kernel_trap(entry, entry_timestamp, hostname).await,
         }
     }
 
@@ -170,7 +200,11 @@ impl RawEventStream {
     // ====>> traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]
     // Optionally followed by
     // ====>>  in a.out[556b4c03c000+1000]
-    async fn parse_kernel_trap(entry: &rmesg::entry::Entry, entry_timestamp: OffsetDateTime, hostname: &Option<String>) -> Option<events::Version> {
+    async fn parse_kernel_trap(
+        entry: &rmesg::entry::Entry,
+        entry_timestamp: OffsetDateTime,
+        hostname: &Option<String>,
+    ) -> Option<events::Event> {
         lazy_static! {
             static ref RE_WITHOUT_LOCATION: Regex = Regex::new(r"(?x)^
                 # start with any number of spaces or 'traps:'
@@ -232,7 +266,7 @@ impl RawEventStream {
                         (None, None, None)
                     };
 
-                return Some(events::Version::V1 {
+                return Some(Arc::new(events::Version::V1 {
                     timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -248,7 +282,7 @@ impl RawEventStream {
                         vmastart,
                         vmasize,
                     }),
-                });
+                }));
             }
         };
 
@@ -305,7 +339,7 @@ impl RawEventStream {
         rmesg_entry: &rmesg::entry::Entry,
         entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
-    ) -> Option<events::Version> {
+    ) -> Option<events::Event> {
         lazy_static! {
             static ref RE_FATAL_SIGNAL: Regex = Regex::new(r"(?x)^[[:space:]]*potentially[[:space:]]*unexpected[[:space:]]*fatal[[:space:]]*signal[[:space:]]*(?P<signalnumstr>[[:digit:]]*).*$").unwrap();
         }
@@ -313,8 +347,12 @@ impl RawEventStream {
             if let Some(signalnum) =
                 common::parse_fragment::<u8>(&fatal_signal_parts["signalnumstr"])
             {
-                if let (Some(facility), Some(level), Some(signal)) = (rmesg_entry.facility, rmesg_entry.level, events::FatalSignalType::from_u8(signalnum)) {
-                    return Some(events::Version::V1 {
+                if let (Some(facility), Some(level), Some(signal)) = (
+                    rmesg_entry.facility,
+                    rmesg_entry.level,
+                    events::FatalSignalType::from_u8(signalnum),
+                ) {
+                    return Some(Arc::new(events::Version::V1 {
                         timestamp: entry_timestamp,
                         hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
@@ -323,7 +361,7 @@ impl RawEventStream {
                             signal,
                             stack_dump: self.parse_stack_dump(hostname).await,
                         }),
-                    });
+                    }));
                 } else {
                     eprintln!(
                         "Unable to fatal signal number {} into known enumeration.",
@@ -370,13 +408,22 @@ impl RawEventStream {
             let entry = match self.entries.peek_timeout(self.flush_timeout).await {
                 Ok(Ok(peek_entry)) => {
                     let peek_entry_timestamp = match peek_entry.timestamp_from_system_start {
-                        Some(timestamp_from_system_start) => self.system_start_time.add(timestamp_from_system_start),
+                        Some(timestamp_from_system_start) => {
+                            self.system_start_time.add(timestamp_from_system_start)
+                        }
                         None => return sd, // no timestamp? That ends the loop!
                     };
 
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if RawEventStream::parse_finite_kmsg_to_event(peek_entry, peek_entry_timestamp, hostname).await.is_some() {
+                    if RawEventStream::parse_finite_kmsg_to_event(
+                        peek_entry,
+                        peek_entry_timestamp,
+                        hostname,
+                    )
+                    .await
+                    .is_some()
+                    {
                         return sd;
                     }
 
@@ -474,7 +521,7 @@ impl RawEventStream {
         rmesg_entry: &rmesg::entry::Entry,
         entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
-    ) -> Option<events::Version> {
+    ) -> Option<events::Event> {
         lazy_static! {
             static ref RE_CALLBACKS_SUPPRESSED: Regex = Regex::new(
                 r"(?x)^
@@ -495,7 +542,7 @@ impl RawEventStream {
                 &dmesg_parts["function"],
                 common::parse_fragment::<usize>(&dmesg_parts["count"]),
             ) {
-                return Some(events::Version::V1 {
+                return Some(Arc::new(events::Version::V1 {
                     timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
@@ -506,7 +553,7 @@ impl RawEventStream {
                             count,
                         },
                     ),
-                });
+                }));
             }
         };
 
@@ -1446,10 +1493,7 @@ mod test {
         })
     }
 
-    fn boxed_kmsgs(
-        timestamp: OffsetDateTime,
-        messages: Vec<String>,
-    ) -> Vec<Box<kmsg::KMsg>> {
+    fn boxed_kmsgs(timestamp: OffsetDateTime, messages: Vec<String>) -> Vec<Box<kmsg::KMsg>> {
         messages
             .into_iter()
             .map(|message| boxed_kmsg(timestamp, message))

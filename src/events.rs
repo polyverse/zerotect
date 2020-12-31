@@ -1,11 +1,11 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use rmesg::entry;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 use strum_macros::EnumString;
-use rmesg::entry;
 use time::OffsetDateTime;
 
 #[cfg(test)]

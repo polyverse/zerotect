@@ -1,8 +1,12 @@
 use crate::events;
+use core::pin::Pin;
+use futures::Stream;
 use num::{Integer, Unsigned};
 use std::any::type_name;
+use std::error::Error;
 use std::fmt::Display;
 use std::str::FromStr;
+use tokio_stream::StreamExt;
 
 pub fn get_first_event_hostname(events: &[events::Event]) -> Option<String> {
     events
@@ -56,4 +60,16 @@ pub fn abs_diff<N: Unsigned + Integer>(u1: N, u2: N) -> N {
     } else {
         u2 - u1
     }
+}
+
+pub fn result_stream_exit_on_error<E>(
+    stream: impl Stream<Item = Result<events::Event, E>>,
+) -> impl Stream<Item = events::Event>
+where
+    E: Error,
+{
+    stream.filter_map(|x| match x {
+        Ok(ev) => Some(ev),
+        Err(err) => panic!("Exiting due to error: {:?}", err),
+    })
 }

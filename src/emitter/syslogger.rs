@@ -9,6 +9,7 @@ use params::{SyslogConfig, SyslogDestination};
 use std::error;
 use std::fmt::{Display, Formatter as FmtFormatter, Result as FmtResult};
 use syslog::{Error as SyslogError, Facility, Formatter3164, Logger, LoggerBackend};
+use async_trait::async_trait;
 
 #[derive(Debug)]
 pub enum SysLoggerError {
@@ -55,7 +56,7 @@ impl emitter::Emitter for SysLogger {
     }
 }
 
-pub fn new(sc: SyslogConfig, hostname: Option<String>) -> Result<SysLogger, SysLoggerError> {
+pub async fn new(sc: SyslogConfig, hostname: Option<String>) -> Result<SysLogger, SysLoggerError> {
     let pid = getpid_safe();
     let syslog_formatter = Formatter3164 {
         facility: Facility::LOG_USER,

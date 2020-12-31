@@ -4,11 +4,12 @@ use crate::emitter;
 use crate::events;
 use crate::formatter::{new as new_formatter, Formatter as EventFormatter};
 use crate::params::{LogFileConfig, OutputFormat};
-use file_rotate_record_boundary::{FileRotate, RotationMode};
+use file_rotation::asynchronous::{FileRotate, RotationMode};
 use std::error;
 use std::fmt::{Display, Formatter as FmtFormatter, Result as FmtResult};
-use std::fs::OpenOptions;
-use std::io::{ErrorKind, Write};
+use tokio::fs::OpenOptions;
+use tokio::io::{ErrorKind, AsyncWrite};
+use async_trait::async_trait;
 
 #[derive(Debug)]
 pub enum FileLoggerError {
@@ -35,7 +36,7 @@ impl std::convert::From<std::io::Error> for FileLoggerError {
 pub struct FileLogger {
     output_format: OutputFormat,
     event_formatter: Box<dyn EventFormatter>,
-    writer: Box<dyn Write>,
+    writer: Box<dyn AsyncWrite>,
 }
 
 #[async_trait]
@@ -51,13 +52,13 @@ impl emitter::Emitter for FileLogger {
     }
 }
 
-pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
+pub async fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
     let event_formatter = new_formatter(&lfc.format);
 
-    let writer: Box<dyn Write> = match lfc.rotation_file_count {
+    let writer: Box<dyn AsyncWrite> = match lfc.rotation_file_count {
         Some(rfc) => match lfc.rotation_file_max_size {
             //wrap file in file-rotation
-            Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::BytesSurpassed(rfms), rfc)),
+            Some(rfms) => Box::new(FileRotate::new(lfc.filepath, RotationMode::BytesSurpassed(rfms), rfc).await),
             None => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless.".to_owned())),
         },
         None => match lfc.rotation_file_max_size {
@@ -65,11 +66,11 @@ pub fn new(lfc: LogFileConfig) -> Result<FileLogger, FileLoggerError> {
             None => match OpenOptions::new()
                 .append(true)
                 .create_new(true)
-                .open(&lfc.filepath)
+                .open(&lfc.filepath).await
             {
                 Ok(file) => Box::new(file),
                 Err(err) => match err.kind() {
-                    ErrorKind::AlreadyExists => Box::new(OpenOptions::new().append(true).open(lfc.filepath)?),
+                    ErrorKind::AlreadyExists => Box::new(OpenOptions::new().append(true).open(lfc.filepath).await?),
                     _ => return Err(FileLoggerError::from(err)),
                 },
             },

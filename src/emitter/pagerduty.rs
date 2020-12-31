@@ -6,6 +6,7 @@ use pagerduty_rs::asynchronous::*;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use time::OffsetDateTime;
+use async_trait::async_trait;
 
 #[derive(Debug)]
 pub enum PagerDutyError {
@@ -70,7 +71,7 @@ impl emitter::Emitter for PagerDuty {
     }
 }
 
-pub fn new(routing_key: String) -> Result<PagerDuty, PagerDutyError> {
+pub async fn new(routing_key: String) -> Result<PagerDuty, PagerDutyError> {
     Ok(PagerDuty {
         eventsv2: eventsv2::EventsV2::new(routing_key, Some("zerotect".to_owned()))?,
     })

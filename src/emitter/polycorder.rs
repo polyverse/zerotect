@@ -10,6 +10,7 @@ use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
+use async_trait::async_trait;
 
 use crate::emitter;
 use crate::events;
@@ -61,7 +62,7 @@ impl From<std::io::Error> for PolycorderError {
     }
 }
 
-pub fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder, PolycorderError> {
+pub async fn new(config: params::PolycorderConfig, verbosity: u8) -> Result<Polycorder, PolycorderError> {
     let (sender, receiver): (Sender<events::Event>, Receiver<events::Event>) = channel();
     thread::Builder::new()
         .name("Emit to Polycorder Thread".to_owned())

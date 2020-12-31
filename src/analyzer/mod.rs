@@ -7,7 +7,12 @@ mod eventbuffer;
 use crate::events;
 use crate::params;
 
+use core::pin::Pin;
 use eventbuffer::EventBuffer;
+use futures::stream;
+use futures::task::{Context, Poll};
+use futures::Stream;
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -17,9 +22,45 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 use time::OffsetDateTime;
+use timeout_iterator::asynchronous::TimeoutStream;
 
 use close_by_ip_detect::close_by_ip_detect;
 use close_by_register_detect::close_by_register_detect;
+
+pub async fn new(
+    verbosity: u8,
+    config: params::AnalyticsConfig,
+    raw_incoming_stream: impl Stream<Item = events::Event> + Unpin,
+) -> Result<impl Stream<Item = events::Event>, AnalyzerError> {
+    eprintln!("Analyzer: Initializing...");
+    let event_buffer = EventBuffer::new(
+        verbosity,
+        config.max_event_count,
+        config.event_drop_count,
+        Duration::from_secs(config.event_lifetime_seconds),
+    );
+
+    let analyzer = Analyzer {
+        verbosity,
+        mode: config.mode,
+        incoming_events_stream: TimeoutStream::with_stream(raw_incoming_stream).await?,
+        collection_timeout: Duration::from_secs(config.collection_timeout_seconds),
+        // if IP is within usize then someone's jumping within the size of an instruction.
+        // segfaults usually don't happen that close to each other.
+        ip_max_distance: size_of::<usize>(),
+        justification_kind: config.justification,
+        // let's not make this reallocate
+        event_buffer,
+        detected_since_last_add: true,
+        detected_events_buffer: VecDeque::new(),
+    };
+
+    let s = stream::unfold(analyzer, |mut analyzer| async move {
+        Some((analyzer.next_event().await, analyzer))
+    });
+
+    Ok(s)
+}
 
 #[derive(Debug)]
 pub struct AnalyzerError(String);
@@ -30,34 +71,98 @@ impl Display for AnalyzerError {
     }
 }
 impl From<std::num::TryFromIntError> for AnalyzerError {
-    fn from(tryerr: std::num::TryFromIntError) -> AnalyzerError {
-        AnalyzerError(format!("AnalyzerError::TryFromIntError: Error converting between integers. Probably a bounds/fit violation: {}", tryerr))
+    fn from(tryerr: std::num::TryFromIntError) -> Self {
+        Self(format!("AnalyzerError::TryFromIntError: Error converting between integers. Probably a bounds/fit violation: {}", tryerr))
+    }
+}
+impl From<timeout_iterator::error::Error> for AnalyzerError {
+    fn from(timeouterr: timeout_iterator::error::Error) -> Self {
+        Self(format!(
+            "AnalyzerError::TimeoutIterator::Error: Error from the TimeoutIterator: {}",
+            timeouterr
+        ))
     }
 }
 
 /// A struct with fields/associated functions
 /// to perform analysis.
-struct Analyzer {
+struct Analyzer<I>
+where
+    I: Stream<Item = events::Event> + Unpin,
+{
     verbosity: u8,
-
+    incoming_events_stream: TimeoutStream<events::Event, I>,
+    mode: params::AnalyticsMode,
     collection_timeout: Duration,
-
     /// how close can the instruction pointer be for it to be an event?
     ip_max_distance: usize,
-
     /// How detailed a justification do we want?
     justification_kind: params::DetectedEventJustification,
-
-    event_source: Receiver<events::Event>,
-    detected_event_sink: Sender<events::Event>,
     event_buffer: EventBuffer,
-
     detected_since_last_add: bool,
+    detected_events_buffer: VecDeque<events::Event>,
 }
 
 /// Implements a Collection (backed bu an inner buffer), but
 /// use those wrapper methods because they can do some useful things.
-impl Analyzer {
+impl<I> Analyzer<I>
+where
+    I: Stream<Item = events::Event> + Unpin,
+{
+    async fn next_event(&mut self) -> events::Event {
+        loop {
+            if let Some(detected_event) = self.detected_events_buffer.pop_front() {
+                return detected_event;
+            }
+
+            match self
+                .incoming_events_stream
+                .next_timeout(self.collection_timeout)
+                .await
+            {
+                Ok(event) => {
+                    match event.as_ref() {
+                        events::Version::V1 {
+                            timestamp,
+                            hostname: _,
+                            event: events::EventType::LinuxKernelTrap(lkt),
+                        } => self.buffer_incoming_event(
+                            *timestamp,
+                            lkt.procname.clone(),
+                            event.clone(),
+                        ),
+                        events::Version::V1 {
+                            timestamp,
+                            hostname: _,
+                            event: events::EventType::LinuxFatalSignal(lfs),
+                        } => {
+                            if let Some(comm) = lfs.stack_dump.get("Comm") {
+                                // comm is process name
+                                self.buffer_incoming_event(*timestamp, comm.clone(), event.clone())
+                            }
+                        }
+
+                        // ignore other event types for detection
+                        _ => {}
+                    }
+
+                    // if passthrough, send the event out...
+                    if let params::AnalyticsMode::Passthrough = self.mode {
+                        return event;
+                    }
+                }
+                Err(timeout_iterator::error::Error::TimedOut) => {
+                    self.detect();
+                }
+                Err(timeout_iterator::error::Error::Disconnected) => {
+                    panic!(
+                        "Analyzer: Analysis channel disconnected. Aborting the analyzer thread."
+                    );
+                }
+            }
+        }
+    }
+
     /// Runs a detection on currently buffered events
     /// If successful, generates a confirmed detection event
     /// and sends it to the emitter channel. It also clears the buffer
@@ -150,29 +255,24 @@ impl Analyzer {
             }
 
                 // retain unused events
-                eventslist.retain(|(_, e)| !Analyzer::used(e, &used_events));
+                eventslist.retain(|(_, e)| !used_events.contains(e));
             }
 
             // send all detected events
             for detected_event in detected_events.into_iter() {
-                self.send_event(detected_event);
+                self.detected_events_buffer.push_back(detected_event);
             }
         }
 
         self.event_buffer.cleanup();
     }
 
-    fn send_event(&mut self, event: events::Event) {
-        // send this event
-        if let Err(e) = self.detected_event_sink.send(event) {
-            eprintln!(
-                "Analyzer: Detector unable to send detection event to output channel: {}",
-                e
-            )
-        }
-    }
-
-    fn buffer_event(&mut self, timestamp: OffsetDateTime, procname: String, event: events::Event) {
+    fn buffer_incoming_event(
+        &mut self,
+        timestamp: OffsetDateTime,
+        procname: String,
+        event: events::Event,
+    ) {
         // Append event to to end of buffer
         self.event_buffer.insert(timestamp, procname, event);
         self.detected_since_last_add = false;
@@ -182,140 +282,6 @@ impl Analyzer {
             // we analyze what we have - see if there's already an event there
             // Detect will cleanup events.
             self.detect();
-        }
-    }
-
-    fn analyze_forever(&mut self) -> Result<(), RecvTimeoutError> {
-        loop {
-            match self.event_source.recv_timeout(self.collection_timeout) {
-                Ok(event) => match event.as_ref() {
-                    events::Version::V1 {
-                        timestamp,
-                        hostname: _,
-                        event: events::EventType::LinuxKernelTrap(lkt),
-                    } => self.buffer_event(*timestamp, lkt.procname.clone(), event),
-                    events::Version::V1 {
-                        timestamp,
-                        hostname: _,
-                        event: events::EventType::LinuxFatalSignal(lfs),
-                    } => {
-                        if let Some(comm) = lfs.stack_dump.get("Comm") {
-                            // comm is process name
-                            self.buffer_event(*timestamp, comm.clone(), event)
-                        }
-                    }
-
-                    // ignore other event types for detection
-                    _ => {}
-                },
-                Err(RecvTimeoutError::Timeout) => {
-                    self.detect();
-                }
-                Err(RecvTimeoutError::Disconnected) => {
-                    eprintln!(
-                        "Analyzer: Analysis channel disconnected. Aborting the analyzer thread."
-                    );
-                    return Err(RecvTimeoutError::Disconnected);
-                }
-            }
-        }
-    }
-
-    fn used(e: &events::Event, used_events: &[events::Event]) -> bool {
-        for used_event in used_events {
-            if e == used_event {
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-pub fn analyze(
-    verbosity: u8,
-    config: params::AnalyticsConfig,
-    source: Receiver<events::Event>,
-    passthrough_sink: Sender<events::Event>,
-) -> Result<(), AnalyzerError> {
-    eprintln!("Analyzer: Initializing...");
-
-    if config.max_event_count <= 1 {
-        return Err(AnalyzerError(format!("Analyzer's 'max_event_count'({}) must be at least 2. If we cannot store at least 2 events, we cannot detect even the simplest attack. You should turn off analytics altogether. Aboring Analyzer due to misconfiguration.", config.max_event_count)));
-    }
-    if config.event_drop_count == 0 {
-        return Err(AnalyzerError(format!("Analyzer's 'event_drop_count'({}) must be at least 1. If we cannot drop at least 1 event when the buffer is full, we cannot add new events. Aboring Analyzer due to misconfiguration.", config.event_drop_count)));
-    }
-    if config.max_event_count < config.event_drop_count {
-        return Err(AnalyzerError(format!("Analyzer's 'max_event_count'({}) is less than 'event_drop_count'({}). Cannot drop more events at cleanup, than number of events we store. Aboring Analyzer due to misconfiguration.", config.max_event_count, config.event_drop_count)));
-    }
-
-    let (inner_analyzer_sink, inner_analyzer_source): (
-        Sender<events::Event>,
-        Receiver<events::Event>,
-    ) = channel();
-
-    // fork off the analytics thread
-    let detected_event_sink = passthrough_sink.clone();
-    let collection_timeout = Duration::from_secs(config.collection_timeout_seconds);
-    let max_event_count = config.max_event_count;
-    let event_drop_count = config.event_drop_count;
-    let event_lifetime = Duration::from_secs(config.event_lifetime_seconds);
-    let justification_kind = config.justification;
-
-    if let Err(e) = thread::Builder::new()
-        .name("Realtime Analytics Thread".to_owned())
-        .spawn(move || {
-            let mut analyzer = Analyzer {
-                verbosity,
-
-                collection_timeout,
-
-                // if IP is within usize then someone's jumping within the size of an instruction.
-                // segfaults usually don't happen that close to each other.
-                ip_max_distance: size_of::<usize>(),
-
-                justification_kind,
-
-                event_source: inner_analyzer_source,
-                detected_event_sink,
-
-                // let's not make this reallocate
-                event_buffer: EventBuffer::new(
-                    verbosity,
-                    max_event_count,
-                    event_drop_count,
-                    event_lifetime,
-                ),
-
-                detected_since_last_add: true,
-            };
-            if analyzer.analyze_forever().is_err() {
-                eprintln!("Analyzer: Background analysis thread exited. Aborting program.");
-                process::exit(1)
-            }
-        })
-    {
-        eprintln!(
-            "An error occurred spawning the realtime analytics thread: {}",
-            e
-        );
-        process::exit(1);
-    }
-
-    loop {
-        match source.recv() {
-            Ok(event) => match inner_analyzer_sink.send(event.clone()) {
-                Err(e) => return Err(AnalyzerError(format!("Analyzer: Error occurred sending events to analyzer. Analytics loop is dead. Closing analyzer. Error: {}", e))),
-                Ok(_) => if config.mode == params::AnalyticsMode::Passthrough {
-                    if let Err(e) = passthrough_sink.send(event) {
-                        return Err(AnalyzerError(format!("Analyzer: Error occurred passing through events. Receipent is dead. Closing analyzer. Error: {}", e)))
-                    }
-                },
-            },
-            Err(e) => {
-                return Err(AnalyzerError(format!("Analyzer: Received an error from messages channel. No more possibility of messages coming in. Closing thread. Error: {}", e)));
-            }
         }
     }
 }

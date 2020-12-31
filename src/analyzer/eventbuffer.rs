@@ -2,8 +2,8 @@ use crate::events;
 
 use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use time::OffsetDateTime;
 use std::time::Duration;
+use time::OffsetDateTime;
 
 type TimestampedEvent = (OffsetDateTime, events::Event);
 pub type TimestampedEventList = VecDeque<TimestampedEvent>;

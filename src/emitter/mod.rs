@@ -7,6 +7,8 @@ use std::convert::From;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::mpsc::Receiver;
+use core::future::Future;
+use async_trait::async_trait;
 
 mod console;
 mod filelogger;
@@ -16,7 +18,6 @@ mod syslogger;
 
 #[async_trait]
 pub trait Emitter {
-    // Emit this event synchronously (blocks current thread)
     async fn emit(&mut self, event: &events::Event);
 }
 
@@ -98,7 +99,7 @@ pub async fn emit(
         match source.recv() {
             Ok(event) => {
                 for emitter in emitters.iter_mut() {
-                    emitter.emit(&event)
+                    emitter.emit(&event).await;
                 }
             }
             Err(e) => {

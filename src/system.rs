@@ -1,7 +1,12 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use crate::common;
 use crate::events;
 use crate::params;
+use core::future::Future;
+use core::pin::Pin;
+use futures::stream::Stream;
+use futures::task::{Context, Poll};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
@@ -12,10 +17,7 @@ use std::str;
 use std::sync::Arc;
 use sys_info::os_type;
 use sysctl::Sysctl;
-use futures::stream::Stream;
-use core::future::Future;
-use core::pin::Pin;
-use futures::task::{Context, Poll};
+use tokio::sync::broadcast;
 use tokio::time::{sleep, Sleep};
 
 use std::time::Duration;
@@ -73,24 +75,24 @@ pub struct EnvironmentConfigurator {
     sleep_future: Option<Pin<Box<Sleep>>>,
 }
 impl EnvironmentConfigurator {
-    pub fn new(auto_config: params::AutoConfigure, hostname: Option<String>) -> Self {
-        Self {
+    pub fn new(
+        auto_config: params::AutoConfigure,
+        hostname: Option<String>,
+    ) -> impl Stream<Item = events::Event> {
+        common::result_stream_exit_on_error(Self {
             auto_config,
             sleep_interval: Duration::from_secs(300),
             hostname,
             change_events: Vec::new(),
             sleep_future: None,
-        }
+        })
     }
 
     fn enforce_config(&mut self) -> Result<(), SystemConfigError> {
         // if not sleeping.. reinforce the system with config
         let events = modify_environment(&self.auto_config, &self.hostname)?;
         for event in events.into_iter() {
-            eprintln!(
-                "Configuration modified. {}",
-                &event
-            );
+            eprintln!("Configuration modified. {}", &event);
             self.change_events.push(event);
         }
 
@@ -100,8 +102,10 @@ impl EnvironmentConfigurator {
 impl Stream for EnvironmentConfigurator {
     type Item = Result<events::Event, SystemConfigError>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::option::Option<<Self as Stream>::Item>> {
-
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::option::Option<<Self as Stream>::Item>> {
         // if already sleeping... handle that.
         if let Some(mut sf) = self.sleep_future.take() {
             match Future::poll(sf.as_mut(), cx) {
@@ -124,13 +128,13 @@ impl Stream for EnvironmentConfigurator {
 
         // entries empty? then go to sleep...
         if self.change_events.is_empty() {
-            let mut sf = sleep(self.sleep_interval);
+            let sf = sleep(self.sleep_interval);
             let mut pinned_sf = Box::pin(sf);
             match Future::poll(pinned_sf.as_mut(), cx) {
                 Poll::Pending => {
                     self.sleep_future = Some(pinned_sf);
                     return Poll::Pending;
-                },
+                }
                 Poll::Ready(_) => {
                     eprintln!("Sleep future did not return Poll::Pending as expected despite being asked to sleep for {:?}", self.sleep_interval);
                     return Poll::Pending;
@@ -141,24 +145,6 @@ impl Stream for EnvironmentConfigurator {
         Poll::Ready(Some(Ok(self.change_events.remove(0))))
     }
 }
-/*
-async fn configure_environment(
-    auto_config: params::AutoConfigure,
-    hostname: Option<String>,
-    config_event_sink: UnboundedSender<events::Event>,
-) -> Result<(), MainError> {
-    // initialize the system with config
-    system::modify_environment(&auto_config, &hostname).await?;
-
-    // let the first time go from config-mismatch event reporting
-    loop {
-
-
-        // ensure configuratione very five minutes.
-        sleep().await;
-    }
-}
-*/
 
 pub fn system_start_time() -> Result<OffsetDateTime, SystemConfigError> {
     let system_uptime_nanos: u64 = (system_uptime_secs()? * 1000000000.0) as u64;
