@@ -4,6 +4,7 @@ use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
 use time::OffsetDateTime;
+use rmesg;
 
 type TimestampedEvent = (OffsetDateTime, events::Event);
 pub type TimestampedEventList = VecDeque<TimestampedEvent>;
@@ -320,14 +321,14 @@ mod test {
     }
 
     fn create_event(procname: String) -> (OffsetDateTime, String, events::Event) {
-        let timestamp = Utc::now();
+        let timestamp = OffsetDateTime::now_utc();
         let event = match rand::random::<bool>() {
             true => Arc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                    facility: events::LogFacility::User,
-                    level: events::LogLevel::Info,
+                    facility: rmesg::entry::LogFacility::User,
+                    level: rmesg::entry::LogLevel::Info,
                     procname: procname.clone(),
                     pid: 1800,
                     ip: 0x5000,
@@ -343,8 +344,8 @@ mod test {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                    facility: events::LogFacility::User,
-                    level: events::LogLevel::Info,
+                    facility: rmesg::entry::LogFacility::User,
+                    level: rmesg::entry::LogLevel::Info,
                     signal: events::FatalSignalType::SIGIOT,
                     stack_dump: map!("Comm" => procname.clone()),
                 }),

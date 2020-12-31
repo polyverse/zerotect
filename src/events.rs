@@ -45,7 +45,7 @@ pub type Event = Arc<Version>;
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[cef_values(
     CefHeaderVersion = "0",
     CefHeaderDeviceVendor = "polyverse",
@@ -128,7 +128,7 @@ impl Display for Version {
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[serde(tag = "type")]
 pub enum EventType {
     /// An analytics-detected internal event based on other events
@@ -285,7 +285,7 @@ impl Display for EventType {
 /// When probing a stack canary, RDI/RSI increment by one value, for instance.
 ///
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[cef_ext_values(cs1Label = "register")]
 pub struct RegisterProbe {
     /// Which register was being probed?
@@ -307,7 +307,7 @@ pub struct RegisterProbe {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum RegisterProbeJustification {
     FullEvents(Vec<Event>),
     RegisterValues(Vec<String>),
@@ -341,7 +341,7 @@ impl rust_cef::CefExtensions for RegisterProbeJustification {
     cn3Label = "vmasize",
     flexString2Label = "signal"
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
     /// A Log-level for this event - was it critical?
@@ -391,7 +391,7 @@ pub struct LinuxKernelTrap {
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cef_ext_values(flexString2Label = "signal")]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxFatalSignal {
     /// A Log-level for this event - was it critical?
     pub level: entry::LogLevel,
@@ -422,7 +422,7 @@ impl Display for LinuxFatalSignal {
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cef_ext_values(flexString1Label = "function_name")]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
     pub level: entry::LogLevel,
@@ -440,7 +440,7 @@ pub struct LinuxSuppressedCallback {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
     #[cef_ext_field(PolyverseZerotectKey)]
@@ -457,7 +457,7 @@ pub struct ConfigMismatch {
 
 /// The types of kernel traps understood
 #[derive(Debug, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
@@ -494,7 +494,7 @@ impl Display for KernelTrapType {
 
 /// The reason for the Segmentation Fault
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultReason {
     /// The page attempted to access was not found (i.e. in invalid memory address)
     NoPageFound,
@@ -506,7 +506,7 @@ pub enum SegfaultReason {
 
 /// The type of Access that triggered this Segmentation Fault
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultAccessType {
     /// Attempting to Read
     Read,
@@ -517,7 +517,7 @@ pub enum SegfaultAccessType {
 
 /// The context under which the Segmentation Fault was triggered
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultAccessMode {
     /// Process was in kernel mode (during a syscall, context switch, etc.)
     Kernel,
@@ -536,7 +536,7 @@ pub enum SegfaultAccessMode {
     cs5Label = "instruction_fetch",
     cs6Label = "protection_keys_block_access"
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct SegfaultErrorCode {
     /// The reason for the segmentation fault
     #[cef_ext_field]
@@ -625,7 +625,7 @@ impl Display for SegfaultErrorCode {
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
 #[derive(Debug, PartialEq, EnumString, Display, Copy, Clone, FromPrimitive, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
     SIGHUP = 1,
@@ -716,32 +716,4 @@ pub enum FatalSignalType {
 
     /// Power failure (System V) (synonym: SIGINFO)
     SIGPWR,
-}
-
-/**********************************************************************************/
-// Tests! Tests! Tests!
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use schemars::schema_for;
-    use serde_json;
-    use std::fs;
-    use std::mem;
-
-    #[test]
-    fn generate_reference_json_schema_file() {
-        let schema_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/schema.json");
-        let schema = schema_for!(Version);
-        let schema_json = serde_json::to_string_pretty(&schema).unwrap();
-        eprintln!("Writing latest event schema to file: {}", schema_file);
-        fs::write(schema_file, schema_json).expect("Unable to re-generate the event schema file.");
-    }
-
-    #[test]
-    fn measure_size_of_event() {
-        // You can decide when to use Version and when to use Event = Arc'd Version
-        assert_eq!(192, mem::size_of::<Version>());
-        assert_eq!(8, mem::size_of::<Event>());
-    }
 }

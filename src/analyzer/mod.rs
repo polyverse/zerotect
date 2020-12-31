@@ -900,8 +900,8 @@ mod test {
             timestamp: OffsetDateTime::now_utc(),
             hostname: Some("nonexistent".to_owned()),
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                level: events::LogLevel::Info,
-                facility: events::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Info,
+                facility: rmesg::entry::LogFacility::Kern,
                 signal: events::FatalSignalType::SIGIOT,
                 stack_dump,
             }),

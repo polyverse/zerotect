@@ -15,7 +15,7 @@ use tokio::sync::broadcast;
 
 mod console;
 mod filelogger;
-mod pagerduty;
+//mod pagerduty;
 mod polycorder;
 mod syslogger;
 
@@ -39,7 +39,7 @@ pub enum EmitterError {
     Polycorder(polycorder::PolycorderError),
     Syslogger(syslogger::SysLoggerError),
     FileLogger(filelogger::FileLoggerError),
-    Pagerduty(pagerduty::PagerDutyError),
+    //Pagerduty(pagerduty::PagerDutyError),
 }
 
 impl error::Error for EmitterError {}
@@ -53,7 +53,7 @@ impl Display for EmitterError {
             Self::Polycorder(e) => write!(f, "Error in Polycorder Emitter: {}", e),
             Self::Syslogger(e) => write!(f, "Error in Syslogger Emitter: {}", e),
             Self::FileLogger(e) => write!(f, "Error in FileLogger Emitter: {}", e),
-            Self::Pagerduty(e) => write!(f, "Error in Pagerduty Emitter: {}", e),
+            //Self::Pagerduty(e) => write!(f, "Error in Pagerduty Emitter: {}", e),
         }
     }
 }
@@ -76,11 +76,13 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
+/*
 impl From<pagerduty::PagerDutyError> for EmitterError {
     fn from(err: pagerduty::PagerDutyError) -> Self {
         Self::Pagerduty(err)
     }
 }
+*/
 
 impl From<broadcast::error::SendError<events::Event>> for EmitterError {
     fn from(err: broadcast::error::SendError<events::Event>) -> Self {
@@ -96,7 +98,7 @@ pub async fn emit_forever(
     eprintln!("Emitter: Initializing...");
 
     // start a channel to all emitters with plenty of buffer
-    let (tx, rx1) = broadcast::channel(1000);
+    let (tx, _) = broadcast::channel(1000);
 
     let mut emit_forever_futures: Vec<EmitForeverFuture> = vec![];
     if let Some(cc) = ec.console {
@@ -120,10 +122,11 @@ pub async fn emit_forever(
         eprintln!("Emitter: Initialized PagerDuty emitter. Expect messages to be sent to a PagerDuty Service.");
         emit_forever_futures.push(pagerduty::emit_forever(prk, tx.subscribe()));
     }
+    */
     if let Some(tc) = ec.polycorder {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
-        emit_forever_futures.push(polycorder::emit_forever(tc, ec.verbosity, tx.subscribe()));
-    }*/
+        emit_forever_futures.push(Box::pin(polycorder::emit_forever(ec.verbosity, tc, tx.subscribe())));
+    }
 
     if emit_forever_futures.is_empty() {
         return Err(EmitterError::NoEmitters);

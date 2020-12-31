@@ -21,7 +21,7 @@ serde = { version = "1.0.118", features = ["derive", "rc"] }
 serde_json = { version = "1.0.61", features = ["arbitrary_precision"] }
 toml = "0.5.8"
 http = "0.2.2"
-rmesg = {version = "1.0.7", default-features = false, features = ["async", "extra-traits"] }
+rmesg = {version = "1.0.7", default-features = false, features = ["async"] }
 libflate = "1.0.3"
 rust-cef-derive = "0.2.0"
 rust-cef = "0.2.0"
@@ -43,7 +43,6 @@ default-features = false
 [dev-dependencies]
 assert_matches = "1.4.0"
 rand = "0.8.0"
-schemars = { version = "0.8.0" }
 pretty_assertions = "0.6.1"
 
 # Enable LTO for release (since it only builds in Travis and doesn't block day to day)

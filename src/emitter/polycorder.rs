@@ -1,6 +1,5 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use async_trait::async_trait;
 use http::StatusCode;
 use libflate::gzip::Encoder;
 use reqwest::header::{
@@ -97,7 +96,7 @@ async fn emit_forever_polycorder_error(
     headers.insert(CONTENT_TYPE, content_type_json);
 
     let client = Client::builder()
-        .user_agent(USER_AGENT)
+        .user_agent(USER_AGENT_ZEROTECT)
         .default_headers(headers)
         .build()?;
 
@@ -127,7 +126,7 @@ async fn emit_forever_polycorder_error(
                     panic!("Polycorder event source closed. Panicking and exiting.");
                 }
             },
-            Err(Elapsed) => true,
+            Err(_) => true,
         };
 
         if flush {

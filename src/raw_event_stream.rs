@@ -23,6 +23,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
+use std::ops::Sub;
 
 pub async fn new(
     c: RawEventStreamConfig,
@@ -31,8 +32,15 @@ pub async fn new(
         eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
     }
 
+    new_with_rmesg_stream(c, rmesg::logs_stream(rmesg::Backend::Default, false, false).await?).await
+}
+
+pub async fn new_with_rmesg_stream(
+    c: RawEventStreamConfig,
+    rmesg_stream: rmesg::EntriesStream
+) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
     let entries = TimeoutStream::with_stream(
-        rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
+        rmesg_stream,
     )
     .await?;
 
@@ -48,7 +56,7 @@ pub async fn new(
         entries,
         verbosity: c.verbosity,
         hostname: c.hostname,
-        flush_timeout: Duration::from_secs(1),
+        flush_timeout: c.flush_timeout,
         system_start_time,
         event_stream_start_time,
     };
@@ -106,6 +114,7 @@ pub struct RawEventStreamConfig {
     pub verbosity: u8,
     pub hostname: Option<String>,
     pub gobble_old_events: bool,
+    pub flush_timeout: Duration,
 }
 
 type TimeoutStreamItem = Result<Entry, RMesgError>;
@@ -568,7 +577,7 @@ mod test {
     use super::*;
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
-    use std::thread;
+    use futures::stream::iter;
 
     macro_rules! map(
         { $($key:expr => $value:expr),+ } => {
@@ -582,10 +591,10 @@ mod test {
          };
     );
 
-    #[test]
-    fn can_parse_kernel_trap_segfault() {
-        let timestamp = Utc.timestamp_millis(378084605);
-        let kmsgs = boxed_kmsgs(timestamp,
+    #[tokio::test]
+    async fn can_parse_kernel_trap_segfault() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000);
+        let kmsgs = unboxed_kmsgs(timestamp,
                 vec![
                     String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
                     String::from(" a.out[36275]: segfault at 0 ip (null) sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
@@ -596,8 +605,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
                 procname: String::from("a.out"),
                 pid: 36175,
@@ -621,8 +630,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
                 procname: String::from("a.out"),
                 pid: 36275,
@@ -646,8 +655,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault {
                     location: 0x7fff4b8ba8b8,
                 },
@@ -669,25 +678,28 @@ mod test {
             }),
         });
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            None,
-        )
-        .unwrap();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event1);
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event3);
@@ -793,11 +805,11 @@ mod test {
         );
     }
 
-    #[test]
-    fn can_parse_kernel_trap_invalid_opcode() {
-        let timestamp = Utc.timestamp_millis(5606197845);
+    #[tokio::test]
+    async fn can_parse_kernel_trap_invalid_opcode() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(5606197845000000);
 
-        let kmsgs = boxed_kmsgs(timestamp,
+        let kmsgs = unboxed_kmsgs(timestamp,
             vec![
                 String::from(" a.out[38175]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
                 String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
@@ -807,8 +819,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::InvalidOpcode,
                 procname: String::from("a.out"),
                 pid: 38175,
@@ -832,8 +844,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::InvalidOpcode,
                 procname: String::from("a.out"),
                 pid: 38275,
@@ -853,20 +865,23 @@ mod test {
             }),
         });
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            None,
-        )
-        .unwrap();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event1);
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
@@ -936,21 +951,21 @@ mod test {
         );
     }
 
-    #[test]
-    fn can_parse_kernel_trap_generic() {
-        let timestamp = Utc.timestamp_millis(471804323);
+    #[tokio::test]
+    async fn can_parse_kernel_trap_generic() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let kmsgs = vec![
-            boxed_kmsg(timestamp, String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]")),
-            boxed_kmsg(timestamp, String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4")),
+            unboxed_kmsg(timestamp, String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]")),
+            unboxed_kmsg(timestamp, String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4")),
         ];
 
         let event1 = Arc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Generic {
                     description: "foo".to_owned(),
                 },
@@ -976,8 +991,8 @@ mod test {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Generic {
                     description: "bar".to_owned(),
                 },
@@ -999,20 +1014,23 @@ mod test {
             }),
         });
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            None,
-        )
-        .unwrap();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event1);
 
-        let maybe_segfault = parser.next();
+        let maybe_segfault = parser.next().await;
         assert!(maybe_segfault.is_some());
         let segfault = maybe_segfault.unwrap();
         assert_eq!(segfault, event2);
@@ -1084,10 +1102,10 @@ mod test {
         );
     }
 
-    #[test]
-    fn can_parse_kernel_trap_general_protection() {
-        let timestamp = Utc.timestamp_millis(378084605);
-        let kmsgs = boxed_kmsgs(timestamp,
+    #[tokio::test]
+    async fn can_parse_kernel_trap_general_protection() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000);
+        let kmsgs = unboxed_kmsgs(timestamp,
                 vec![
                     String::from("traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
                     String::from("  traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
@@ -1100,8 +1118,8 @@ mod test {
             timestamp,
             hostname: Some("testhost".to_owned()),
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::GeneralProtectionFault,
                 procname: String::from("nginx"),
                 pid: 67494,
@@ -1121,40 +1139,44 @@ mod test {
             }),
         });
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            Some("testhost".to_owned()),
-        )
-        .unwrap();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
 
-        let maybe_gpf = parser.next();
+
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_some());
         let gpf = maybe_gpf.unwrap();
         assert_eq!(gpf, event1);
 
-        let maybe_gpf = parser.next();
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_some());
         let gpf = maybe_gpf.unwrap();
         assert_eq!(gpf, event1);
 
-        let maybe_gpf = parser.next();
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_some());
         let gpf = maybe_gpf.unwrap();
         assert_eq!(gpf, event1);
 
-        let maybe_gpf = parser.next();
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_some());
         let gpf = maybe_gpf.unwrap();
         assert_eq!(gpf, event1);
 
-        let maybe_gpf = parser.next();
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_some());
         let gpf = maybe_gpf.unwrap();
         assert_eq!(gpf, event1);
 
-        let maybe_gpf = parser.next();
+        let maybe_gpf = parser.next().await;
         assert!(maybe_gpf.is_none());
 
         assert_eq!(
@@ -1193,25 +1215,30 @@ mod test {
         );
     }
 
-    #[test]
-    fn can_parse_fatal_signal_optional_dump() {
-        let timestamp = Utc.timestamp_millis(376087724);
+    #[tokio::test]
+    async fn can_parse_fatal_signal_optional_dump() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(376087724000000);
 
-        let kmsgs = vec![Box::new(kmsg::KMsg {
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp,
+        let kmsgs = vec![rmesg::entry::Entry {
+            facility: Some(rmesg::entry::LogFacility::Kern),
+            level: Some(rmesg::entry::LogLevel::Warning),
+            timestamp_from_system_start: Some(timestamp_from_system_start(timestamp)),
+            sequence_num: None,
             message: String::from("potentially unexpected fatal signal 11."),
-        })];
+        }];
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            Some("testhost2".to_owned()),
-        )
-        .unwrap();
-        let sig11 = parser.next();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
+
+        let sig11 = parser.next().await;
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
@@ -1219,8 +1246,8 @@ mod test {
                 timestamp,
                 hostname: Some("testhost2".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                    facility: events::LogFacility::Kern,
-                    level: events::LogLevel::Warning,
+                    facility: rmesg::entry::LogFacility::Kern,
+                    level: rmesg::entry::LogLevel::Warning,
                     signal: events::FatalSignalType::SIGSEGV,
                     stack_dump: BTreeMap::new(),
                 }),
@@ -1228,10 +1255,10 @@ mod test {
         )
     }
 
-    #[test]
-    fn can_parse_fatal_signal_11() {
-        let timestamp = Utc.timestamp_millis(6433742 + 372858970);
-        let mut kmsgs = boxed_kmsgs(
+    #[tokio::test]
+    async fn can_parse_fatal_signal_11() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(6433742000000 + 372858970000000);
+        let mut kmsgs = unboxed_kmsgs(
             timestamp,
             vec![
                 String::from("potentially unexpected fatal signal 11."),
@@ -1255,24 +1282,28 @@ mod test {
 
         {
             // Validate when new kmsg's stop coming in (at timeout).
-            let mut parser = RawEventStream::from_kmsg_iterator(
-                Box::new(kmsgs.clone().into_iter()),
-                Duration::from_secs(1),
-                0,
-                None,
-            )
-            .unwrap();
-            let sig11 = parser.next();
+            let mut parser = Box::pin(new_with_rmesg_stream(
+                RawEventStreamConfig{
+                    verbosity: 0,
+                    hostname: None,
+                    gobble_old_events: false,
+                    flush_timeout: Duration::from_secs(1),
+                },
+                Box::pin(iter(kmsgs.clone().into_iter().map(|k| Ok(k)))),
+            ).await
+            .unwrap());
+
+            let sig11 = parser.next().await;
             assert!(sig11.is_some());
             eprintln!("Sig11: {}", sig11.as_ref().unwrap());
             assert_eq!(
                 sig11.unwrap(),
                 Arc::new(events::Version::V1 {
-                    timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    timestamp: OffsetDateTime::from_unix_timestamp_nanos(6433742000000 + 372858970000000),
                     hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                        facility: events::LogFacility::Kern,
-                        level: events::LogLevel::Warning,
+                        facility: rmesg::entry::LogFacility::Kern,
+                        level: rmesg::entry::LogLevel::Warning,
                         signal: events::FatalSignalType::SIGSEGV,
                         stack_dump: map! {
                             "CPU" => "1",
@@ -1315,25 +1346,29 @@ mod test {
 
         {
             // Validate when new kmsg's stop bring KV/pairs
-            kmsgs.push(boxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
+            kmsgs.push(unboxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
 
-            let mut parser = RawEventStream::from_kmsg_iterator(
-                Box::new(kmsgs.into_iter()),
-                Duration::from_secs(1),
-                0,
-                None,
-            )
-            .unwrap();
-            let sig11 = parser.next();
+            let mut parser = Box::pin(new_with_rmesg_stream(
+                RawEventStreamConfig{
+                    verbosity: 0,
+                    hostname: None,
+                    gobble_old_events: false,
+                    flush_timeout: Duration::from_secs(1),
+                },
+                Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+            ).await
+            .unwrap());
+
+            let sig11 = parser.next().await;
             assert!(sig11.is_some());
             assert_eq!(
                 sig11.unwrap(),
                 Arc::new(events::Version::V1 {
-                    timestamp: Utc.timestamp_millis(6433742 + 372858970),
+                    timestamp: OffsetDateTime::from_unix_timestamp_nanos(6433742000000 + 372858970000000),
                     hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                        facility: events::LogFacility::Kern,
-                        level: events::LogLevel::Warning,
+                        facility: rmesg::entry::LogFacility::Kern,
+                        level: rmesg::entry::LogLevel::Warning,
                         signal: events::FatalSignalType::SIGSEGV,
                         stack_dump: map! {
                             "CPU" => "1",
@@ -1374,7 +1409,7 @@ mod test {
             );
 
             // make sure the next kernel trap message is parsed as well
-            let kt = parser.next();
+            let kt = parser.next().await;
             assert!(kt.is_some());
             assert_matches!(
                 kt.unwrap().as_ref(),
@@ -1387,28 +1422,32 @@ mod test {
         }
     }
 
-    #[test]
-    fn is_sendable() {
-        let timestamp = Utc.timestamp_millis(57533475 + 372850970);
+    #[tokio::test]
+    async fn is_sendable() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(57533475000000 + 372850970000000);
         let kmsgs = vec![
-            Box::new(kmsg::KMsg{
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
-                timestamp,
+            rmesg::entry::Entry{
+                facility: Some(rmesg::entry::LogFacility::Kern),
+                level: Some(rmesg::entry::LogLevel::Warning),
+                timestamp_from_system_start: Some(timestamp_from_system_start(timestamp)),
+                sequence_num: None,
                 message: String::from(" a.out[36075]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
-            }),
+            },
         ];
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            None,
-        )
-        .unwrap();
+            let mut parser = Box::pin(new_with_rmesg_stream(
+                RawEventStreamConfig{
+                    verbosity: 0,
+                    hostname: None,
+                    gobble_old_events: false,
+                    flush_timeout: Duration::from_secs(1),
+                },
+                Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+            ).await
+            .unwrap());
 
         thread::spawn(move || {
-            let maybe_segfault = parser.next();
+            let maybe_segfault = parser.next().await;
             assert!(maybe_segfault.is_some());
             let segfault = maybe_segfault.unwrap();
             assert_eq!(
@@ -1417,8 +1456,8 @@ mod test {
                     timestamp,
                     hostname: None,
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                        facility: events::LogFacility::Kern,
-                        level: events::LogLevel::Warning,
+                        facility: rmesg::entry::LogFacility::Kern,
+                        level: rmesg::entry::LogLevel::Warning,
                         trap: events::KernelTrapType::Segfault { location: 0 },
                         procname: String::from("a.out"),
                         pid: 36075,
@@ -1446,25 +1485,30 @@ mod test {
         );
     }
 
-    #[test]
-    fn can_parse_suppressed_callback() {
-        let timestamp = Utc.timestamp_millis(803835 + 372850970);
+    #[tokio::test]
+    async fn can_parse_suppressed_callback() {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(803835000000 + 372850970000000);
 
-        let kmsgs = vec![Box::new(kmsg::KMsg {
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp,
+        let kmsgs = vec![rmesg::entry::Entry {
+            facility: Some(rmesg::entry::LogFacility::Kern),
+            level: Some(rmesg::entry::LogLevel::Warning),
+            timestamp_from_system_start: Some(timestamp_from_system_start(timestamp)),
+            sequence_num: None,
             message: String::from("show_signal_msg: 9 callbacks suppressed"),
-        })];
+        }];
 
-        let mut parser = RawEventStream::from_kmsg_iterator(
-            Box::new(kmsgs.into_iter()),
-            Duration::from_secs(1),
-            0,
-            None,
-        )
-        .unwrap();
-        let suppressed_callback = parser.next();
+        let mut parser = Box::pin(new_with_rmesg_stream(
+            RawEventStreamConfig{
+                verbosity: 0,
+                hostname: None,
+                gobble_old_events: false,
+                flush_timeout: Duration::from_secs(1),
+            },
+            Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+        ).await
+        .unwrap());
+
+        let suppressed_callback = parser.next().await;
         assert!(suppressed_callback.is_some());
         assert_eq!(
             suppressed_callback.unwrap(),
@@ -1473,8 +1517,8 @@ mod test {
                 hostname: None,
                 event: events::EventType::LinuxSuppressedCallback(
                     events::LinuxSuppressedCallback {
-                        facility: events::LogFacility::Kern,
-                        level: events::LogLevel::Warning,
+                        facility: rmesg::entry::LogFacility::Kern,
+                        level: rmesg::entry::LogLevel::Warning,
                         function_name: "show_signal_msg".to_owned(),
                         count: 9,
                     }
@@ -1483,19 +1527,28 @@ mod test {
         )
     }
 
-    fn boxed_kmsg(timestamp: OffsetDateTime, message: String) -> Box<kmsg::KMsg> {
-        Box::new(kmsg::KMsg {
-            facility: events::LogFacility::Kern,
-            level: events::LogLevel::Warning,
-            timestamp,
+    fn unboxed_kmsg(timestamp: OffsetDateTime, message: String) -> rmesg::entry::Entry {
+        rmesg::entry::Entry {
+            facility: Some(rmesg::entry::LogFacility::Kern),
+            level: Some(rmesg::entry::LogLevel::Warning),
+            timestamp_from_system_start: Some(timestamp_from_system_start(timestamp)),
+            sequence_num: None,
             message,
-        })
+        }
     }
 
-    fn boxed_kmsgs(timestamp: OffsetDateTime, messages: Vec<String>) -> Vec<Box<kmsg::KMsg>> {
+    fn unboxed_kmsgs(timestamp: OffsetDateTime, messages: Vec<String>) -> Vec<rmesg::entry::Entry> {
         messages
             .into_iter()
-            .map(|message| boxed_kmsg(timestamp, message))
+            .map(|message| unboxed_kmsg(timestamp, message))
             .collect()
+    }
+
+    fn timestamp_from_system_start(timestamp: OffsetDateTime) -> Duration {
+        lazy_static! {
+            static let ref system_start = system::system_start_time().unwrap();
+        }
+
+        timestamp.sub(system_start)
     }
 }

@@ -28,6 +28,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::process;
 use tokio_stream::StreamExt;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct MainError(String);
@@ -81,6 +82,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         verbosity: zerotect_config.verbosity,
         hostname: zerotect_config.hostname.clone(),
         gobble_old_events: zerotect_config.monitor.gobble_old_events,
+        flush_timeout: Duration::from_secs(1),
     };
     let os_event_stream = raw_event_stream::new(resc).await?;
 

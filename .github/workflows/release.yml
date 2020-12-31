@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Style (rustfmt)
+        run: docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t ghcr.io/polyverse/rust-dev-env/rust-dev-env:latest cargo fmt --all -- --check
+
+      - name: Lint (Clippy)
+        run: docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t ghcr.io/polyverse/rust-dev-env/rust-dev-env:latest cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t --privileged ghcr.io/polyverse/rust-dev-env/rust-dev-env:latest cargo test --workspace --all-targets --all-features
+
+      - name: Build Release executable
+        run: docker run -v cargo-cache:/root/.cargo/registry -v $PWD:/volume --rm -t polyverse/rust-dev-env cargo build --release --all
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Zerotect Executable
+        id: upload-zerotect-executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./target/x86_64-unknown-linux-musl/release/zerotect
+          asset_name: zerotect
+          asset_content_type: application/x-executable
+
+      - name: Upload Zerotect Installer
+        id: upload-zerotect-installer
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./install/install.sh
+          asset_name: install.sh
+          asset_content_type: application/x-shellscript
+
+      - name: Upload Zerotect Reference config file
+        id: upload-zerotect-reference-config-file
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          asset_path: ./reference/zerotect.toml
+          asset_name: zerotect.toml
+          asset_content_type: application/toml
