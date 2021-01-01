@@ -110,7 +110,8 @@ pub async fn emit_forever_syslogger_error(
                 )
             }
             Err(broadcast::error::RecvError::Closed) => {
-                panic!("Syslogger event source closed. Panicking and exiting.")
+                eprintln!("Syslogger event source closed. Exiting.");
+                return Ok(());
             }
         }
     }

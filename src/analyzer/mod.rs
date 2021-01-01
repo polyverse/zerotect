@@ -50,7 +50,10 @@ pub async fn new(
     };
 
     let s = stream::unfold(analyzer, |mut analyzer| async move {
-        Some((analyzer.next_event().await, analyzer))
+        match analyzer.next_event().await {
+            Some(next_event) => Some((next_event, analyzer)),
+            None => None,
+        }
     });
 
     Ok(s)
@@ -103,10 +106,10 @@ impl<I> Analyzer<I>
 where
     I: Stream<Item = events::Event> + Unpin,
 {
-    async fn next_event(&mut self) -> events::Event {
+    async fn next_event(&mut self) -> Option<events::Event> {
         loop {
             if let Some(detected_event) = self.detected_events_buffer.pop_front() {
-                return detected_event;
+                return Some(detected_event);
             }
 
             match self
@@ -142,16 +145,17 @@ where
 
                     // if passthrough, send the event out...
                     if let params::AnalyticsMode::Passthrough = self.mode {
-                        return event;
+                        return Some(event);
                     }
                 }
                 Err(timeout_iterator::error::Error::TimedOut) => {
                     self.detect();
                 }
                 Err(timeout_iterator::error::Error::Disconnected) => {
-                    panic!(
+                    eprintln!(
                         "Analyzer: Analysis channel disconnected. Aborting the analyzer thread."
                     );
+                    return None;
                 }
             }
         }
@@ -283,13 +287,10 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::Rng;
+    use futures::stream::iter;
     use serde_json::{from_str, from_value};
     use std::collections::BTreeMap;
     use std::sync::Arc;
-    use std::time::Duration;
-    use futures::stream::iter;
-    use tokio::time::sleep;
     use tokio_stream::StreamExt;
 
     macro_rules! map(
@@ -309,7 +310,8 @@ mod test {
         let mut events = run_analytics(
             iter(get_close_ip_events()),
             params::DetectedEventJustification::Full,
-        ).await;
+        )
+        .await;
 
         let event = events.next().await.unwrap();
         assert_matches!(event.as_ref(),
@@ -351,7 +353,8 @@ mod test {
         let mut events = run_analytics(
             iter(get_close_ip_events()),
             params::DetectedEventJustification::Summary,
-        ).await;
+        )
+        .await;
 
         let event = events.next().await.unwrap();
         assert_matches!(event.as_ref(),
@@ -401,7 +404,8 @@ mod test {
         let mut events = run_analytics(
             iter(close_rdi_events),
             params::DetectedEventJustification::Summary,
-        ).await;
+        )
+        .await;
 
         let event = events.next().await.unwrap();
         assert_matches!(event.as_ref(),
@@ -452,7 +456,11 @@ mod test {
         // interleave some close_ip_events
         let interleaved_streams = iter(raw_events).merge(iter(get_close_ip_events()));
 
-        let mut events = run_analytics(interleaved_streams, params::DetectedEventJustification::Summary).await;
+        let mut events = run_analytics(
+            interleaved_streams,
+            params::DetectedEventJustification::Summary,
+        )
+        .await;
 
         // Get register for event1
         let event1 = events.next().await.unwrap();
@@ -522,7 +530,8 @@ mod test {
         let mut events = run_analytics(
             iter(close_rdi_events),
             params::DetectedEventJustification::None,
-        ).await;
+        )
+        .await;
 
         let event = events.next().await.unwrap();
         assert_matches!(event.as_ref(),
@@ -563,14 +572,22 @@ mod test {
         events: impl Stream<Item = events::Event> + Unpin,
         justification_kind: params::DetectedEventJustification,
     ) -> impl Stream<Item = events::Event> + Unpin {
-        Box::pin(new(0,  params::AnalyticsConfig{
-            mode: params::AnalyticsMode::Detected,
-            justification: justification_kind,
-            collection_timeout_seconds: 2,
-            max_event_count: 20,
-            event_drop_count: 5,
-            event_lifetime_seconds: 5,
-        }, events).await.unwrap())
+        Box::pin(
+            new(
+                0,
+                params::AnalyticsConfig {
+                    mode: params::AnalyticsMode::Detected,
+                    justification: justification_kind,
+                    collection_timeout_seconds: 2,
+                    max_event_count: 20,
+                    event_drop_count: 5,
+                    event_lifetime_seconds: 5,
+                },
+                events,
+            )
+            .await
+            .unwrap(),
+        )
     }
 
     fn get_close_ip_events() -> Vec<events::Event> {

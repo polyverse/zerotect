@@ -78,13 +78,16 @@ impl EnvironmentConfigurator {
         auto_config: params::AutoConfigure,
         hostname: Option<String>,
     ) -> impl Stream<Item = events::Event> {
-        common::result_stream_exit_on_error(Self {
-            auto_config,
-            sleep_interval: Duration::from_secs(300),
-            hostname,
-            change_events: Vec::new(),
-            sleep_future: None,
-        })
+        common::result_stream_filter_error(
+            Self {
+                auto_config,
+                sleep_interval: Duration::from_secs(300),
+                hostname,
+                change_events: Vec::new(),
+                sleep_future: None,
+            },
+            "EnvironmentConfigurator",
+        )
     }
 
     fn enforce_config(&mut self) -> Result<(), SystemConfigError> {

@@ -1,10 +1,10 @@
 use crate::events;
 
+use rmesg;
 use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
 use time::OffsetDateTime;
-use rmesg;
 
 type TimestampedEvent = (OffsetDateTime, events::Event);
 pub type TimestampedEventList = VecDeque<TimestampedEvent>;

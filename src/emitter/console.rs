@@ -26,7 +26,8 @@ pub async fn emit_forever(
                 count
             ),
             Err(broadcast::error::RecvError::Closed) => {
-                panic!("Console emitter event source closed. Panicking and exiting.")
+                eprintln!("Console emitter event source closed. Exiting.");
+                return Ok(());
             }
         }
     }

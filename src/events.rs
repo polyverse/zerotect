@@ -2,6 +2,7 @@
 
 use rmesg::entry;
 use serde::Serialize;
+use serde::Serializer;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
@@ -9,7 +10,12 @@ use strum_macros::EnumString;
 use time::OffsetDateTime;
 
 #[cfg(test)]
-use serde::Deserialize;
+use serde::{de, Deserialize};
+#[cfg(test)]
+use time::Format;
+
+// See: https://docs.rs/time/0.2.23/time/index.html
+const OFFSET_DATETIME_FORMAT_STRING: &str = "%FT%H:%M:%S.%NZ";
 
 pub type Event = Arc<Version>;
 
@@ -60,6 +66,8 @@ pub enum Version {
     V1 {
         /// This is universal and important for all events. They occur at a time.
         #[cef_ext_gobble]
+        #[serde(serialize_with = "datetime_to_iso8601")]
+        #[cfg_attr(test, serde(deserialize_with = "iso8601_to_datetime"))]
         timestamp: OffsetDateTime,
 
         #[cef_ext_field(dhost)]
@@ -714,4 +722,59 @@ pub enum FatalSignalType {
 
     /// Power failure (System V) (synonym: SIGINFO)
     SIGPWR,
+}
+
+/// Convert an OffsetDateTime to ISO string representation
+fn datetime_to_iso8601<S>(d: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(d.format(OFFSET_DATETIME_FORMAT_STRING).as_str())
+}
+
+/// Convert an ISO DateTime string representation to OffsetDateTime
+#[cfg(test)]
+fn iso8601_to_datetime<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let timestr = String::deserialize(deserializer)?;
+    OffsetDateTime::parse(timestr.as_str(), Format::Rfc3339).map_err(|e| {
+        de::Error::custom(format!(
+            "Error deserializing OffsetDateTime from string {} with format {}: {}",
+            timestr, OFFSET_DATETIME_FORMAT_STRING, e
+        ))
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn deserialize_timestamp() {
+        let timestamp_original = OffsetDateTime::now_utc();
+        let timestamp_str = timestamp_original.format(OFFSET_DATETIME_FORMAT_STRING);
+        let timestamp_rehydrated = OffsetDateTime::parse(timestamp_str, Format::Rfc3339).unwrap();
+        assert_eq!(timestamp_original, timestamp_rehydrated);
+    }
+
+    #[test]
+    fn ser_de() {
+        let event_original = Version::V1 {
+            timestamp: OffsetDateTime::now_utc(),
+            hostname: None,
+            event: EventType::ConfigMismatch(ConfigMismatch {
+                key: "test".to_owned(),
+                expected_value: "this".to_owned(),
+                observed_value: "that".to_owned(),
+            }),
+        };
+
+        let jstr = serde_json::to_string(&event_original).unwrap();
+
+        let event_rehydrated: Version = serde_json::from_str(jstr.as_str()).unwrap();
+
+        assert_eq!(event_original, event_rehydrated);
+    }
 }

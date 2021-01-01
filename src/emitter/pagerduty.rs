@@ -78,7 +78,8 @@ pub async fn emit_forever(
                 )
             }
             Err(broadcast::error::RecvError::Closed) => {
-                panic!("PagerDuty event source closed. Panicking and exiting.")
+                eprintln!("PagerDuty event source closed. Exiting.");
+                return Ok(());
             }
         }
     }

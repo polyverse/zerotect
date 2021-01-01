@@ -125,7 +125,11 @@ pub async fn emit_forever(
     */
     if let Some(tc) = ec.polycorder {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
-        emit_forever_futures.push(Box::pin(polycorder::emit_forever(ec.verbosity, tc, tx.subscribe())));
+        emit_forever_futures.push(Box::pin(polycorder::emit_forever(
+            ec.verbosity,
+            tc,
+            tx.subscribe(),
+        )));
     }
 
     if emit_forever_futures.is_empty() {

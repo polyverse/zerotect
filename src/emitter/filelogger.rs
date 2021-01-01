@@ -101,7 +101,8 @@ pub async fn emit_forever_filelogger_error(
                 )
             }
             Err(broadcast::error::RecvError::Closed) => {
-                panic!("FileLogger event source closed. Panicking and exiting.")
+                eprintln!("FileLogger event source closed. Exiting.");
+                return Ok(());
             }
         }
     }

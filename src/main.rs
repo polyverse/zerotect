@@ -27,8 +27,8 @@ use futures::stream::Stream;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::process;
-use tokio_stream::StreamExt;
 use std::time::Duration;
+use tokio_stream::StreamExt;
 
 #[derive(Debug)]
 pub struct MainError(String);

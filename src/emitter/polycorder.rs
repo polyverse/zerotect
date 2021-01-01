@@ -2,9 +2,7 @@
 
 use http::StatusCode;
 use libflate::gzip::Encoder;
-use reqwest::header::{
-    HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, USER_AGENT,
-};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
 use reqwest::Client;
 use serde::Serialize;
 use serde_json;
@@ -123,7 +121,8 @@ async fn emit_forever_polycorder_error(
                     false
                 }
                 Err(broadcast::error::RecvError::Closed) => {
-                    panic!("Polycorder event source closed. Panicking and exiting.");
+                    eprintln!("Polycorder event source closed. Exiting.");
+                    return Ok(());
                 }
             },
             Err(_) => true,

@@ -61,14 +61,18 @@ pub fn abs_diff<N: Unsigned + Integer>(u1: N, u2: N) -> N {
     }
 }
 
-pub fn result_stream_exit_on_error<E>(
+pub fn result_stream_filter_error<E>(
     stream: impl Stream<Item = Result<events::Event, E>>,
+    stream_name: &str,
 ) -> impl Stream<Item = events::Event>
 where
     E: Error,
 {
-    stream.filter_map(|x| match x {
+    let owned_stream_name = stream_name.to_owned();
+    stream.filter_map(move |x| match x {
         Ok(ev) => Some(ev),
-        Err(err) => panic!("Exiting due to error: {:?}", err),
+        Err(err) => {
+            panic!("Error in stream {}: {:?}", owned_stream_name, err);
+        }
     })
 }

@@ -1412,7 +1412,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let config = parse_config_file(&toml_file).unwrap();
@@ -1467,7 +1466,6 @@ mod test {
 
             let toml_file = unique_temp_toml_file();
             let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-            println!("Writing TOML string to file: {}", &toml_file);
             fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
             let maybe_config = parse_config_file(&toml_file);
@@ -1533,7 +1531,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1597,7 +1594,6 @@ mod test {
 
             let toml_file = unique_temp_toml_file();
             let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-            println!("Writing TOML string to file: {}", &toml_file);
             fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
             let args: Vec<OsString> = vec![
@@ -1622,7 +1618,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1665,7 +1660,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1712,7 +1706,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1760,7 +1753,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1795,7 +1787,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1862,7 +1853,6 @@ mod test {
             "/reference/zerotect.toml"
         );
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
     }
 
