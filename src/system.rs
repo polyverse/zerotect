@@ -13,8 +13,8 @@ use std::fs;
 use std::io;
 use std::num;
 use std::ops::Sub;
+use std::rc::Rc;
 use std::str;
-use std::sync::Arc;
 use sys_info::os_type;
 use sysctl::Sysctl;
 use tokio::time::{sleep, Sleep};
@@ -203,7 +203,7 @@ pub fn modify_environment(
     if auto_configure.klog_include_timestamp && !rmesg::klogctl::klog_timestamps_enabled()? {
         rmesg::klogctl::klog_timestamps_enable(true)?;
 
-        env_events.push(Arc::new(events::Version::V1 {
+        env_events.push(Rc::new(events::Version::V1 {
             timestamp: OffsetDateTime::now_utc(),
             hostname: hostname.clone(),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {
@@ -232,7 +232,7 @@ fn ensure_systemctl(
         Ok(None)
     } else {
         ctl.set_value_string(valuestr)?;
-        Ok(Some(Arc::new(events::Version::V1 {
+        Ok(Some(Rc::new(events::Version::V1 {
             timestamp: OffsetDateTime::now_utc(),
             hostname: hostname.clone(),
             event: events::EventType::ConfigMismatch(events::ConfigMismatch {

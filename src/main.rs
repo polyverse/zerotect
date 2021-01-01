@@ -52,7 +52,7 @@ impl From<raw_event_stream::RawEventStreamError> for MainError {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = system::ensure_linux() {
         eprintln!(

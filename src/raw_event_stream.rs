@@ -18,7 +18,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FmtResult},
     ops::Add,
-    sync::Arc,
+    rc::Rc,
     time::Duration,
 };
 use time::OffsetDateTime;
@@ -284,7 +284,7 @@ impl RawEventStream {
                         (None, None, None)
                     };
 
-                return Some(Arc::new(events::Version::V1 {
+                return Some(Rc::new(events::Version::V1 {
                     timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -369,7 +369,7 @@ impl RawEventStream {
                     rmesg_entry.level,
                     events::FatalSignalType::from_u8(signalnum),
                 ) {
-                    return Some(Arc::new(events::Version::V1 {
+                    return Some(Rc::new(events::Version::V1 {
                         timestamp: entry_timestamp,
                         hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
@@ -559,7 +559,7 @@ impl RawEventStream {
                 &dmesg_parts["function"],
                 common::parse_fragment::<usize>(&dmesg_parts["count"]),
             ) {
-                return Some(Arc::new(events::Version::V1 {
+                return Some(Rc::new(events::Version::V1 {
                     timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
@@ -612,7 +612,7 @@ mod test {
                     String::from("a.out[37659]: segfault at 7fff4b8ba8b8 ip 00007fff4b8ba8b8 sp 00007fff4b8ba7b8 error 15"),
                 ]);
 
-        let event1 = Arc::new(events::Version::V1 {
+        let event1 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -637,7 +637,7 @@ mod test {
             }),
         });
 
-        let event2 = Arc::new(events::Version::V1 {
+        let event2 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -662,7 +662,7 @@ mod test {
             }),
         });
 
-        let event3 = Arc::new(events::Version::V1 {
+        let event3 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -830,7 +830,7 @@ mod test {
                 String::from(" a.out[38275]: trap invalid opcode ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4"),
             ]);
 
-        let event1 = Arc::new(events::Version::V1 {
+        let event1 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -855,7 +855,7 @@ mod test {
             }),
         });
 
-        let event2 = Arc::new(events::Version::V1 {
+        let event2 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -979,7 +979,7 @@ mod test {
             unboxed_kmsg(timestamp, String::from(" a.out[39275]: bar ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4")),
         ];
 
-        let event1 = Arc::new(events::Version::V1 {
+        let event1 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -1006,7 +1006,7 @@ mod test {
             }),
         });
 
-        let event2 = Arc::new(events::Version::V1 {
+        let event2 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -1137,7 +1137,7 @@ mod test {
                     String::from("nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
                 ]);
 
-        let event1 = Arc::new(events::Version::V1 {
+        let event1 = Rc::new(events::Version::V1 {
             timestamp,
             hostname: Some("testhost".to_owned()),
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -1272,7 +1272,7 @@ mod test {
         assert!(sig11.is_some());
         assert_eq!(
             sig11.unwrap(),
-            Arc::new(events::Version::V1 {
+            Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("testhost2".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
@@ -1331,7 +1331,7 @@ mod test {
             assert!(sig11.is_some());
             assert_eq!(
                 sig11.unwrap(),
-                Arc::new(events::Version::V1 {
+                Rc::new(events::Version::V1 {
                     timestamp: OffsetDateTime::from_unix_timestamp_nanos(
                         6433742000000 + 372858970000000
                     ),
@@ -1402,7 +1402,7 @@ mod test {
             assert!(sig11.is_some());
             assert_eq!(
                 sig11.unwrap(),
-                Arc::new(events::Version::V1 {
+                Rc::new(events::Version::V1 {
                     timestamp: OffsetDateTime::from_unix_timestamp_nanos(
                         6433742000000 + 372858970000000
                     ),
@@ -1494,7 +1494,7 @@ mod test {
         assert!(suppressed_callback.is_some());
         assert_eq!(
             suppressed_callback.unwrap(),
-            Arc::new(events::Version::V1 {
+            Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: None,
                 event: events::EventType::LinuxSuppressedCallback(

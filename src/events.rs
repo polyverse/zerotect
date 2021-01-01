@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde::Serializer;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::Arc;
+use std::rc::Rc;
 use strum_macros::EnumString;
 use time::OffsetDateTime;
 
@@ -17,7 +17,7 @@ use time::Format;
 // See: https://docs.rs/time/0.2.23/time/index.html
 const OFFSET_DATETIME_FORMAT_STRING: &str = "%FT%H:%M:%S.%NZ";
 
-pub type Event = Arc<Version>;
+pub type Event = Rc<Version>;
 
 /// Event is the complete structure that Polycorder (Polyverse-hosted
 /// zero-day detection service) understands. This structure is also

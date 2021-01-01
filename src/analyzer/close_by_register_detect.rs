@@ -3,7 +3,7 @@ use crate::events;
 use crate::params;
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::rc::Rc;
 use time::OffsetDateTime;
 
 pub fn close_by_register_detect(
@@ -73,7 +73,7 @@ pub fn close_by_register_detect(
     // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
     if close_by_register.len() > justification_threshold {
         return Some((
-            Arc::new(events::Version::V1 {
+            Rc::new(events::Version::V1 {
                 timestamp: OffsetDateTime::now_utc(),
                 hostname: common::get_first_event_hostname(&close_by_register),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
