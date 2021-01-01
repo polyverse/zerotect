@@ -45,7 +45,14 @@ assert_matches = "1.4.0"
 rand = "0.8.0"
 pretty_assertions = "0.6.1"
 
-# Enable LTO for release (since it only builds in Travis and doesn't block day to day)
+[profile.dev]
+# We don't need stack unwinding in releases
+panic = 'abort'
+
 [profile.release]
+# We don't need stack unwinding in releases
+panic = 'abort'
+# Enable LTO for release (since it only builds in Travis and doesn't block day to day)
 lto = "fat"
+# One code-gen unit so we get a highly optimized binary
 codegen-units = 1
