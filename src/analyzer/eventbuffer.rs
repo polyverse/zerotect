@@ -55,6 +55,10 @@ impl EventBuffer {
         self.len() >= self.max_event_count
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == self.max_event_count
+    }
+
     pub fn len(&self) -> usize {
         self.cached_len
     }
@@ -301,7 +305,7 @@ mod test {
 
     #[test]
     fn ensure_expiry_multiple_procs_multiple_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_millis(100));
 
         // add 10 events
         for i in 0..9 {

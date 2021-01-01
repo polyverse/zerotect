@@ -123,11 +123,13 @@ where
                             timestamp,
                             hostname: _,
                             event: events::EventType::LinuxKernelTrap(lkt),
-                        } => self.buffer_incoming_event(
-                            *timestamp,
-                            lkt.procname.clone(),
-                            event.clone(),
-                        ),
+                        } => {
+                            self.buffer_incoming_event(
+                                *timestamp,
+                                lkt.procname.clone(),
+                                event.clone(),
+                            );
+                        }
                         events::Version::V1 {
                             timestamp,
                             hostname: _,
@@ -149,6 +151,11 @@ where
                     }
                 }
                 Err(timeout_iterator::error::Error::TimedOut) => {
+                    self.detect();
+                }
+                Err(timeout_iterator::error::Error::Disconnected)
+                    if !self.event_buffer.is_empty() =>
+                {
                     self.detect();
                 }
                 Err(timeout_iterator::error::Error::Disconnected) => {
