@@ -1,7 +1,6 @@
 use crate::events;
 use crate::formatter::{FormatResult, Formatter};
 use rust_cef::ToCef;
-use time::OffsetDateTime;
 
 pub struct CEFFormatter {}
 impl Formatter for CEFFormatter {

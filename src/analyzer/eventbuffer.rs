@@ -1,6 +1,5 @@
 use crate::events;
 
-use rmesg;
 use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
