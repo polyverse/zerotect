@@ -10,6 +10,7 @@ use futures::{
     stream::{self, Stream},
     StreamExt,
 };
+use lazy_static::lazy_static;
 use num::FromPrimitive;
 use regex::Regex;
 use rmesg::{entry::Entry, error::RMesgError};
@@ -23,7 +24,6 @@ use std::{
 };
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
-use lazy_static::lazy_static;
 
 #[derive(Debug)]
 pub enum RawEventStreamError {
@@ -76,8 +76,11 @@ pub struct RawEventStreamConfig {
 
 type TimeoutStreamItem = Result<Entry, RMesgError>;
 
-pub struct RawEventStream {
-    entries: TimeoutStream<rmesg::EntriesStream>,
+pub struct RawEventStream<S>
+where
+    S: Stream<Item = TimeoutStreamItem>,
+{
+    entries: Pin<Box<TimeoutStream<S>>>,
     verbosity: u8,
     hostname: Option<String>,
     flush_timeout: Duration,
@@ -90,8 +93,10 @@ pub struct RawEventStream {
     event_stream_start_time: OffsetDateTime,
 }
 
-impl RawEventStream {
-
+impl<S> RawEventStream<S>
+where
+    S: Stream<Item = TimeoutStreamItem>,
+{
     pub async fn new(
         c: RawEventStreamConfig,
     ) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
@@ -101,7 +106,7 @@ impl RawEventStream {
 
         let system_start_time = system::system_start_time()?;
 
-        RawEventStream::new_with_rmesg_stream(
+        RawEventStream::<rmesg::EntriesStream>::new_with_rmesg_stream(
             c,
             system_start_time,
             rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
@@ -112,9 +117,9 @@ impl RawEventStream {
     pub async fn new_with_rmesg_stream(
         c: RawEventStreamConfig,
         system_start_time: OffsetDateTime,
-        rmesg_stream: rmesg::EntriesStream,
+        rmesg_stream: S,
     ) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
-        let entries = TimeoutStream::with_stream(rmesg_stream).await?;
+        let entries = Box::pin(TimeoutStream::with_stream(rmesg_stream).await?);
 
         // Start processing events from system start? Or when zerotect was started?
         let event_stream_start_time = match c.gobble_old_events {
@@ -132,11 +137,11 @@ impl RawEventStream {
         };
 
         let s = stream::unfold(res, |mut res| async move {
-                match res.parse_next_event().await {
-                    Some(next_event) => Some((next_event.unwrap(), res)),
-                    None => None,
-                }
-            });
+            match res.parse_next_event().await {
+                Some(next_event) => Some((next_event.unwrap(), res)),
+                None => None,
+            }
+        });
 
         Ok(s)
     }
@@ -165,7 +170,7 @@ impl RawEventStream {
                         continue;
                     }
 
-                    match RawEventStream::parse_finite_kmsg_to_event(
+                    match RawEventStream::<S>::parse_finite_kmsg_to_event(
                         &rmesg_entry,
                         entry_timestamp,
                         &hostname,
@@ -200,11 +205,17 @@ impl RawEventStream {
         entry_timestamp: OffsetDateTime,
         hostname: &Option<String>,
     ) -> Option<events::Event> {
-        match RawEventStream::parse_callbacks_suppressed(rmesg_entry, entry_timestamp, hostname)
-            .await
+        match RawEventStream::<S>::parse_callbacks_suppressed(
+            rmesg_entry,
+            entry_timestamp,
+            hostname,
+        )
+        .await
         {
             Some(e) => Some(e),
-            None => RawEventStream::parse_kernel_trap(rmesg_entry, entry_timestamp, hostname).await,
+            None => {
+                RawEventStream::<S>::parse_kernel_trap(rmesg_entry, entry_timestamp, hostname).await
+            }
         }
     }
 
@@ -266,7 +277,7 @@ impl RawEventStream {
                 rmesg_entry.level,
                 &dmesg_parts["procname"],
                 common::parse_fragment::<usize>(&dmesg_parts["pid"]),
-                RawEventStream::parse_kernel_trap_type(&dmesg_parts["message"]).await,
+                RawEventStream::<S>::parse_kernel_trap_type(&dmesg_parts["message"]).await,
                 common::parse_hex::<usize>(&dmesg_parts["ip"]),
                 common::parse_hex::<usize>(&dmesg_parts["sp"]),
                 common::parse_hex::<usize>(&dmesg_parts["errcode"]),
@@ -421,7 +432,7 @@ impl RawEventStream {
         // the various branches of the loop will terminate...
         loop {
             // peek next line, and if it has a colon, take it
-            let entry = match self.entries.peek_timeout(self.flush_timeout).await {
+            let entry = match self.entries.as_mut().peek_timeout(self.flush_timeout).await {
                 Ok(Ok(peek_entry)) => {
                     let peek_entry_timestamp = match peek_entry.timestamp_from_system_start {
                         Some(timestamp_from_system_start) => {
@@ -432,7 +443,7 @@ impl RawEventStream {
 
                     // is next message possibly a finite event? Like a kernel trap?
                     // if so, don't consume it and end this KV madness
-                    if RawEventStream::parse_finite_kmsg_to_event(
+                    if RawEventStream::<S>::parse_finite_kmsg_to_event(
                         peek_entry,
                         peek_entry_timestamp,
                         hostname,
@@ -583,6 +594,7 @@ impl RawEventStream {
 #[cfg(test)]
 mod test {
     use super::*;
+    use assert_matches::assert_matches;
     use futures::stream::iter;
     use pretty_assertions::assert_eq;
     use serde_json::{from_str, to_value};
@@ -689,7 +701,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -697,7 +709,7 @@ mod test {
                     flush_timeout: Duration::from_secs(1),
                 },
                 OffsetDateTime::from_unix_timestamp(0),
-                Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
+                iter(kmsgs.into_iter().map(|k| Ok(k))),
             )
             .await
             .unwrap(),
@@ -880,7 +892,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -1033,7 +1045,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -1162,7 +1174,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: Some("testhost".to_owned()),
@@ -1253,7 +1265,7 @@ mod test {
         }];
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: Some("testhost2".to_owned()),
@@ -1312,7 +1324,7 @@ mod test {
         {
             // Validate when new kmsg's stop coming in (at timeout).
             let mut parser = Box::pin(
-                new_with_rmesg_stream(
+                RawEventStream::new_with_rmesg_stream(
                     RawEventStreamConfig {
                         verbosity: 0,
                         hostname: None,
@@ -1383,7 +1395,7 @@ mod test {
             kmsgs.push(unboxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
 
             let mut parser = Box::pin(
-                new_with_rmesg_stream(
+                RawEventStream::new_with_rmesg_stream(
                     RawEventStreamConfig {
                         verbosity: 0,
                         hostname: None,
@@ -1475,7 +1487,7 @@ mod test {
         }];
 
         let mut parser = Box::pin(
-            new_with_rmesg_stream(
+            RawEventStream::new_with_rmesg_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,

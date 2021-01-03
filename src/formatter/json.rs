@@ -1,5 +1,6 @@
 use crate::events;
 use crate::formatter::FormatResult;
+use time::OffsetDateTime;
 
 pub struct JsonFormatter {}
 impl JsonFormatter {

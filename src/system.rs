@@ -121,7 +121,7 @@ impl Stream for EnvironmentConfigurator {
 
         // enforce configuration
         if let Err(e) = self.enforce_config() {
-            panic!("Error in Environment Configurator. Panicking.");
+            panic!("Error in Environment Configurator. Panicking. {}", e);
         }
 
         // entries empty? then go to sleep...

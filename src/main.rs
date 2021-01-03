@@ -71,22 +71,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         gobble_old_events: zerotect_config.monitor.gobble_old_events,
         flush_timeout: Duration::from_secs(1),
     };
-    let os_event_stream = raw_event_stream::RawEventStream::new(resc).await?;
+    let os_event_stream =
+        raw_event_stream::RawEventStream::<rmesg::EntriesStream>::new(resc).await?;
 
     // get a unified stream of all incoming events...
-    let events_stream: Pin<Box<dyn Stream<Item = events::Event>>> = Box::pin(os_event_stream.merge(config_events_stream));
+    let events_stream = Box::pin(os_event_stream.merge(config_events_stream));
 
-    let analyzed_stream: Pin<Box<dyn Stream<Item = events::Event>>> = match zerotect_config.analytics.mode {
-        params::AnalyticsMode::Off => events_stream,
-        _ => Box::pin(
-            analyzer::Analyzer::new(
-                zerotect_config.verbosity,
-                zerotect_config.analytics,
-                events_stream,
-            )
-            .await?,
-        ),
-    };
+    let analyzed_stream: Pin<Box<dyn Stream<Item = events::Event>>> =
+        match zerotect_config.analytics.mode {
+            params::AnalyticsMode::Off => events_stream,
+            _ => Box::pin(
+                analyzer::Analyzer::new(
+                    zerotect_config.verbosity,
+                    zerotect_config.analytics,
+                    events_stream,
+                )
+                .await?,
+            ),
+        };
 
     // split these up before a move
     let ec = emitter::EmitterConfig {

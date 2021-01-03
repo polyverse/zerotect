@@ -7,6 +7,7 @@ mod eventbuffer;
 use crate::events;
 use crate::params;
 
+use core::pin::Pin;
 use eventbuffer::EventBuffer;
 use futures::stream;
 use futures::Stream;
@@ -14,6 +15,7 @@ use std::collections::VecDeque;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::mem::size_of;
+use std::rc::Rc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
@@ -47,10 +49,10 @@ impl From<timeout_iterator::error::Error> for AnalyzerError {
 /// to perform analysis.
 pub struct Analyzer<I>
 where
-    I: Stream<Item = events::Event> + Unpin,
+    I: Stream<Item = events::Event>,
 {
     verbosity: u8,
-    incoming_events_stream: TimeoutStream<I>,
+    incoming_events_stream: Pin<Box<TimeoutStream<I>>>,
     mode: params::AnalyticsMode,
     collection_timeout: Duration,
     /// how close can the instruction pointer be for it to be an event?
@@ -66,9 +68,8 @@ where
 /// use those wrapper methods because they can do some useful things.
 impl<I> Analyzer<I>
 where
-    I: Stream<Item = events::Event> + Unpin,
+    I: Stream<Item = events::Event>,
 {
-
     pub async fn new(
         verbosity: u8,
         config: params::AnalyticsConfig,
@@ -85,7 +86,9 @@ where
         let analyzer = Analyzer {
             verbosity,
             mode: config.mode,
-            incoming_events_stream: TimeoutStream::with_stream(raw_incoming_stream).await?,
+            incoming_events_stream: Box::pin(
+                TimeoutStream::with_stream(raw_incoming_stream).await?,
+            ),
             collection_timeout: Duration::from_secs(config.collection_timeout_seconds),
             // if IP is within usize then someone's jumping within the size of an instruction.
             // segfaults usually don't happen that close to each other.
@@ -107,7 +110,6 @@ where
         Ok(s)
     }
 
-
     async fn next_event(&mut self) -> Option<events::Event> {
         loop {
             if let Some(detected_event) = self.detected_events_buffer.pop_front() {
@@ -116,6 +118,7 @@ where
 
             match self
                 .incoming_events_stream
+                .as_mut()
                 .next_timeout(self.collection_timeout)
                 .await
             {
@@ -127,7 +130,7 @@ where
                             event: events::EventType::LinuxKernelTrap(lkt),
                         } => {
                             self.buffer_incoming_event(
-                                *timestamp,
+                                timestamp.clone(),
                                 lkt.procname.clone(),
                                 event.clone(),
                             );
@@ -139,7 +142,11 @@ where
                         } => {
                             if let Some(comm) = lfs.stack_dump.get("Comm") {
                                 // comm is process name
-                                self.buffer_incoming_event(*timestamp, comm.clone(), event.clone())
+                                self.buffer_incoming_event(
+                                    timestamp.clone(),
+                                    comm.clone(),
+                                    event.clone(),
+                                )
                             }
                         }
 
@@ -296,10 +303,10 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use assert_matches::assert_matches;
     use futures::stream::iter;
     use serde_json::{from_str, from_value};
     use std::collections::BTreeMap;
-    use std::sync::Arc;
     use tokio_stream::StreamExt;
 
     macro_rules! map(
@@ -578,11 +585,11 @@ mod test {
     }
 
     async fn run_analytics(
-        events: impl Stream<Item = events::Event> + Unpin,
+        events: impl Stream<Item = events::Event>,
         justification_kind: params::DetectedEventJustification,
-    ) -> impl Stream<Item = events::Event> + Unpin {
+    ) -> impl Stream<Item = events::Event> {
         Box::pin(
-            new(
+            Analyzer::new(
                 0,
                 params::AnalyticsConfig {
                     mode: params::AnalyticsMode::Detected,
@@ -601,7 +608,7 @@ mod test {
 
     fn get_close_ip_events() -> Vec<events::Event> {
         vec![
-            Arc::new(
+            Rc::new(
                 from_value(
                     from_str::<serde_json::Value>(
                         r#"{
@@ -637,7 +644,7 @@ mod test {
                 )
                 .unwrap(),
             ),
-            Arc::new(
+            Rc::new(
                 from_value(
                     from_str::<serde_json::Value>(
                         r#"{
@@ -674,7 +681,7 @@ mod test {
                 )
                 .unwrap(),
             ),
-            Arc::new(
+            Rc::new(
                 from_value(
                     from_str::<serde_json::Value>(
                         r#"{
@@ -710,7 +717,7 @@ mod test {
                 )
                 .unwrap(),
             ),
-            Arc::new(
+            Rc::new(
                 from_value(
                     from_str::<serde_json::Value>(
                         r#"{
@@ -747,7 +754,7 @@ mod test {
                 )
                 .unwrap(),
             ),
-            Arc::new(
+            Rc::new(
                 from_value(
                     from_str::<serde_json::Value>(
                         r#"{
@@ -822,7 +829,7 @@ mod test {
             stack_dump.insert(k, v);
         }
 
-        Arc::new(events::Version::V1 {
+        Rc::new(events::Version::V1 {
             timestamp: OffsetDateTime::now_utc(),
             hostname: Some("nonexistent".to_owned()),
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {

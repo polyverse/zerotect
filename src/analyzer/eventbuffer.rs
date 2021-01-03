@@ -211,7 +211,7 @@ impl EventBuffer {
 mod test {
     use super::*;
     use rand;
-    use std::sync::Arc;
+    use std::rc::Rc;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -326,7 +326,7 @@ mod test {
     fn create_event(procname: String) -> (OffsetDateTime, String, events::Event) {
         let timestamp = OffsetDateTime::now_utc();
         let event = match rand::random::<bool>() {
-            true => Arc::new(events::Version::V1 {
+            true => Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
@@ -343,7 +343,7 @@ mod test {
                     vmastart: None,
                 }),
             }),
-            false => Arc::new(events::Version::V1 {
+            false => Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {

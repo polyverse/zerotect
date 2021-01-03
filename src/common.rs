@@ -3,7 +3,6 @@ use num::{Integer, Unsigned};
 use std::any::type_name;
 use std::fmt::Display;
 use std::str::FromStr;
-use tokio_stream::StreamExt;
 
 pub fn get_first_event_hostname(events: &[events::Event]) -> Option<String> {
     events
