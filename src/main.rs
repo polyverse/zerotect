@@ -61,7 +61,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let auto_configure_env = zerotect_config.auto_configure;
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let config_events_stream = system::EnvironmentConfigurator::new(auto_configure_env, chostname);
+    let config_events_stream =
+        system::EnvironmentConfigurator::create_environment_configrator_stream(
+            auto_configure_env,
+            chostname,
+        );
 
     let resc = raw_event_stream::RawEventStreamConfig {
         verbosity: zerotect_config.verbosity,
@@ -70,13 +74,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         flush_timeout: Duration::from_secs(1),
     };
     let os_event_stream =
-        raw_event_stream::RawEventStream::<rmesg::EntriesStream>::new(resc).await?;
+        raw_event_stream::RawEventStream::<rmesg::EntriesStream>::create_raw_event_stream(resc)
+            .await?;
 
     // get a unified stream of all incoming events...
     let merged_events_stream = os_event_stream.merge(config_events_stream);
 
     let analyzed_stream = Box::pin(
-        analyzer::Analyzer::new(
+        analyzer::Analyzer::analyzer_over_stream(
             zerotect_config.verbosity,
             zerotect_config.analytics,
             merged_events_stream,

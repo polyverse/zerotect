@@ -98,10 +98,10 @@ pub async fn emit_forever_filelogger_error(
         Some(rfc) => match lfc.rotation_file_max_size {
             //wrap file in file-rotation
             Some(rfms) => FileLogger::FileRotate(FileRotate::new(lfc.filepath, RotationMode::BytesSurpassed(rfms), rfc).await?),
-            None => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless.".to_owned()).into()),
+            None => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_count parameter, but not a rotation_file_max_size parameter. Without knowing the maximum size of a file at which to rotate to the next one, the rotation count is meaningless.".to_owned())),
         },
         None => match lfc.rotation_file_max_size {
-            Some(_) => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_max_size parameter, but not a rotation_file_count parameter. Without knowing the number of files to rotate over, the max size is meaningless.".to_owned()).into()),
+            Some(_) => return Err(FileLoggerError::MissingParameter("File Logger was provided a rotation_file_max_size parameter, but not a rotation_file_count parameter. Without knowing the number of files to rotate over, the max size is meaningless.".to_owned())),
             None => match OpenOptions::new()
                 .append(true)
                 .create_new(true)
@@ -110,7 +110,7 @@ pub async fn emit_forever_filelogger_error(
                 Ok(file) => FileLogger::File(file),
                 Err(err) => match err.kind() {
                     ErrorKind::AlreadyExists => FileLogger::File(OpenOptions::new().append(true).open(lfc.filepath).await?),
-                    _ => return Err(FileLoggerError::from(err).into()),
+                    _ => return Err(FileLoggerError::from(err)),
                 },
             },
         },

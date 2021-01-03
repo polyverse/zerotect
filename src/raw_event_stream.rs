@@ -97,7 +97,7 @@ impl<S> RawEventStream<S>
 where
     S: Stream<Item = TimeoutStreamItem>,
 {
-    pub async fn new(
+    pub async fn create_raw_event_stream(
         c: RawEventStreamConfig,
     ) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
         if c.verbosity > 0 {
@@ -106,7 +106,7 @@ where
 
         let system_start_time = system::system_start_time()?;
 
-        RawEventStream::<rmesg::EntriesStream>::new_with_rmesg_stream(
+        RawEventStream::<rmesg::EntriesStream>::create_raw_event_stream_over_provided_entry_stream(
             c,
             system_start_time,
             rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
@@ -114,7 +114,7 @@ where
         .await
     }
 
-    pub async fn new_with_rmesg_stream(
+    pub async fn create_raw_event_stream_over_provided_entry_stream(
         c: RawEventStreamConfig,
         system_start_time: OffsetDateTime,
         rmesg_stream: S,
@@ -498,7 +498,7 @@ where
                     } else {
                         let appended_key = match key {
                             Some(mut ks) => {
-                                if ks != "" {
+                                if !ks.is_empty() {
                                     ks.push(' ')
                                 };
                                 ks.push_str(part_without_colon);
@@ -514,13 +514,13 @@ where
                 } else {
                     // are we in a value? if so append to it
                     if let Some(mut v) = value {
-                        if v != "" {
+                        if !v.is_empty() {
                             v.push(' ')
                         };
                         v.push_str(part);
                         value = Some(v);
                     } else if let Some(mut k) = key {
-                        if k != "" {
+                        if !k.is_empty() {
                             k.push(' ')
                         };
                         k.push_str(part);
@@ -701,7 +701,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -892,7 +892,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -1045,7 +1045,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,
@@ -1174,7 +1174,7 @@ mod test {
         });
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: Some("testhost".to_owned()),
@@ -1265,7 +1265,7 @@ mod test {
         }];
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: Some("testhost2".to_owned()),
@@ -1324,7 +1324,7 @@ mod test {
         {
             // Validate when new kmsg's stop coming in (at timeout).
             let mut parser = Box::pin(
-                RawEventStream::new_with_rmesg_stream(
+                RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                     RawEventStreamConfig {
                         verbosity: 0,
                         hostname: None,
@@ -1395,7 +1395,7 @@ mod test {
             kmsgs.push(unboxed_kmsg(timestamp, String::from("traps: nginx[65914] general protection ip:7f883f6f39a5 sp:7ffc914464e8 error:0 in libpthread-2.23.so[7f883f6e3000+18000]")));
 
             let mut parser = Box::pin(
-                RawEventStream::new_with_rmesg_stream(
+                RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                     RawEventStreamConfig {
                         verbosity: 0,
                         hostname: None,
@@ -1487,7 +1487,7 @@ mod test {
         }];
 
         let mut parser = Box::pin(
-            RawEventStream::new_with_rmesg_stream(
+            RawEventStream::create_raw_event_stream_over_provided_entry_stream(
                 RawEventStreamConfig {
                     verbosity: 0,
                     hostname: None,

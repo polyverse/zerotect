@@ -70,7 +70,7 @@ impl<I> Analyzer<I>
 where
     I: Stream<Item = events::Event>,
 {
-    pub async fn new(
+    pub async fn analyzer_over_stream(
         verbosity: u8,
         config: params::AnalyticsConfig,
         raw_incoming_stream: I,
@@ -138,7 +138,7 @@ where
                             event: events::EventType::LinuxKernelTrap(lkt),
                         } => {
                             self.buffer_incoming_event(
-                                timestamp.clone(),
+                                *timestamp,
                                 lkt.procname.clone(),
                                 event.clone(),
                             );
@@ -150,11 +150,7 @@ where
                         } => {
                             if let Some(comm) = lfs.stack_dump.get("Comm") {
                                 // comm is process name
-                                self.buffer_incoming_event(
-                                    timestamp.clone(),
-                                    comm.clone(),
-                                    event.clone(),
-                                )
+                                self.buffer_incoming_event(*timestamp, comm.clone(), event.clone())
                             }
                         }
 
@@ -198,7 +194,7 @@ where
         }
 
         // exit on the most trivial case
-        if self.event_buffer.len() == 0 {
+        if self.event_buffer.is_empty() {
             if self.verbosity > 1 {
                 eprintln!("Analyzer: Skipping detection since event buffer is empty")
             }

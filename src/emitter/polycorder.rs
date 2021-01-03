@@ -67,7 +67,7 @@ impl From<serde_json::Error> for PolycorderError {
 #[derive(Serialize)]
 struct Report<'l> {
     node_id: &'l str,
-    events: &'l Vec<events::Event>,
+    events: &'l [events::Event],
 }
 
 pub async fn emit_forever(
@@ -106,11 +106,7 @@ async fn emit_forever_polycorder_error(
             Ok(recv_result) => match recv_result {
                 Ok(event) => {
                     events.push(event);
-                    if events.len() >= config.flush_event_count {
-                        true
-                    } else {
-                        false
-                    }
+                    events.len() >= config.flush_event_count
                 }
                 Err(broadcast::error::RecvError::Lagged(count)) => {
                     eprintln!(
@@ -138,11 +134,11 @@ async fn publish_to_polycorder(
     verbosity: u8,
     config: &params::PolycorderConfig,
     client: &Client,
-    events: &Vec<events::Event>,
+    events: &[events::Event],
 ) -> Result<(), PolycorderError> {
     let report = Report {
         node_id: config.node_id.as_str(),
-        events: &events,
+        events,
     };
 
     let json_serialized_report = serde_json::to_vec(&report)?;

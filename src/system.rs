@@ -73,7 +73,7 @@ pub struct EnvironmentConfigurator {
     sleep_future: Option<Pin<Box<Sleep>>>,
 }
 impl EnvironmentConfigurator {
-    pub fn new(
+    pub fn create_environment_configrator_stream(
         auto_config: params::AutoConfigure,
         hostname: Option<String>,
     ) -> impl Stream<Item = events::Event> {

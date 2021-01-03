@@ -73,18 +73,18 @@ pub async fn emit_forever_syslogger_error(
         },
         SyslogDestination::Unix => match sc.path {
             Some(path) => syslog::unix_custom(syslog_formatter, path)?,
-            None => return Err(SysLoggerError::MissingParameter("Parameter 'path' was not provided, but required to connect syslog to unix socket.".to_owned()).into()),
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'path' was not provided, but required to connect syslog to unix socket.".to_owned())),
         },
         SyslogDestination::Tcp => match sc.server {
             Some(server) => syslog::tcp(syslog_formatter, server)?,
-            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned()).into()),
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned())),
         },
         SyslogDestination::Udp => match sc.server {
             Some(server) => match sc.local {
                 Some(local) => syslog::udp(syslog_formatter, local, server)?,
-                None => return Err(SysLoggerError::MissingParameter("Parameter 'local' was not provided, but required to connect syslog to unix socket.".to_owned()).into()),
+                None => return Err(SysLoggerError::MissingParameter("Parameter 'local' was not provided, but required to connect syslog to unix socket.".to_owned())),
             },
-            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned()).into()),
+            None => return Err(SysLoggerError::MissingParameter("Parameter 'server' was not provided, but required to connect syslog to unix socket.".to_owned())),
         },
     };
 
