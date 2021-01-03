@@ -9,8 +9,6 @@ mod params;
 mod raw_event_stream;
 mod system;
 
-use core::pin::Pin;
-use futures::stream::Stream;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::process;
@@ -75,20 +73,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         raw_event_stream::RawEventStream::<rmesg::EntriesStream>::new(resc).await?;
 
     // get a unified stream of all incoming events...
-    let events_stream = Box::pin(os_event_stream.merge(config_events_stream));
+    let merged_events_stream = os_event_stream.merge(config_events_stream);
 
-    let analyzed_stream: Pin<Box<dyn Stream<Item = events::Event>>> =
-        match zerotect_config.analytics.mode {
-            params::AnalyticsMode::Off => events_stream,
-            _ => Box::pin(
-                analyzer::Analyzer::new(
-                    zerotect_config.verbosity,
-                    zerotect_config.analytics,
-                    events_stream,
-                )
-                .await?,
-            ),
-        };
+    let analyzed_stream = Box::pin(
+        analyzer::Analyzer::new(
+            zerotect_config.verbosity,
+            zerotect_config.analytics,
+            merged_events_stream,
+        )
+        .await?,
+    );
 
     // split these up before a move
     let ec = emitter::EmitterConfig {

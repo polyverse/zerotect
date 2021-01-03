@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
+use tokio_stream::StreamExt;
 
 use close_by_ip_detect::close_by_ip_detect;
 use close_by_register_detect::close_by_register_detect;
@@ -101,9 +102,17 @@ where
         };
 
         let s = stream::unfold(analyzer, |mut analyzer| async move {
-            match analyzer.next_event().await {
-                Some(next_event) => Some((next_event, analyzer)),
-                None => None,
+            match analyzer.mode {
+                params::AnalyticsMode::Off => {
+                    match analyzer.incoming_events_stream.as_mut().next().await {
+                        Some(raw_event) => Some((raw_event, analyzer)),
+                        None => None,
+                    }
+                }
+                _ => match analyzer.next_event().await {
+                    Some(next_event) => Some((next_event, analyzer)),
+                    None => None,
+                },
             }
         });
 
