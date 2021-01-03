@@ -1,7 +1,6 @@
 use crate::events;
 use crate::formatter::FormatResult;
 use rust_cef::ToCef;
-use time::OffsetDateTime;
 
 pub struct CEFFormatter {}
 impl CEFFormatter {
@@ -17,6 +16,7 @@ impl CEFFormatter {
 mod test {
     use super::*;
     use std::collections::BTreeMap;
+    use time::OffsetDateTime;
 
     #[test]
     fn test_linux_kernel_trap() {

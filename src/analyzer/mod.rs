@@ -15,7 +15,6 @@ use std::collections::VecDeque;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::mem::size_of;
-use std::rc::Rc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
@@ -316,6 +315,7 @@ mod test {
     use futures::stream::iter;
     use serde_json::{from_str, from_value};
     use std::collections::BTreeMap;
+    use std::rc::Rc;
     use tokio_stream::StreamExt;
 
     macro_rules! map(

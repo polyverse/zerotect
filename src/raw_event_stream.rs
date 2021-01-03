@@ -298,8 +298,8 @@ where
                     timestamp: entry_timestamp,
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                        facility: facility,
-                        level: level,
+                        facility,
+                        level,
                         trap,
                         procname: procname.to_owned(),
                         pid,
@@ -383,8 +383,8 @@ where
                         timestamp: entry_timestamp,
                         hostname: hostname.clone(),
                         event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                            facility: facility,
-                            level: level,
+                            facility,
+                            level,
                             signal,
                             stack_dump: self.parse_stack_dump(hostname).await,
                         }),
@@ -574,8 +574,8 @@ where
                     hostname: hostname.clone(),
                     event: events::EventType::LinuxSuppressedCallback(
                         events::LinuxSuppressedCallback {
-                            facility: facility,
-                            level: level,
+                            facility,
+                            level,
                             function_name: function_name.to_owned(),
                             count,
                         },

@@ -5,7 +5,6 @@ use libflate::gzip::Encoder;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
 use reqwest::Client;
 use serde::Serialize;
-use serde_json;
 use std::convert::From;
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};

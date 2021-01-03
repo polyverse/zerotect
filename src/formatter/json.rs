@@ -1,6 +1,5 @@
 use crate::events;
 use crate::formatter::FormatResult;
-use time::OffsetDateTime;
 
 pub struct JsonFormatter {}
 impl JsonFormatter {
@@ -16,6 +15,7 @@ impl JsonFormatter {
 mod test {
     use super::*;
     use std::collections::BTreeMap;
+    use time::OffsetDateTime;
 
     #[test]
     fn test_linux_kernel_trap() {
