@@ -1,9 +1,9 @@
 use crate::events;
-use crate::formatter::{FormatResult, Formatter};
+use crate::formatter::FormatResult;
 
 pub struct JsonFormatter {}
-impl Formatter for JsonFormatter {
-    fn format(&self, event: &events::Version) -> FormatResult {
+impl JsonFormatter {
+    pub fn format(&self, event: &events::Version) -> FormatResult {
         Ok(serde_json::to_string(&event)?)
     }
 }

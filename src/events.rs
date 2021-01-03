@@ -1,13 +1,22 @@
 // Copyright (c) 2019 Polyverse Corporation
 
+use num_derive::FromPrimitive;
 use rmesg::entry;
 use serde::Serialize;
 use serde::Serializer;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
+use strum_macros::Display;
 use strum_macros::EnumString;
 use time::OffsetDateTime;
+
+//use rust_cef::{ToCef, CefHeaderVersion, CefHeaderDeviceVendor, CefHeaderDeviceProduct, CefHeaderDeviceVersion, CefHeaderDeviceEventClassID, CefHeaderName, CefHeaderSeverity, CefExtensions};
+use rust_cef_derive::{
+    CefExtensions, CefHeaderDeviceEventClassID, CefHeaderDeviceProduct, CefHeaderDeviceVendor,
+    CefHeaderDeviceVersion, CefHeaderName, CefHeaderSeverity, CefHeaderVersion, ToCef,
+};
+//use rust_cef_derive::{cef_values, cef_inherit, cef_ext_values}
 
 #[cfg(test)]
 use serde::{de, Deserialize};

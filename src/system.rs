@@ -1,6 +1,5 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use crate::common;
 use crate::events;
 use crate::params;
 use core::future::Future;
@@ -78,16 +77,13 @@ impl EnvironmentConfigurator {
         auto_config: params::AutoConfigure,
         hostname: Option<String>,
     ) -> impl Stream<Item = events::Event> {
-        common::result_stream_filter_error(
-            Self {
-                auto_config,
-                sleep_interval: Duration::from_secs(300),
-                hostname,
-                change_events: Vec::new(),
-                sleep_future: None,
-            },
-            "EnvironmentConfigurator",
-        )
+        Self {
+            auto_config,
+            sleep_interval: Duration::from_secs(300),
+            hostname,
+            change_events: Vec::new(),
+            sleep_future: None,
+        }
     }
 
     fn enforce_config(&mut self) -> Result<(), SystemConfigError> {
@@ -102,7 +98,7 @@ impl EnvironmentConfigurator {
     }
 }
 impl Stream for EnvironmentConfigurator {
-    type Item = Result<events::Event, SystemConfigError>;
+    type Item = events::Event;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
@@ -125,7 +121,7 @@ impl Stream for EnvironmentConfigurator {
 
         // enforce configuration
         if let Err(e) = self.enforce_config() {
-            return Poll::Ready(Some(Err(e)));
+            panic!("Error in Environment Configurator. Panicking.");
         }
 
         // entries empty? then go to sleep...
@@ -144,7 +140,7 @@ impl Stream for EnvironmentConfigurator {
             }
         }
 
-        Poll::Ready(Some(Ok(self.change_events.remove(0))))
+        Poll::Ready(Some(self.change_events.remove(0)))
     }
 }
 

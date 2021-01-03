@@ -1,10 +1,10 @@
 use crate::events;
-use crate::formatter::{FormatResult, Formatter};
+use crate::formatter::FormatResult;
 use rust_cef::ToCef;
 
 pub struct CEFFormatter {}
-impl Formatter for CEFFormatter {
-    fn format(&self, event: &events::Version) -> FormatResult {
+impl CEFFormatter {
+    pub fn format(&self, event: &events::Version) -> FormatResult {
         Ok(event.to_cef()?)
     }
 }

@@ -1,8 +1,6 @@
 use crate::events;
-use futures::Stream;
 use num::{Integer, Unsigned};
 use std::any::type_name;
-use std::error::Error;
 use std::fmt::Display;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
@@ -59,20 +57,4 @@ pub fn abs_diff<N: Unsigned + Integer>(u1: N, u2: N) -> N {
     } else {
         u2 - u1
     }
-}
-
-pub fn result_stream_filter_error<E>(
-    stream: impl Stream<Item = Result<events::Event, E>>,
-    stream_name: &str,
-) -> impl Stream<Item = events::Event>
-where
-    E: Error,
-{
-    let owned_stream_name = stream_name.to_owned();
-    stream.filter_map(move |x| match x {
-        Ok(ev) => Some(ev),
-        Err(err) => {
-            panic!("Error in stream {}: {:?}", owned_stream_name, err);
-        }
-    })
 }

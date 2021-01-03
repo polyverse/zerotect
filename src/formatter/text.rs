@@ -1,9 +1,9 @@
 use crate::events::Version;
-use crate::formatter::{FormatResult, Formatter};
+use crate::formatter::FormatResult;
 
 pub struct TextFormatter {}
-impl Formatter for TextFormatter {
-    fn format(&self, event: &Version) -> FormatResult {
+impl TextFormatter {
+    pub fn format(&self, event: &Version) -> FormatResult {
         Ok(format!("{}", event))
     }
 }
