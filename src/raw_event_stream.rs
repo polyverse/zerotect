@@ -23,58 +23,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use timeout_iterator::asynchronous::TimeoutStream;
-
-pub async fn new(
-    c: RawEventStreamConfig,
-) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
-    if c.verbosity > 0 {
-        eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
-    }
-
-    let system_start_time = system::system_start_time()?;
-
-    new_with_rmesg_stream(
-        c,
-        system_start_time,
-        rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
-    )
-    .await
-}
-
-pub async fn new_with_rmesg_stream(
-    c: RawEventStreamConfig,
-    system_start_time: OffsetDateTime,
-    rmesg_stream: rmesg::EntriesStream,
-) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
-    let entries = TimeoutStream::with_stream(rmesg_stream).await?;
-
-    // Start processing events from system start? Or when zerotect was started?
-    let event_stream_start_time = match c.gobble_old_events {
-        true => system_start_time,
-        false => OffsetDateTime::now_utc(),
-    };
-
-    let res = RawEventStream {
-        entries,
-        verbosity: c.verbosity,
-        hostname: c.hostname,
-        flush_timeout: c.flush_timeout,
-        system_start_time,
-        event_stream_start_time,
-    };
-
-    let s = common::result_stream_filter_error(
-        stream::unfold(res, |mut res| async move {
-            match res.parse_next_event().await {
-                Some(next_event) => Some((next_event, res)),
-                None => None,
-            }
-        }),
-        "raw_event_stream",
-    );
-
-    Ok(s)
-}
+use lazy_static::lazy_static;
 
 #[derive(Debug)]
 pub enum RawEventStreamError {
@@ -128,7 +77,7 @@ pub struct RawEventStreamConfig {
 type TimeoutStreamItem = Result<Entry, RMesgError>;
 
 pub struct RawEventStream {
-    entries: TimeoutStream<TimeoutStreamItem, Pin<Box<dyn Stream<Item = TimeoutStreamItem>>>>,
+    entries: TimeoutStream<rmesg::EntriesStream>,
     verbosity: u8,
     hostname: Option<String>,
     flush_timeout: Duration,
@@ -142,6 +91,56 @@ pub struct RawEventStream {
 }
 
 impl RawEventStream {
+
+    pub async fn new(
+        c: RawEventStreamConfig,
+    ) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
+        if c.verbosity > 0 {
+            eprintln!("RawEventStream: Reading and parsing relevant kernel messages...");
+        }
+
+        let system_start_time = system::system_start_time()?;
+
+        RawEventStream::new_with_rmesg_stream(
+            c,
+            system_start_time,
+            rmesg::logs_stream(rmesg::Backend::Default, false, false).await?,
+        )
+        .await
+    }
+
+    pub async fn new_with_rmesg_stream(
+        c: RawEventStreamConfig,
+        system_start_time: OffsetDateTime,
+        rmesg_stream: rmesg::EntriesStream,
+    ) -> Result<impl Stream<Item = events::Event>, RawEventStreamError> {
+        let entries = TimeoutStream::with_stream(rmesg_stream).await?;
+
+        // Start processing events from system start? Or when zerotect was started?
+        let event_stream_start_time = match c.gobble_old_events {
+            true => system_start_time,
+            false => OffsetDateTime::now_utc(),
+        };
+
+        let res = RawEventStream {
+            entries,
+            verbosity: c.verbosity,
+            hostname: c.hostname,
+            flush_timeout: c.flush_timeout,
+            system_start_time,
+            event_stream_start_time,
+        };
+
+        let s = stream::unfold(res, |mut res| async move {
+                match res.parse_next_event().await {
+                    Some(next_event) => Some((next_event.unwrap(), res)),
+                    None => None,
+                }
+            });
+
+        Ok(s)
+    }
+
     async fn parse_next_event(&mut self) -> Option<Result<events::Event, RawEventStreamError>> {
         // we'll need to borrow and capture this in closures multiple times.
         // Make a one-time clone so we don't borrow self over and over again.

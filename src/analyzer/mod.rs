@@ -21,44 +21,6 @@ use timeout_iterator::asynchronous::TimeoutStream;
 use close_by_ip_detect::close_by_ip_detect;
 use close_by_register_detect::close_by_register_detect;
 
-pub async fn new(
-    verbosity: u8,
-    config: params::AnalyticsConfig,
-    raw_incoming_stream: impl Stream<Item = events::Event> + Unpin,
-) -> Result<impl Stream<Item = events::Event>, AnalyzerError> {
-    eprintln!("Analyzer: Initializing...");
-    let event_buffer = EventBuffer::new(
-        verbosity,
-        config.max_event_count,
-        config.event_drop_count,
-        Duration::from_secs(config.event_lifetime_seconds),
-    );
-
-    let analyzer = Analyzer {
-        verbosity,
-        mode: config.mode,
-        incoming_events_stream: TimeoutStream::with_stream(raw_incoming_stream).await?,
-        collection_timeout: Duration::from_secs(config.collection_timeout_seconds),
-        // if IP is within usize then someone's jumping within the size of an instruction.
-        // segfaults usually don't happen that close to each other.
-        ip_max_distance: size_of::<usize>(),
-        justification_kind: config.justification,
-        // let's not make this reallocate
-        event_buffer,
-        detected_since_last_add: true,
-        detected_events_buffer: VecDeque::new(),
-    };
-
-    let s = stream::unfold(analyzer, |mut analyzer| async move {
-        match analyzer.next_event().await {
-            Some(next_event) => Some((next_event, analyzer)),
-            None => None,
-        }
-    });
-
-    Ok(s)
-}
-
 #[derive(Debug)]
 pub struct AnalyzerError(String);
 impl error::Error for AnalyzerError {}
@@ -83,12 +45,12 @@ impl From<timeout_iterator::error::Error> for AnalyzerError {
 
 /// A struct with fields/associated functions
 /// to perform analysis.
-struct Analyzer<I>
+pub struct Analyzer<I>
 where
     I: Stream<Item = events::Event> + Unpin,
 {
     verbosity: u8,
-    incoming_events_stream: TimeoutStream<events::Event, I>,
+    incoming_events_stream: TimeoutStream<I>,
     mode: params::AnalyticsMode,
     collection_timeout: Duration,
     /// how close can the instruction pointer be for it to be an event?
@@ -106,6 +68,46 @@ impl<I> Analyzer<I>
 where
     I: Stream<Item = events::Event> + Unpin,
 {
+
+    pub async fn new(
+        verbosity: u8,
+        config: params::AnalyticsConfig,
+        raw_incoming_stream: I,
+    ) -> Result<impl Stream<Item = events::Event>, AnalyzerError> {
+        eprintln!("Analyzer: Initializing...");
+        let event_buffer = EventBuffer::new(
+            verbosity,
+            config.max_event_count,
+            config.event_drop_count,
+            Duration::from_secs(config.event_lifetime_seconds),
+        );
+
+        let analyzer = Analyzer {
+            verbosity,
+            mode: config.mode,
+            incoming_events_stream: TimeoutStream::with_stream(raw_incoming_stream).await?,
+            collection_timeout: Duration::from_secs(config.collection_timeout_seconds),
+            // if IP is within usize then someone's jumping within the size of an instruction.
+            // segfaults usually don't happen that close to each other.
+            ip_max_distance: size_of::<usize>(),
+            justification_kind: config.justification,
+            // let's not make this reallocate
+            event_buffer,
+            detected_since_last_add: true,
+            detected_events_buffer: VecDeque::new(),
+        };
+
+        let s = stream::unfold(analyzer, |mut analyzer| async move {
+            match analyzer.next_event().await {
+                Some(next_event) => Some((next_event, analyzer)),
+                None => None,
+            }
+        });
+
+        Ok(s)
+    }
+
+
     async fn next_event(&mut self) -> Option<events::Event> {
         loop {
             if let Some(detected_event) = self.detected_events_buffer.pop_front() {

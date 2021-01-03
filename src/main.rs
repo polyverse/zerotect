@@ -74,9 +74,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let os_event_stream = raw_event_stream::RawEventStream::new(resc).await?;
 
     // get a unified stream of all incoming events...
-    let events_stream = os_event_stream.merge(config_events_stream);
+    let events_stream: Pin<Box<dyn Stream<Item = events::Event>>> = Box::pin(os_event_stream.merge(config_events_stream));
 
-    let analyzed_stream = match zerotect_config.analytics.mode {
+    let analyzed_stream: Pin<Box<dyn Stream<Item = events::Event>>> = match zerotect_config.analytics.mode {
         params::AnalyticsMode::Off => events_stream,
         _ => Box::pin(
             analyzer::Analyzer::new(
