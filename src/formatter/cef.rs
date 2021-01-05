@@ -1,10 +1,10 @@
 use crate::events;
-use crate::formatter::{FormatResult, Formatter};
+use crate::formatter::FormatResult;
 use rust_cef::ToCef;
 
 pub struct CEFFormatter {}
-impl Formatter for CEFFormatter {
-    fn format(&self, event: &events::Version) -> FormatResult {
+impl CEFFormatter {
+    pub fn format(&self, event: &events::Version) -> FormatResult {
         Ok(event.to_cef()?)
     }
 }
@@ -15,19 +15,19 @@ impl Formatter for CEFFormatter {
 #[cfg(test)]
 mod test {
     use super::*;
-    use chrono::{TimeZone, Utc};
     use std::collections::BTreeMap;
+    use time::OffsetDateTime;
 
     #[test]
     fn test_linux_kernel_trap() {
-        let timestamp = Utc.timestamp_millis(471804323);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let event1 = events::Version::V1 {
             timestamp,
             hostname: Some("hostnamecef".to_owned()),
             event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 trap: events::KernelTrapType::Segfault { location: 0 },
                 procname: String::from("a.out"),
                 pid: 36275,
@@ -57,14 +57,14 @@ mod test {
 
     #[test]
     fn test_linux_fatal_signal() {
-        let timestamp = Utc.timestamp_millis(471804323);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let event1 = events::Version::V1 {
             timestamp,
             hostname: None,
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 signal: events::FatalSignalType::SIGSEGV,
                 stack_dump: BTreeMap::new(),
             }),
@@ -80,14 +80,14 @@ mod test {
 
     #[test]
     fn test_linux_suppressed_callback() {
-        let timestamp = Utc.timestamp_millis(471804323);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let event1 = events::Version::V1 {
             timestamp,
             hostname: Some("hostnamecef".to_owned()),
             event: events::EventType::LinuxSuppressedCallback(events::LinuxSuppressedCallback {
-                facility: events::LogFacility::Kern,
-                level: events::LogLevel::Warning,
+                facility: rmesg::entry::LogFacility::Kern,
+                level: rmesg::entry::LogLevel::Warning,
                 function_name: "show_signal_msg".to_owned(),
                 count: 9,
             }),
@@ -99,7 +99,7 @@ mod test {
 
     #[test]
     fn test_zerotect_config_mismatch() {
-        let timestamp = Utc.timestamp_millis(471804323);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -118,7 +118,7 @@ mod test {
 
     #[test]
     fn test_zerotect_register_probe() {
-        let timestamp = Utc.timestamp_millis(471804323);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
 
         let event1 = events::Version::V1 {
             timestamp,

@@ -1,10 +1,11 @@
 use crate::events;
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::collections::hash_map::IterMut;
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::time::Duration;
+use time::OffsetDateTime;
 
-type TimestampedEvent = (DateTime<Utc>, events::Event);
+type TimestampedEvent = (OffsetDateTime, events::Event);
 pub type TimestampedEventList = VecDeque<TimestampedEvent>;
 type ProcNameToTimestampedEventsMap = HashMap<String, TimestampedEventList>;
 
@@ -15,7 +16,7 @@ pub struct EventBuffer {
     list_capacity: usize,
 
     max_event_count: usize,
-    event_lifetime: ChronoDuration,
+    event_lifetime: Duration,
     event_drop_count: usize,
 
     cached_len: usize,
@@ -32,7 +33,7 @@ impl EventBuffer {
         verbosity: u8,
         max_event_count: usize,
         event_drop_count: usize,
-        event_lifetime: ChronoDuration,
+        event_lifetime: Duration,
     ) -> EventBuffer {
         EventBuffer {
             _verbosity: verbosity,
@@ -45,12 +46,16 @@ impl EventBuffer {
         }
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, String, VecDeque<(DateTime<Utc>, events::Event)>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, String, VecDeque<(OffsetDateTime, events::Event)>> {
         self.hashlist.iter_mut()
     }
 
     pub fn is_full(&self) -> bool {
         self.len() >= self.max_event_count
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {
@@ -68,7 +73,7 @@ impl EventBuffer {
         total_len
     }
 
-    pub fn insert(&mut self, timestamp: DateTime<Utc>, procname: String, event: events::Event) {
+    pub fn insert(&mut self, timestamp: OffsetDateTime, procname: String, event: events::Event) {
         // so we don't double-borrow self
         let list_capacity = self.list_capacity;
 
@@ -112,7 +117,7 @@ impl EventBuffer {
             return;
         }
 
-        let mut priority_removal_map = BTreeMap::<DateTime<Utc>, String>::new();
+        let mut priority_removal_map = BTreeMap::<OffsetDateTime, String>::new();
 
         // populate the removal map with timestamp -> procname (the oldest timestamp in each procname)
         for (procname, eventlist) in self.hashlist.iter() {
@@ -158,7 +163,7 @@ impl EventBuffer {
     fn remove_expired_events(&mut self) {
         // At what time do events expire?
         // make this mutable so comparison below works
-        let mut event_expiry_time = Utc::now() - self.event_lifetime;
+        let mut event_expiry_time = OffsetDateTime::now_utc() - self.event_lifetime;
 
         // for each procname in event list
         for (_, eventlist) in (&mut self.hashlist).iter_mut() {
@@ -206,7 +211,7 @@ impl EventBuffer {
 mod test {
     use super::*;
     use rand;
-    use std::sync::Arc;
+    use std::rc::Rc;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -224,7 +229,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_single_proc_all_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for _ in 0..10 {
@@ -244,7 +249,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_multiple_procs_single_event() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for i in 0..10 {
@@ -264,7 +269,7 @@ mod test {
 
     #[test]
     fn ensure_removal_when_beyond_full_multiple_procs_multiple_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(100));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_secs(100));
 
         // add 10 events
         for i in 0..5 {
@@ -299,7 +304,7 @@ mod test {
 
     #[test]
     fn ensure_expiry_multiple_procs_multiple_events() {
-        let mut eb = EventBuffer::new(0, 10, 5, ChronoDuration::seconds(2));
+        let mut eb = EventBuffer::new(0, 10, 5, Duration::from_millis(100));
 
         // add 10 events
         for i in 0..9 {
@@ -318,15 +323,15 @@ mod test {
         assert_eq!(0, eb.hashlist.len());
     }
 
-    fn create_event(procname: String) -> (DateTime<Utc>, String, events::Event) {
-        let timestamp = Utc::now();
+    fn create_event(procname: String) -> (OffsetDateTime, String, events::Event) {
+        let timestamp = OffsetDateTime::now_utc();
         let event = match rand::random::<bool>() {
-            true => Arc::new(events::Version::V1 {
+            true => Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxKernelTrap(events::LinuxKernelTrap {
-                    facility: events::LogFacility::User,
-                    level: events::LogLevel::Info,
+                    facility: rmesg::entry::LogFacility::User,
+                    level: rmesg::entry::LogLevel::Info,
                     procname: procname.clone(),
                     pid: 1800,
                     ip: 0x5000,
@@ -338,12 +343,12 @@ mod test {
                     vmastart: None,
                 }),
             }),
-            false => Arc::new(events::Version::V1 {
+            false => Rc::new(events::Version::V1 {
                 timestamp,
                 hostname: Some("analyzerhost".to_owned()),
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
-                    facility: events::LogFacility::User,
-                    level: events::LogLevel::Info,
+                    facility: rmesg::entry::LogFacility::User,
+                    level: rmesg::entry::LogLevel::Info,
                     signal: events::FatalSignalType::SIGIOT,
                     stack_dump: map!("Comm" => procname.clone()),
                 }),

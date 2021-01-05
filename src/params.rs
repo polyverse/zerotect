@@ -1021,7 +1021,7 @@ mod test {
     fn unique_temp_toml_file() -> String {
         format!(
             "/tmp/config_{}.toml",
-            rand::thread_rng().gen_range(0, 32000)
+            rand::thread_rng().gen_range(0..32000)
         )
     }
 
@@ -1412,7 +1412,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let config = parse_config_file(&toml_file).unwrap();
@@ -1467,7 +1466,6 @@ mod test {
 
             let toml_file = unique_temp_toml_file();
             let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-            println!("Writing TOML string to file: {}", &toml_file);
             fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
             let maybe_config = parse_config_file(&toml_file);
@@ -1533,7 +1531,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1597,7 +1594,6 @@ mod test {
 
             let toml_file = unique_temp_toml_file();
             let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-            println!("Writing TOML string to file: {}", &toml_file);
             fs::write(&toml_file, &config_toml_string).expect("Unable to write TOML test file.");
 
             let args: Vec<OsString> = vec![
@@ -1622,7 +1618,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1665,7 +1660,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1712,7 +1706,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1760,7 +1753,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1795,7 +1787,6 @@ mod test {
         "#;
 
         let toml_file = unique_temp_toml_file();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, tomlcontents).expect("Unable to write TOML test file.");
 
         let args: Vec<OsString> = vec![
@@ -1862,7 +1853,6 @@ mod test {
             "/reference/zerotect.toml"
         );
         let config_toml_string = toml::to_string_pretty(&config_expected).unwrap();
-        println!("Writing TOML string to file: {}", &toml_file);
         fs::write(&toml_file, config_toml_string).expect("Unable to write TOML test file.");
     }
 
@@ -1870,7 +1860,7 @@ mod test {
         ZerotectParams {
             hostname: Some(format!(
                 "RandomHostname{}",
-                rand::thread_rng().gen_range(0, 32000)
+                rand::thread_rng().gen_range(0..32000)
             )),
             auto_configure: AutoConfigure {
                 exception_trace: rand::thread_rng().gen_bool(0.5),
@@ -1878,20 +1868,20 @@ mod test {
                 klog_include_timestamp: rand::thread_rng().gen_bool(0.5),
             },
             analytics: AnalyticsConfig {
-                mode: match rand::thread_rng().gen_range(0, 3) {
+                mode: match rand::thread_rng().gen_range(0..3) {
                     0 => AnalyticsMode::Off,
                     1 => AnalyticsMode::Passthrough,
                     _ => AnalyticsMode::Detected,
                 },
-                justification: match rand::thread_rng().gen_range(0, 3) {
+                justification: match rand::thread_rng().gen_range(0..3) {
                     0 => DetectedEventJustification::None,
                     1 => DetectedEventJustification::Summary,
                     _ => DetectedEventJustification::Full,
                 },
-                collection_timeout_seconds: rand::thread_rng().gen_range(1, 100),
-                max_event_count: rand::thread_rng().gen_range(1, 100),
-                event_drop_count: rand::thread_rng().gen_range(1, 100),
-                event_lifetime_seconds: rand::thread_rng().gen_range(1, 100),
+                collection_timeout_seconds: rand::thread_rng().gen_range(1..100),
+                max_event_count: rand::thread_rng().gen_range(1..100),
+                event_drop_count: rand::thread_rng().gen_range(1..100),
+                event_lifetime_seconds: rand::thread_rng().gen_range(1..100),
             },
             monitor: MonitorConfig {
                 gobble_old_events: rand::thread_rng().gen_bool(0.5),
@@ -1909,14 +1899,14 @@ mod test {
                 true => Some(PolycorderConfig {
                     auth_key: format!(
                         "AuthKeyFromAccountManagerRandom{}",
-                        rand::thread_rng().gen_range(0, 32000)
+                        rand::thread_rng().gen_range(0..32000)
                     ),
                     node_id: format!(
                         "NodeDiscriminatorRandom{}",
-                        rand::thread_rng().gen_range(0, 32000)
+                        rand::thread_rng().gen_range(0..32000)
                     ),
-                    flush_timeout_seconds: rand::thread_rng().gen_range(0, 500),
-                    flush_event_count: rand::thread_rng().gen_range(0, 500),
+                    flush_timeout_seconds: rand::thread_rng().gen_range(0..500),
+                    flush_event_count: rand::thread_rng().gen_range(0..500),
                 }),
                 false => None,
             },
@@ -1933,21 +1923,21 @@ mod test {
                     path: match rand::thread_rng().gen_bool(0.5) {
                         true => Some(format!(
                             "RandomPath{}",
-                            rand::thread_rng().gen_range(0, 32000)
+                            rand::thread_rng().gen_range(0..32000)
                         )),
                         false => None,
                     },
                     server: match rand::thread_rng().gen_bool(0.5) {
                         true => Some(format!(
                             "RandomServer{}",
-                            rand::thread_rng().gen_range(0, 32000)
+                            rand::thread_rng().gen_range(0..32000)
                         )),
                         false => None,
                     },
                     local: match rand::thread_rng().gen_bool(0.5) {
                         true => Some(format!(
                             "RandomLocal{}",
-                            rand::thread_rng().gen_range(0, 32000)
+                            rand::thread_rng().gen_range(0..32000)
                         )),
                         false => None,
                     },
@@ -1960,13 +1950,13 @@ mod test {
                         true => OutputFormat::JSON,
                         false => OutputFormat::CEF,
                     },
-                    filepath: format!("RandomFilePath{}", rand::thread_rng().gen_range(0, 32000)),
+                    filepath: format!("RandomFilePath{}", rand::thread_rng().gen_range(0..32000)),
                     rotation_file_count: match rand::thread_rng().gen_bool(0.5) {
-                        true => Some(rand::thread_rng().gen_range(0, 32000)),
+                        true => Some(rand::thread_rng().gen_range(0..32000)),
                         false => None,
                     },
                     rotation_file_max_size: match rand::thread_rng().gen_bool(0.5) {
-                        true => Some(rand::thread_rng().gen_range(0, 32000)),
+                        true => Some(rand::thread_rng().gen_range(0..32000)),
                         false => None,
                     },
                 }),
@@ -1975,11 +1965,11 @@ mod test {
             pagerduty_routing_key: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(format!(
                     "routingkey{}",
-                    rand::thread_rng().gen_range(0, 32000)
+                    rand::thread_rng().gen_range(0..32000)
                 )),
                 false => None,
             },
-            verbosity: rand::thread_rng().gen_range(0, 250),
+            verbosity: rand::thread_rng().gen_range(0..250),
         }
     }
 }

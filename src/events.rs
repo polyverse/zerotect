@@ -1,18 +1,32 @@
 // Copyright (c) 2019 Polyverse Corporation
 
-use chrono::{DateTime, Utc};
+use num_derive::FromPrimitive;
+use rmesg::entry;
 use serde::Serialize;
+use serde::Serializer;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::sync::Arc;
+use std::rc::Rc;
+use strum_macros::Display;
 use strum_macros::EnumString;
+use time::OffsetDateTime;
+
+//use rust_cef::{ToCef, CefHeaderVersion, CefHeaderDeviceVendor, CefHeaderDeviceProduct, CefHeaderDeviceVersion, CefHeaderDeviceEventClassID, CefHeaderName, CefHeaderSeverity, CefExtensions};
+use rust_cef_derive::{
+    CefExtensions, CefHeaderDeviceEventClassID, CefHeaderDeviceProduct, CefHeaderDeviceVendor,
+    CefHeaderDeviceVersion, CefHeaderName, CefHeaderSeverity, CefHeaderVersion, ToCef,
+};
+//use rust_cef_derive::{cef_values, cef_inherit, cef_ext_values}
 
 #[cfg(test)]
-use schemars::JsonSchema;
+use serde::{de, Deserialize};
 #[cfg(test)]
-use serde::Deserialize;
+use time::Format;
 
-pub type Event = Arc<Version>;
+// See: https://docs.rs/time/0.2.23/time/index.html
+const OFFSET_DATETIME_FORMAT_STRING: &str = "%FT%H:%M:%S.%NZ";
+
+pub type Event = Rc<Version>;
 
 /// Event is the complete structure that Polycorder (Polyverse-hosted
 /// zero-day detection service) understands. This structure is also
@@ -44,7 +58,7 @@ pub type Event = Arc<Version>;
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[cef_values(
     CefHeaderVersion = "0",
     CefHeaderDeviceVendor = "polyverse",
@@ -61,7 +75,9 @@ pub enum Version {
     V1 {
         /// This is universal and important for all events. They occur at a time.
         #[cef_ext_gobble]
-        timestamp: DateTime<Utc>,
+        #[serde(serialize_with = "datetime_to_iso8601")]
+        #[cfg_attr(test, serde(deserialize_with = "iso8601_to_datetime"))]
+        timestamp: OffsetDateTime,
 
         #[cef_ext_field(dhost)]
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,7 +143,7 @@ impl Display for Version {
     CefHeaderSeverity,
     CefExtensions,
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[serde(tag = "type")]
 pub enum EventType {
     /// An analytics-detected internal event based on other events
@@ -284,7 +300,7 @@ impl Display for EventType {
 /// When probing a stack canary, RDI/RSI increment by one value, for instance.
 ///
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[cef_ext_values(cs1Label = "register")]
 pub struct RegisterProbe {
     /// Which register was being probed?
@@ -306,7 +322,7 @@ pub struct RegisterProbe {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum RegisterProbeJustification {
     FullEvents(Vec<Event>),
     RegisterValues(Vec<String>),
@@ -340,14 +356,14 @@ impl rust_cef::CefExtensions for RegisterProbeJustification {
     cn3Label = "vmasize",
     flexString2Label = "signal"
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxKernelTrap {
     /// The type of kernel trap triggered
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     #[cef_ext_field(flexString2)]
     pub trap: KernelTrapType,
@@ -390,13 +406,13 @@ pub struct LinuxKernelTrap {
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cef_ext_values(flexString2Label = "signal")]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxFatalSignal {
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     /// The type of Fatal triggered
     #[cef_ext_field(flexString2)]
@@ -421,13 +437,13 @@ impl Display for LinuxFatalSignal {
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
 #[cef_ext_values(flexString1Label = "function_name")]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct LinuxSuppressedCallback {
     /// A Log-level for this event - was it critical?
-    pub level: LogLevel,
+    pub level: entry::LogLevel,
 
     /// A Log-facility - most OSes would have one, but this is Linux-specific for now
-    pub facility: LogFacility,
+    pub facility: entry::LogFacility,
 
     /// Name of the function being suppressed/folded.
     #[cef_ext_field(flexString1)]
@@ -439,7 +455,7 @@ pub struct LinuxSuppressedCallback {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, CefExtensions)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct ConfigMismatch {
     /// The key in question whose values mismatched.
     #[cef_ext_field(PolyverseZerotectKey)]
@@ -454,79 +470,9 @@ pub struct ConfigMismatch {
     pub observed_value: String,
 }
 
-/// Linux kmesg (kernel message buffer) Log Facility.
-#[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
-pub enum LogFacility {
-    #[strum(serialize = "kern")]
-    Kern = 0,
-
-    #[strum(serialize = "user")]
-    User,
-
-    #[strum(serialize = "mail")]
-    Mail,
-
-    #[strum(serialize = "daemon")]
-    Daemon,
-
-    #[strum(serialize = "auth")]
-    Auth,
-
-    #[strum(serialize = "syslog")]
-    Syslog,
-
-    #[strum(serialize = "lpr")]
-    Lpr,
-
-    #[strum(serialize = "news")]
-    News,
-
-    #[strum(serialize = "uucp")]
-    UUCP,
-
-    #[strum(serialize = "cron")]
-    Cron,
-
-    #[strum(serialize = "authpriv")]
-    AuthPriv,
-
-    #[strum(serialize = "ftp")]
-    FTP,
-}
-
-/// Linux kmesg (kernel message buffer) Log Level.
-#[derive(EnumString, Debug, PartialEq, Display, Copy, Clone, FromPrimitive, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
-pub enum LogLevel {
-    #[strum(serialize = "emerg")]
-    Emergency = 0,
-
-    #[strum(serialize = "alert")]
-    Alert,
-
-    #[strum(serialize = "crit")]
-    Critical,
-
-    #[strum(serialize = "err")]
-    Error,
-
-    #[strum(serialize = "warn")]
-    Warning,
-
-    #[strum(serialize = "notice")]
-    Notice,
-
-    #[strum(serialize = "info")]
-    Info,
-
-    #[strum(serialize = "debug")]
-    Debug,
-}
-
 /// The types of kernel traps understood
 #[derive(Debug, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 #[serde(tag = "type")]
 pub enum KernelTrapType {
     /// This is type zerotect doesn't know how to parse. So it captures and stores the string description.
@@ -563,7 +509,7 @@ impl Display for KernelTrapType {
 
 /// The reason for the Segmentation Fault
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultReason {
     /// The page attempted to access was not found (i.e. in invalid memory address)
     NoPageFound,
@@ -575,7 +521,7 @@ pub enum SegfaultReason {
 
 /// The type of Access that triggered this Segmentation Fault
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultAccessType {
     /// Attempting to Read
     Read,
@@ -586,7 +532,7 @@ pub enum SegfaultAccessType {
 
 /// The context under which the Segmentation Fault was triggered
 #[derive(EnumString, Debug, Display, PartialEq, Clone, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum SegfaultAccessMode {
     /// Process was in kernel mode (during a syscall, context switch, etc.)
     Kernel,
@@ -605,7 +551,7 @@ pub enum SegfaultAccessMode {
     cs5Label = "instruction_fetch",
     cs6Label = "protection_keys_block_access"
 )]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub struct SegfaultErrorCode {
     /// The reason for the segmentation fault
     #[cef_ext_field]
@@ -694,7 +640,7 @@ impl Display for SegfaultErrorCode {
 /// A bit more detail may be found in the man-pages:
 /// http://man7.org/linux/man-pages/man7/signal.7.html
 #[derive(Debug, PartialEq, EnumString, Display, Copy, Clone, FromPrimitive, Serialize)]
-#[cfg_attr(test, derive(JsonSchema, Deserialize))]
+#[cfg_attr(test, derive(Deserialize))]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
     SIGHUP = 1,
@@ -787,30 +733,57 @@ pub enum FatalSignalType {
     SIGPWR,
 }
 
-/**********************************************************************************/
-// Tests! Tests! Tests!
+/// Convert an OffsetDateTime to ISO string representation
+fn datetime_to_iso8601<S>(d: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(d.format(OFFSET_DATETIME_FORMAT_STRING).as_str())
+}
+
+/// Convert an ISO DateTime string representation to OffsetDateTime
+#[cfg(test)]
+fn iso8601_to_datetime<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let timestr = String::deserialize(deserializer)?;
+    OffsetDateTime::parse(timestr.as_str(), Format::Rfc3339).map_err(|e| {
+        de::Error::custom(format!(
+            "Error deserializing OffsetDateTime from string {} with format {}: {}",
+            timestr, OFFSET_DATETIME_FORMAT_STRING, e
+        ))
+    })
+}
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use schemars::schema_for;
-    use serde_json;
-    use std::fs;
-    use std::mem;
 
     #[test]
-    fn generate_reference_json_schema_file() {
-        let schema_file = format!("{}{}", env!("CARGO_MANIFEST_DIR"), "/reference/schema.json");
-        let schema = schema_for!(Version);
-        let schema_json = serde_json::to_string_pretty(&schema).unwrap();
-        eprintln!("Writing latest event schema to file: {}", schema_file);
-        fs::write(schema_file, schema_json).expect("Unable to re-generate the event schema file.");
+    fn deserialize_timestamp() {
+        let timestamp_original = OffsetDateTime::now_utc();
+        let timestamp_str = timestamp_original.format(OFFSET_DATETIME_FORMAT_STRING);
+        let timestamp_rehydrated = OffsetDateTime::parse(timestamp_str, Format::Rfc3339).unwrap();
+        assert_eq!(timestamp_original, timestamp_rehydrated);
     }
 
     #[test]
-    fn measure_size_of_event() {
-        // You can decide when to use Version and when to use Event = Arc'd Version
-        assert_eq!(192, mem::size_of::<Version>());
-        assert_eq!(8, mem::size_of::<Event>());
+    fn ser_de() {
+        let event_original = Version::V1 {
+            timestamp: OffsetDateTime::now_utc(),
+            hostname: None,
+            event: EventType::ConfigMismatch(ConfigMismatch {
+                key: "test".to_owned(),
+                expected_value: "this".to_owned(),
+                observed_value: "that".to_owned(),
+            }),
+        };
+
+        let jstr = serde_json::to_string(&event_original).unwrap();
+
+        let event_rehydrated: Version = serde_json::from_str(jstr.as_str()).unwrap();
+
+        assert_eq!(event_original, event_rehydrated);
     }
 }

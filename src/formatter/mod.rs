@@ -12,14 +12,25 @@ pub use text::TextFormatter;
 
 pub type FormatResult = Result<String, FormatError>;
 
-pub trait Formatter {
-    fn format(&self, value: &Version) -> FormatResult;
+pub enum Formatter {
+    CEF(CEFFormatter),
+    JSON(JsonFormatter),
+    Text(TextFormatter),
+}
+impl Formatter {
+    pub fn format(&self, value: &Version) -> FormatResult {
+        match self {
+            Self::CEF(f) => f.format(value),
+            Self::JSON(f) => f.format(value),
+            Self::Text(f) => f.format(value),
+        }
+    }
 }
 
-pub fn new(format: &OutputFormat) -> Box<dyn Formatter> {
+pub fn new(format: &OutputFormat) -> Formatter {
     match format {
-        OutputFormat::Text => Box::new(TextFormatter {}),
-        OutputFormat::JSON => Box::new(JsonFormatter {}),
-        OutputFormat::CEF => Box::new(CEFFormatter {}),
+        OutputFormat::Text => Formatter::Text(TextFormatter {}),
+        OutputFormat::JSON => Formatter::JSON(JsonFormatter {}),
+        OutputFormat::CEF => Formatter::CEF(CEFFormatter {}),
     }
 }

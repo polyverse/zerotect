@@ -29,7 +29,7 @@ where
     N::FromStrRadixErr: Display,
 {
     // special case
-    if frag == "(null)" || frag == "" {
+    if frag.is_empty() || frag == "(null)" {
         return Some(N::zero());
     };
 

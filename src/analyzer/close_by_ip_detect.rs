@@ -2,13 +2,13 @@ use crate::common;
 use crate::events;
 use crate::params;
 
-use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::rc::Rc;
+use time::OffsetDateTime;
 
 pub fn close_by_ip_detect(
     procname: &str,
-    eventslist: &VecDeque<(DateTime<Utc>, events::Event)>,
+    eventslist: &VecDeque<(OffsetDateTime, events::Event)>,
     ip_max_distance: usize,
     justification_threshold: usize,
     justification_kind: params::DetectedEventJustification,
@@ -59,8 +59,8 @@ pub fn close_by_ip_detect(
     // if we found a sufficient number of close_by_ip events (i.e. 2 or more), we detect an event
     if close_by_ip.len() > justification_threshold {
         return Some((
-            Arc::new(events::Version::V1 {
-                timestamp: Utc::now(),
+            Rc::new(events::Version::V1 {
+                timestamp: OffsetDateTime::now_utc(),
                 hostname: common::get_first_event_hostname(&close_by_ip),
                 event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: "ip".to_owned(),
