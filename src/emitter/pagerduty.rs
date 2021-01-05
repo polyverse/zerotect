@@ -2,7 +2,7 @@
 
 use crate::emitter;
 use crate::events;
-use pagerduty_rs::asynchronous::*;
+use pagerduty_rs::{eventsv2async::*, types::*};
 use std::error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use time::OffsetDateTime;
@@ -10,7 +10,7 @@ use tokio::sync::broadcast;
 
 #[derive(Debug)]
 pub enum PagerDutyError {
-    EventsV2Error(eventsv2::EventsV2Error),
+    EventsV2Error(EventsV2Error),
 }
 impl error::Error for PagerDutyError {}
 impl Display for PagerDutyError {
@@ -20,8 +20,8 @@ impl Display for PagerDutyError {
         }
     }
 }
-impl From<eventsv2::EventsV2Error> for PagerDutyError {
-    fn from(err: eventsv2::EventsV2Error) -> PagerDutyError {
+impl From<EventsV2Error> for PagerDutyError {
+    fn from(err: EventsV2Error) -> PagerDutyError {
         PagerDutyError::EventsV2Error(err)
     }
 }
@@ -29,14 +29,23 @@ impl From<eventsv2::EventsV2Error> for PagerDutyError {
 pub async fn emit_forever(
     routing_key: String,
     source: broadcast::Receiver<events::Event>,
-) -> Result<PagerDuty, PagerDutyError> {
-    let eventsv2 = eventsv2::EventsV2::new(routing_key, Some("zerotect".to_owned()))?;
+) -> Result<(), emitter::EmitterError> {
+    // It helps to keep a localized error implementation without exposing a lot of
+    // dependency and interpretation in upper emitter
+    Ok(emit_forever_pagerduty_error(routing_key, source).await?)
+}
+
+pub async fn emit_forever_pagerduty_error(
+    routing_key: String,
+    mut source: broadcast::Receiver<events::Event>,
+) -> Result<(), PagerDutyError> {
+    let eventsv2 = EventsV2::new(routing_key, Some("zerotect".to_owned()))?;
 
     loop {
         match source.recv().await {
             Ok(event) => {
                 if !event.as_ref().is_analyzed() {
-                    return;
+                    continue;
                 };
 
                 let source = match event.as_ref().get_hostname() {
@@ -45,12 +54,12 @@ pub async fn emit_forever(
                 };
 
                 let result = eventsv2
-                    .event(eventsv2::Event::AlertTrigger(eventsv2::AlertTrigger {
-                        payload: eventsv2::AlertTriggerPayload {
+                    .event(Event::AlertTrigger(AlertTrigger {
+                        payload: AlertTriggerPayload {
                             summary: "Zerotect detected anomaly".to_owned(),
                             source,
                             timestamp: Some(OffsetDateTime::now_utc()),
-                            severity: eventsv2::Severity::Warning,
+                            severity: Severity::Warning,
                             component: None,
                             group: None,
                             class: None,

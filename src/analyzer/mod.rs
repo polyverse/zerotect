@@ -267,10 +267,10 @@ where
                     self.justification_kind,
                     "An InstructionPointer Probe - someone's systematically moving the instruction pointer by a few bytes to find desirable jump locations.",
                 )
-            {
-                detected_events.push(detected_event);
-                used_events.append(&mut events_used_for_detection)
-            }
+                {
+                    detected_events.push(detected_event);
+                    used_events.append(&mut events_used_for_detection)
+                }
 
                 // retain unused events
                 eventslist.retain(|(_, e)| !used_events.contains(e));
@@ -594,7 +594,7 @@ mod test {
         justification_kind: params::DetectedEventJustification,
     ) -> impl Stream<Item = events::Event> {
         Box::pin(
-            Analyzer::new(
+            Analyzer::analyzer_over_stream(
                 0,
                 params::AnalyticsConfig {
                     mode: params::AnalyticsMode::Detected,

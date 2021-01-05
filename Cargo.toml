@@ -16,25 +16,25 @@ num = "0.3.1"
 lazy_static = "1.4.0"
 num-traits = "0.2"
 num-derive = "0.3.3"
-timeout-iterator = { version = "1.1.4", default-features = false, features = ["async"] }
+timeout-iterator = { version = "1.1.4" }
 serde = { version = "1.0.118", features = ["derive", "rc"] }
 serde_json = { version = "1.0.61", features = ["arbitrary_precision"] }
 toml = "0.5.8"
 http = "0.2.2"
-rmesg = {version = "1.0.9", default-features = false, features = ["async", "extra-traits"] }
+rmesg = {version = "1.0.10", features = ["extra-traits"] }
 libflate = "1.0.3"
 rust-cef-derive = "0.2.0"
 rust-cef = "0.2.0"
 syslog = "5.0.0"
 libc = "0.2.81"
-file-rotation = { version = "0.4.0", default-features = false, features =["async"] }
+file-rotation = { version = "0.4.1" }
 futures = "0.3.8"
-pagerduty-rs = {version = "0.1.0", default-features = false, features = ["async"] }
+pagerduty-rs = {version = "0.1.1" }
 time = {version = "0.2.23", features = ["std", "serde"] }
-reqwest = { version = "0.10.10"}
+reqwest = { version = "0.11.0"}
 tokio = { version = "1.0.1", features = ["rt", "macros", "time", "sync"] }
-tokio-stream = "0.1.0"
-pin-project = { version = "1.0.2" }
+tokio-stream = "0.1.1"
+pin-project = { version = "1.0.3" }
 
 [dependencies.clap]
 version = "2.33.3"
@@ -43,7 +43,7 @@ default-features = false
 
 [dev-dependencies]
 assert_matches = "1.4.0"
-rand = "0.8.0"
+rand = "0.8.1"
 pretty_assertions = "0.6.1"
 
 [profile.dev]

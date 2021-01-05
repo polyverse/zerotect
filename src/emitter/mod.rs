@@ -15,7 +15,7 @@ use tokio::sync::broadcast;
 
 mod console;
 mod filelogger;
-//mod pagerduty;
+mod pagerduty;
 mod polycorder;
 mod syslogger;
 
@@ -39,7 +39,7 @@ pub enum EmitterError {
     Polycorder(polycorder::PolycorderError),
     Syslogger(syslogger::SysLoggerError),
     FileLogger(filelogger::FileLoggerError),
-    //Pagerduty(pagerduty::PagerDutyError),
+    Pagerduty(pagerduty::PagerDutyError),
 }
 
 impl error::Error for EmitterError {}
@@ -53,7 +53,7 @@ impl Display for EmitterError {
             Self::Polycorder(e) => write!(f, "Error in Polycorder Emitter: {}", e),
             Self::Syslogger(e) => write!(f, "Error in Syslogger Emitter: {}", e),
             Self::FileLogger(e) => write!(f, "Error in FileLogger Emitter: {}", e),
-            //Self::Pagerduty(e) => write!(f, "Error in Pagerduty Emitter: {}", e),
+            Self::Pagerduty(e) => write!(f, "Error in Pagerduty Emitter: {}", e),
         }
     }
 }
@@ -76,13 +76,11 @@ impl From<filelogger::FileLoggerError> for EmitterError {
     }
 }
 
-/*
 impl From<pagerduty::PagerDutyError> for EmitterError {
     fn from(err: pagerduty::PagerDutyError) -> Self {
         Self::Pagerduty(err)
     }
 }
-*/
 
 impl From<broadcast::error::SendError<events::Event>> for EmitterError {
     fn from(err: broadcast::error::SendError<events::Event>) -> Self {
@@ -117,12 +115,10 @@ pub async fn emit_forever(
         eprintln!("Emitter: Initialized LogFile emitter. Expect messages to be sent to a file.");
         emit_forever_futures.push(Box::pin(filelogger::emit_forever(lfc, tx.subscribe())));
     }
-    /*
     if let Some(prk) = ec.pagerduty_routing_key {
         eprintln!("Emitter: Initialized PagerDuty emitter. Expect messages to be sent to a PagerDuty Service.");
-        emit_forever_futures.push(pagerduty::emit_forever(prk, tx.subscribe()));
+        emit_forever_futures.push(Box::pin(pagerduty::emit_forever(prk, tx.subscribe())));
     }
-    */
     if let Some(tc) = ec.polycorder {
         eprintln!("Emitter: Initialized Polycorder emitter. Expect messages to be phoned home to the Polyverse polycorder service.");
         emit_forever_futures.push(Box::pin(polycorder::emit_forever(

@@ -55,7 +55,7 @@ impl EventBuffer {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == self.max_event_count
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {
