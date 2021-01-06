@@ -533,6 +533,8 @@ else
 
     printf "==> Step 5/6: Adding zerotect to init system...\n"
     $create_init_file
+    printf " |--> Waiting 5 seconds to give zerotect time to start...\n"
+    sleep 5
 
     printf "==> Step 6/6: Ensure zerotect is running...\n"
     ensure_zerotect_running "yes" $init_status
