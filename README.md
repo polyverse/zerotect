@@ -61,6 +61,8 @@ Zerotect sends events to ArcSight through the Syslog SmartConnector. It is easy 
 
 ### PagerDuty
 
+[Zerotect integration with PagerDuty](https://www.pagerduty.com/integrations/zerotect/)
+
 Zerotect can send detected events to the PagerDuty Events API V2 through a single configuration. View the [PagerDuty Integration Guide](/integrations/PagerDuty/README.md) for details.
 
 ## Zerotect Log
