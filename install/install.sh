@@ -126,6 +126,20 @@ create_zerotect_conf() {
 ensure_zerotect_running() {
     expected="$1"
     init_status="$2"
+    sleep_seconds=$3
+
+    if [ ! -z "$sleep_seconds" ]; then
+        printf " |--> waiting upto $sleep_seconds seconds for zerotect to start"
+        pid=$(pgrep zerotect)
+        while [ -z "$pid" ]; do
+            printf "."
+            sleep 1
+            sleep_seconds="$(($sleep_seconds-1))"
+            pid=$(pgrep zerotect)
+        done
+        printf "\n"
+    fi
+
 
     pid=$(pgrep zerotect)
     if [ -z "$pid" ]; then
@@ -533,9 +547,7 @@ else
 
     printf "==> Step 5/6: Adding zerotect to init system...\n"
     $create_init_file
-    printf " |--> Waiting 5 seconds to give zerotect time to start...\n"
-    sleep 5
 
     printf "==> Step 6/6: Ensure zerotect is running...\n"
-    ensure_zerotect_running "yes" $init_status
+    ensure_zerotect_running "yes" $init_status 60
 fi
