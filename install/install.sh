@@ -129,9 +129,9 @@ ensure_zerotect_running() {
     sleep_seconds=$3
 
     if [ ! -z "$sleep_seconds" ]; then
-        printf " |--> waiting upto $sleep_seconds seconds for zerotect to start"
+        printf " |--> waiting upto $sleep_seconds seconds"
         pid=$(pgrep zerotect)
-        while [ -z "$pid" ]; do
+        while ([ $sleep_seconds -gt 0 ]) && (([ -z "$pid" ] && [ "$expected" = "yes" ]) || ([ ! -z "$pid" ] && [ "$expected" = "no" ])); do
             printf "."
             sleep 1
             sleep_seconds="$(($sleep_seconds-1))"
