@@ -1,6 +1,6 @@
 [package]
 name = "zerotect"
-version = "0.4.16"
+version = "0.4.18"
 authors = ["Archis Gore <archis@polyverse.io>"]
 edition = "2018"
 
