@@ -537,7 +537,7 @@ if [ "$UNINSTALL" != "" ]; then
     printf "==> Step 5/6: Uninstalling zerotect...\n"
     $uninstall
     printf "==> Step 6/6: Ensure zerotect is not running...\n"
-    ensure_zerotect_running "no" $init_status
+    ensure_zerotect_running "no" $init_status 60
 else
     printf "==> Step 3/6: Downloading zerotect binary...\n"
     download_latest_zerotect
