@@ -86,7 +86,7 @@ impl EnvironmentConfigurator {
         }
     }
 
-    fn enforce_config(&mut self) -> Result<(), SystemConfigError> {
+    pub fn enforce_config(&mut self) -> Result<(), SystemConfigError> {
         // if not sleeping.. reinforce the system with config
         let events = modify_environment(&self.auto_config, &self.hostname)?;
         for event in events.into_iter() {

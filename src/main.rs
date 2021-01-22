@@ -67,6 +67,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             chostname,
         );
 
+    // enforce config before we create raw event stream,
+    // since the config affects how it works
+    if let Err(e) = self.enforce_config() {
+        panic!("Error in Environment Configurator. Panicking. {}", e);
+    }
+
     let resc = raw_event_stream::RawEventStreamConfig {
         verbosity: zerotect_config.verbosity,
         hostname: zerotect_config.hostname.clone(),
