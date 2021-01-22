@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let auto_configure_env = zerotect_config.auto_configure;
     let chostname = zerotect_config.hostname.clone();
     // ensure environment is kept stable every 5 minutes (in case something or someone disables the settings)
-    let config_events_stream =
+    let mut config_events_stream =
         system::EnvironmentConfigurator::create_environment_configrator_stream(
             auto_configure_env,
             chostname,
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // enforce config before we create raw event stream,
     // since the config affects how it works
-    if let Err(e) = self.enforce_config() {
+    if let Err(e) = config_events_stream.enforce_config() {
         panic!("Error in Environment Configurator. Panicking. {}", e);
     }
 

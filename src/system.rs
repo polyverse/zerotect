@@ -76,7 +76,7 @@ impl EnvironmentConfigurator {
     pub fn create_environment_configrator_stream(
         auto_config: params::AutoConfigure,
         hostname: Option<String>,
-    ) -> impl Stream<Item = events::Event> {
+    ) -> Self {
         Self {
             auto_config,
             sleep_interval: Duration::from_secs(300),
