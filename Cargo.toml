@@ -21,7 +21,7 @@ serde = { version = "1.0.120", features = ["derive", "rc"] }
 serde_json = { version = "1.0.61", features = ["arbitrary_precision"] }
 toml = "0.5.8"
 http = "0.2.3"
-rmesg = {version = "1.0.11", features = ["extra-traits"] }
+rmesg = {version = "1.0.13", features = ["extra-traits"] }
 libflate = "1.0.3"
 rust-cef-derive = "0.2.0"
 rust-cef = "0.2.0"
