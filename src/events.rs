@@ -124,7 +124,7 @@ impl Display for Version {
             } => write!(
                 f,
                 "Event<V1,{},{}>::{}",
-                hostname.as_ref().unwrap_or(&"".to_owned()),
+                hostname.as_deref().unwrap_or(""),
                 timestamp,
                 event
             ),
@@ -228,20 +228,9 @@ impl Display for EventType {
                 vmasize,
                 vmastart,
             }) => {
-                let location = if let (Some(file), Some(vmastart), Some(vmasize)) =
-                    (file.as_ref(), vmastart, vmasize)
-                {
-                    Some(format!(
-                        "in file {} (VMM region {} of size {})",
-                        file, vmastart, vmasize
-                    ))
-                } else {
-                    None
-                };
-
                 write!(
                     f,
-                    "<log_level: {}, log_facility: {}>{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {}) {}.",
+                    "<log_level: {}, log_facility: {}>{}:: {} by process {}(pid:{}, instruction pointer: {}, stack pointer: {})",
                     level,
                     facility,
                     trap,
@@ -249,9 +238,20 @@ impl Display for EventType {
                     procname,
                     pid,
                     ip,
-                    sp,
-                    location.unwrap_or_default()
-                )
+                    sp
+                )?;
+
+                if let (Some(file), Some(vmastart), Some(vmasize)) =
+                    (file.as_ref(), vmastart, vmasize)
+                {
+                    write!(
+                        f,
+                        " in file {} (VMM region {} of size {})",
+                        file, vmastart, vmasize
+                    )?;
+                }
+
+                Ok(())
             }
             EventType::LinuxFatalSignal(LinuxFatalSignal {
                 level,
