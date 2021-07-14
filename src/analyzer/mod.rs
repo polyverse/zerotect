@@ -335,11 +335,12 @@ mod test {
         .await;
 
         let event = events.next().await.unwrap();
-        assert_matches!(event.as_ref(),
-            events::Version::V1{
+        assert_matches!(
+            event.as_ref(),
+            events::Version::V1 {
                 timestamp: _,
                 hostname: _,
-                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: _,
                     message: _,
                     procname: _,
@@ -378,11 +379,12 @@ mod test {
         .await;
 
         let event = events.next().await.unwrap();
-        assert_matches!(event.as_ref(),
-            events::Version::V1{
+        assert_matches!(
+            event.as_ref(),
+            events::Version::V1 {
                 timestamp: _,
                 hostname: _,
-                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: _,
                     message: _,
                     procname: _,
@@ -429,11 +431,12 @@ mod test {
         .await;
 
         let event = events.next().await.unwrap();
-        assert_matches!(event.as_ref(),
-            events::Version::V1{
+        assert_matches!(
+            event.as_ref(),
+            events::Version::V1 {
                 timestamp: _,
                 hostname: _,
-                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: _,
                     message: _,
                     procname: _,
@@ -555,11 +558,12 @@ mod test {
         .await;
 
         let event = events.next().await.unwrap();
-        assert_matches!(event.as_ref(),
-            events::Version::V1{
+        assert_matches!(
+            event.as_ref(),
+            events::Version::V1 {
                 timestamp: _,
                 hostname: _,
-                event: events::EventType::RegisterProbe(events::RegisterProbe{
+                event: events::EventType::RegisterProbe(events::RegisterProbe {
                     register: _,
                     message: _,
                     procname: _,
