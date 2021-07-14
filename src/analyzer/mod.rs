@@ -102,16 +102,16 @@ where
 
         let s = stream::unfold(analyzer, |mut analyzer| async move {
             match analyzer.mode {
-                params::AnalyticsMode::Off => {
-                    match analyzer.incoming_events_stream.as_mut().next().await {
-                        Some(raw_event) => Some((raw_event, analyzer)),
-                        None => None,
-                    }
-                }
-                _ => match analyzer.next_event().await {
-                    Some(next_event) => Some((next_event, analyzer)),
-                    None => None,
-                },
+                params::AnalyticsMode::Off => analyzer
+                    .incoming_events_stream
+                    .as_mut()
+                    .next()
+                    .await
+                    .map(|raw_event| (raw_event, analyzer)),
+                _ => analyzer
+                    .next_event()
+                    .await
+                    .map(|next_event| (next_event, analyzer)),
             }
         });
 

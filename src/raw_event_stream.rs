@@ -137,10 +137,9 @@ where
         };
 
         let s = stream::unfold(res, |mut res| async move {
-            match res.parse_next_event().await {
-                Some(next_event) => Some((next_event.unwrap(), res)),
-                None => None,
-            }
+            res.parse_next_event()
+                .await
+                .map(|next_event| (next_event.unwrap(), res))
         });
 
         Ok(s)

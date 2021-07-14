@@ -760,8 +760,8 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
             Some(PolycorderConfig {
                 auth_key,
                 node_id,
-                flush_timeout_seconds,
                 flush_event_count,
+                flush_timeout_seconds,
             })
         }
     };
@@ -849,6 +849,7 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
     Ok(ZerotectParams {
         verbosity,
         hostname,
+        pagerduty_routing_key,
         auto_configure,
         analytics,
         monitor,
@@ -856,7 +857,6 @@ pub fn parse_args(maybe_args: Option<Vec<OsString>>) -> Result<ZerotectParams, P
         polycorder,
         syslog,
         logfile,
-        pagerduty_routing_key,
     })
 }
 
