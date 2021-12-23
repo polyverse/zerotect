@@ -349,7 +349,7 @@ mod test {
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: rmesg::entry::LogFacility::User,
                     level: rmesg::entry::LogLevel::Info,
-                    signal: events::FatalSignalType::SIGIOT,
+                    signal: events::FatalSignalType::Iot,
                     stack_dump: map!("Comm" => procname.clone()),
                 }),
             }),

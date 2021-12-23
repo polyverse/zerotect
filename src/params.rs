@@ -1088,7 +1088,7 @@ mod test {
 
         let lfc = config.logfile.unwrap();
         assert_eq!("/tmp/zerotect/zerotect.log", lfc.filepath);
-        assert_eq!(OutputFormat::CEF, lfc.format);
+        assert_eq!(OutputFormat::Cef, lfc.format);
         assert_eq!(Some(1), lfc.rotation_file_count);
         assert_eq!(Some(10), lfc.rotation_file_max_size);
 
@@ -1172,7 +1172,7 @@ mod test {
                 "Error parsing arguments for json: {}",
                 pc.err().unwrap()
             );
-            assert_eq!(OutputFormat::JSON, pc.unwrap().console.unwrap().format);
+            assert_eq!(OutputFormat::Json, pc.unwrap().console.unwrap().format);
         }
     }
 
@@ -1445,7 +1445,7 @@ mod test {
         assert_eq!(23, pc.flush_event_count);
 
         let sc = config.syslog.unwrap();
-        assert_eq!(OutputFormat::CEF, sc.format);
+        assert_eq!(OutputFormat::Cef, sc.format);
         assert_eq!(SyslogDestination::Tcp, sc.destination);
         assert_eq!(Some("/dev/log".to_owned()), sc.path);
         assert_eq!(Some("127.0.0.1:834".to_owned()), sc.server);
@@ -1573,14 +1573,14 @@ mod test {
         assert_eq!(10, pc.flush_event_count);
 
         let sc = config.syslog.unwrap();
-        assert_eq!(OutputFormat::JSON, sc.format);
+        assert_eq!(OutputFormat::Json, sc.format);
         assert_eq!(SyslogDestination::Udp, sc.destination);
         assert_eq!(Some("/dev/log/something/else".to_owned()), sc.path);
         assert_eq!(Some("127.0.0.1:345".to_owned()), sc.server);
         assert_eq!(Some("127.0.0.1:468".to_owned()), sc.local);
 
         let lfc = config.logfile.unwrap();
-        assert_eq!(OutputFormat::JSON, lfc.format);
+        assert_eq!(OutputFormat::Json, lfc.format);
         assert_eq!("/tmp/other/path".to_owned(), lfc.filepath);
         assert_eq!(Some(92), lfc.rotation_file_count);
         assert_eq!(Some(107), lfc.rotation_file_max_size);
@@ -1831,7 +1831,7 @@ mod test {
                 flush_event_count: DEFAULT_POLYCORDER_FLUSH_EVENT_COUNT,
             }),
             syslog: Some(SyslogConfig{
-                format: OutputFormat::CEF,
+                format: OutputFormat::Cef,
                 destination: SyslogDestination::Udp,
                 local: Some("# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)".to_owned()),
                 server: Some("# applicable to tcp and udp - the host:port to send syslog to (i.e. 127.0.0.1:601 or 127.0.0.1:514)".to_owned()),
@@ -1839,7 +1839,7 @@ mod test {
             }),
             logfile: Some(LogFileConfig{
                 filepath: "/test/path".to_owned(),
-                format: OutputFormat::CEF,
+                format: OutputFormat::Cef,
                 rotation_file_count: Some(1),
                 rotation_file_max_size: Some(20),
             }),
@@ -1889,7 +1889,7 @@ mod test {
             console: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(ConsoleConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
-                        true => OutputFormat::JSON,
+                        true => OutputFormat::Json,
                         false => OutputFormat::Text,
                     },
                 }),
@@ -1913,8 +1913,8 @@ mod test {
             syslog: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(SyslogConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
-                        true => OutputFormat::JSON,
-                        false => OutputFormat::CEF,
+                        true => OutputFormat::Json,
+                        false => OutputFormat::Cef,
                     },
                     destination: match rand::thread_rng().gen_bool(0.5) {
                         true => SyslogDestination::Udp,
@@ -1947,8 +1947,8 @@ mod test {
             logfile: match rand::thread_rng().gen_bool(0.5) {
                 true => Some(LogFileConfig {
                     format: match rand::thread_rng().gen_bool(0.5) {
-                        true => OutputFormat::JSON,
-                        false => OutputFormat::CEF,
+                        true => OutputFormat::Json,
+                        false => OutputFormat::Cef,
                     },
                     filepath: format!("RandomFilePath{}", rand::thread_rng().gen_range(0..32000)),
                     rotation_file_count: match rand::thread_rng().gen_bool(0.5) {

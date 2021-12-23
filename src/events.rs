@@ -19,8 +19,6 @@ use rust_cef_derive::{
 
 #[cfg(test)]
 use serde::{de, Deserialize};
-#[cfg(test)]
-use time::Format;
 
 pub type Event = Rc<Version>;
 
@@ -749,8 +747,8 @@ where
     let timestr = String::deserialize(deserializer)?;
     OffsetDateTime::parse(timestr.as_str(), &Rfc3339).map_err(|e| {
         de::Error::custom(format!(
-            "Error deserializing OffsetDateTime from string {} with format {}: {}",
-            timestr, Rfc3339, e
+            "Error deserializing OffsetDateTime from string {} with format {:?}: {}",
+            timestr, &Rfc3339, e
         ))
     })
 }
@@ -763,7 +761,7 @@ mod test {
     fn deserialize_timestamp() {
         let timestamp_original = OffsetDateTime::now_utc();
         let timestamp_str = timestamp_original.format(&Rfc3339).unwrap();
-        let timestamp_rehydrated = OffsetDateTime::parse(timestamp_str, Format::Rfc3339).unwrap();
+        let timestamp_rehydrated = OffsetDateTime::parse(&timestamp_str, &Rfc3339).unwrap();
         assert_eq!(timestamp_original, timestamp_rehydrated);
     }
 

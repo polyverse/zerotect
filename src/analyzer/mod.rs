@@ -844,7 +844,7 @@ mod test {
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 level: rmesg::entry::LogLevel::Info,
                 facility: rmesg::entry::LogFacility::Kern,
-                signal: events::FatalSignalType::SIGIOT,
+                signal: events::FatalSignalType::Iot,
                 stack_dump,
             }),
         })

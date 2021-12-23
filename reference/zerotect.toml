@@ -28,14 +28,14 @@ flush_event_count = 10
 flush_timeout_seconds = 10
 
 [syslog]
-format = 'CEF'
+format = 'Cef'
 destination = 'Udp'
 path = '# only applicable to unix - path to unix socket to connect to syslog (i.e. /dev/log or /var/run/syslog)'
 server = '# applicable to tcp and udp - the host:port to send syslog to (i.e. 127.0.0.1:601 or 127.0.0.1:514)'
 local = '# only applicable to udp - the host:port to bind sender to (i.e. 127.0.0.1:0)'
 
 [logfile]
-format = 'CEF'
+format = 'Cef'
 filepath = '/test/path'
 rotation_file_count = 1
 rotation_file_max_size = 20

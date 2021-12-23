@@ -20,7 +20,7 @@ mod test {
 
     #[test]
     fn test_linux_kernel_trap() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -47,7 +47,7 @@ mod test {
             }),
         };
 
-        let formatter = CEFFormatter {};
+        let formatter = CefFormatter {};
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
@@ -57,7 +57,7 @@ mod test {
 
     #[test]
     fn test_linux_fatal_signal() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -65,22 +65,22 @@ mod test {
             event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                 facility: rmesg::entry::LogFacility::Kern,
                 level: rmesg::entry::LogLevel::Warning,
-                signal: events::FatalSignalType::SIGSEGV,
+                signal: events::FatalSignalType::Segv,
                 stack_dump: BTreeMap::new(),
             }),
         };
 
-        let formatter = CEFFormatter {};
+        let formatter = CefFormatter {};
 
         assert_eq!(
             formatter.format(&event1).unwrap(),
-            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|flexString2=SIGSEGV flexString2Label=signal rt=471804323"
+            "CEF:0|polyverse|zerotect|1.0|LinuxFatalSignal|Linux Fatal Signal|10|flexString2=Segv flexString2Label=signal rt=471804323"
         );
     }
 
     #[test]
     fn test_linux_suppressed_callback() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -93,13 +93,13 @@ mod test {
             }),
         };
 
-        let formatter = CEFFormatter {};
+        let formatter = CefFormatter {};
         assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|LinuxSuppressedCallback|Linux kernel suppressed repetitive log entries|3|cnt=9 dhost=hostnamecef flexString1=show_signal_msg flexString1Label=function_name rt=471804323");
     }
 
     #[test]
     fn test_zerotect_config_mismatch() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -111,14 +111,14 @@ mod test {
             }),
         };
 
-        let formatter = CEFFormatter {};
+        let formatter = CefFormatter {};
 
         assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|ConfigMismatch|Configuration mismatched what zerotect expected|4|PolyverseZerotectExpectedValue=Y PolyverseZerotectKey=/sys/module/printk/parameters/time PolyverseZerotectObservedValue=N dhost=hostnamecef rt=471804323");
     }
 
     #[test]
     fn test_zerotect_register_probe() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let event1 = events::Version::V1 {
             timestamp,
@@ -131,7 +131,7 @@ mod test {
             }),
         };
 
-        let formatter = CEFFormatter {};
+        let formatter = CefFormatter {};
 
         assert_eq!(formatter.format(&event1).unwrap(), "CEF:0|polyverse|zerotect|1.0|RegisterProbe|Probe using Register Increment|10|cn1=0 cn1Label=justifying_event_count cs1=RIP cs1Label=register dhost=hostnamecef dproc=nginx msg=Instruction pointer rt=471804323");
     }

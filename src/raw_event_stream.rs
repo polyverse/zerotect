@@ -614,7 +614,7 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_kernel_trap_segfault() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000).unwrap();
         let kmsgs = unboxed_kmsgs(timestamp,
                 vec![
                     String::from(" a.out[36175]: segfault at 0 ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]"),
@@ -707,7 +707,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 iter(kmsgs.into_iter().map(|k| Ok(k))),
             )
             .await
@@ -734,7 +734,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-05T09:01:24.605000000Z",
+                "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -768,7 +768,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-05T09:01:24.605000000Z",
+                "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -802,7 +802,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-05T09:01:24.605000000Z",
+                "timestamp": "1970-01-05T09:01:24.605Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -832,7 +832,7 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_kernel_trap_invalid_opcode() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(5606197845000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(5606197845000000).unwrap();
 
         let kmsgs = unboxed_kmsgs(timestamp,
             vec![
@@ -898,7 +898,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
             )
             .await
@@ -920,7 +920,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-03-06T21:16:37.845000000Z",
+                "timestamp": "1970-03-06T21:16:37.845Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -953,7 +953,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-03-06T21:16:37.845000000Z",
+                "timestamp": "1970-03-06T21:16:37.845Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -982,7 +982,7 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_kernel_trap_generic() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(471804323000000).unwrap();
 
         let kmsgs = vec![
             unboxed_kmsg(timestamp, String::from(" a.out[39175]: foo ip 0000561bc8d8f12e sp 00007ffd5833d0c0 error 4 in a.out[561bc8d8f000+1000]")),
@@ -1051,7 +1051,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
             )
             .await
@@ -1073,7 +1073,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-06T11:03:24.323000000Z",
+                "timestamp": "1970-01-06T11:03:24.323Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                         "facility": "Kern",
@@ -1107,7 +1107,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-06T11:03:24.323000000Z",
+                "timestamp": "1970-01-06T11:03:24.323Z",
                 "event": {
                     "type": "LinuxKernelTrap",
                     "facility": "Kern",
@@ -1137,7 +1137,7 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_kernel_trap_general_protection() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(378084605000000).unwrap();
         let kmsgs = unboxed_kmsgs(timestamp,
                 vec![
                     String::from("traps: nginx[67494] general protection ip:43bbbc sp:7ffdd4474db0 error:0 in nginx[400000+92000]"),
@@ -1180,7 +1180,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
             )
             .await
@@ -1220,7 +1220,7 @@ mod test {
             from_str::<serde_json::Value>(
                 r#"{
                 "version": "V1",
-                "timestamp": "1970-01-05T09:01:24.605000000Z",
+                "timestamp": "1970-01-05T09:01:24.605Z",
                 "hostname": "testhost",
                 "event": {
                     "type": "LinuxKernelTrap",
@@ -1253,7 +1253,7 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_fatal_signal_optional_dump() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(376087724000000);
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(376087724000000).unwrap();
 
         let kmsgs = vec![rmesg::entry::Entry {
             facility: Some(rmesg::entry::LogFacility::Kern),
@@ -1271,7 +1271,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
             )
             .await
@@ -1288,7 +1288,7 @@ mod test {
                 event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                     facility: rmesg::entry::LogFacility::Kern,
                     level: rmesg::entry::LogLevel::Warning,
-                    signal: events::FatalSignalType::SIGSEGV,
+                    signal: events::FatalSignalType::Segv,
                     stack_dump: BTreeMap::new(),
                 }),
             })
@@ -1297,7 +1297,8 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_fatal_signal_11() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(6433742000000 + 372858970000000);
+        let timestamp =
+            OffsetDateTime::from_unix_timestamp_nanos(6433742000000 + 372858970000000).unwrap();
         let mut kmsgs = unboxed_kmsgs(
             timestamp,
             vec![
@@ -1330,7 +1331,7 @@ mod test {
                         gobble_old_events: true,
                         flush_timeout: Duration::from_secs(1),
                     },
-                    OffsetDateTime::from_unix_timestamp(0),
+                    OffsetDateTime::from_unix_timestamp(0).unwrap(),
                     Box::pin(iter(kmsgs.clone().into_iter().map(|k| Ok(k)))),
                 )
                 .await
@@ -1344,12 +1345,13 @@ mod test {
                 Rc::new(events::Version::V1 {
                     timestamp: OffsetDateTime::from_unix_timestamp_nanos(
                         6433742000000 + 372858970000000
-                    ),
+                    )
+                    .unwrap(),
                     hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                         facility: rmesg::entry::LogFacility::Kern,
                         level: rmesg::entry::LogLevel::Warning,
-                        signal: events::FatalSignalType::SIGSEGV,
+                        signal: events::FatalSignalType::Segv,
                         stack_dump: map! {
                             "CPU" => "1",
                             "PID" => "36075",
@@ -1401,7 +1403,7 @@ mod test {
                         gobble_old_events: true,
                         flush_timeout: Duration::from_secs(1),
                     },
-                    OffsetDateTime::from_unix_timestamp(0),
+                    OffsetDateTime::from_unix_timestamp(0).unwrap(),
                     Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
                 )
                 .await
@@ -1415,12 +1417,13 @@ mod test {
                 Rc::new(events::Version::V1 {
                     timestamp: OffsetDateTime::from_unix_timestamp_nanos(
                         6433742000000 + 372858970000000
-                    ),
+                    )
+                    .unwrap(),
                     hostname: None,
                     event: events::EventType::LinuxFatalSignal(events::LinuxFatalSignal {
                         facility: rmesg::entry::LogFacility::Kern,
                         level: rmesg::entry::LogLevel::Warning,
-                        signal: events::FatalSignalType::SIGSEGV,
+                        signal: events::FatalSignalType::Segv,
                         stack_dump: map! {
                             "CPU" => "1",
                             "PID" => "36075",
@@ -1475,7 +1478,8 @@ mod test {
 
     #[tokio::test]
     async fn can_parse_suppressed_callback() {
-        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(803835000000 + 372850970000000);
+        let timestamp =
+            OffsetDateTime::from_unix_timestamp_nanos(803835000000 + 372850970000000).unwrap();
 
         let kmsgs = vec![rmesg::entry::Entry {
             facility: Some(rmesg::entry::LogFacility::Kern),
@@ -1493,7 +1497,7 @@ mod test {
                     gobble_old_events: true,
                     flush_timeout: Duration::from_secs(1),
                 },
-                OffsetDateTime::from_unix_timestamp(0),
+                OffsetDateTime::from_unix_timestamp(0).unwrap(),
                 Box::pin(iter(kmsgs.into_iter().map(|k| Ok(k)))),
             )
             .await
@@ -1538,7 +1542,8 @@ mod test {
 
     fn timestamp_from_system_start(timestamp: OffsetDateTime) -> Duration {
         lazy_static! {
-            static ref SYSTEM_START: OffsetDateTime = OffsetDateTime::from_unix_timestamp(0);
+            static ref SYSTEM_START: OffsetDateTime =
+                OffsetDateTime::from_unix_timestamp(0).unwrap();
         }
 
         timestamp.sub(*SYSTEM_START).try_into().unwrap()
