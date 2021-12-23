@@ -1,8 +1,9 @@
 [package]
 name = "zerotect"
-version = "0.4.22"
+version = "0.4.23"
 authors = ["Archis Gore <archis@polyverse.io>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 log = "0.4.14"
@@ -16,20 +17,20 @@ num = "0.4.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.14"
 num-derive = "0.3.3"
-timeout-iterator = { version = "1.1.5" }
+timeout-iterator = { version = "1.1.7" }
 serde = { version = "1.0.132", features = ["derive", "rc"] }
 serde_json = { version = "1.0.73", features = ["arbitrary_precision"] }
 toml = "0.5.8"
 http = "0.2.5"
-rmesg = {version = "1.0.17", features = ["extra-traits"] }
+rmesg = {version = "1.0.18", features = ["extra-traits"] }
 libflate = "1.1.1"
-rust-cef-derive = "0.2.5"
-rust-cef = "0.2.5"
+rust-cef-derive = "0.2.6"
+rust-cef = "0.2.6"
 syslog = "6.0.1"
 libc = "0.2.112"
 file-rotation = { version = "0.4.1" }
 futures = "0.3.19"
-pagerduty-rs = {version = "0.1.3" }
+pagerduty-rs = {version = "0.1.4" }
 time = {version = "0.3.5", features = ["std", "serde", "formatting", "parsing"] }
 reqwest = { version = "0.11.8"}
 tokio = { version = "1.15.0", features = ["rt", "macros", "time", "sync"] }
