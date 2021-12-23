@@ -2,8 +2,8 @@ use crate::events;
 use crate::formatter::FormatResult;
 use rust_cef::ToCef;
 
-pub struct CEFFormatter {}
-impl CEFFormatter {
+pub struct CefFormatter {}
+impl CefFormatter {
     pub fn format(&self, event: &events::Version) -> FormatResult {
         Ok(event.to_cef()?)
     }

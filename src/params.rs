@@ -104,11 +104,11 @@ pub enum OutputFormat {
     Text,
 
     #[strum(serialize = "json")]
-    JSON,
+    Json,
 
     // Microfocus ArcSight Common Event Format
     #[strum(serialize = "cef")]
-    CEF,
+    Cef,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

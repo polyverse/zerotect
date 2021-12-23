@@ -2,14 +2,13 @@
 
 use num_derive::FromPrimitive;
 use rmesg::entry;
-use serde::Serialize;
-use serde::Serializer;
+use serde::{ser::Error as SerializeError, Serialize, Serializer};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use strum_macros::Display;
 use strum_macros::EnumString;
-use time::OffsetDateTime;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 //use rust_cef::{ToCef, CefHeaderVersion, CefHeaderDeviceVendor, CefHeaderDeviceProduct, CefHeaderDeviceVersion, CefHeaderDeviceEventClassID, CefHeaderName, CefHeaderSeverity, CefExtensions};
 use rust_cef_derive::{
@@ -22,9 +21,6 @@ use rust_cef_derive::{
 use serde::{de, Deserialize};
 #[cfg(test)]
 use time::Format;
-
-// See: https://docs.rs/time/0.2.23/time/index.html
-const OFFSET_DATETIME_FORMAT_STRING: &str = "%FT%H:%M:%S.%NZ";
 
 pub type Event = Rc<Version>;
 
@@ -643,94 +639,94 @@ impl Display for SegfaultErrorCode {
 #[cfg_attr(test, derive(Deserialize))]
 pub enum FatalSignalType {
     /// Hangup detected on controlling terminal or death of controlling process
-    SIGHUP = 1,
+    Hup = 1,
 
     /// Interrupt from keyboard
-    SIGINT,
+    Int,
 
     /// Quit from keyboard
-    SIGQUIT,
+    Quit,
 
     /// Illegal Instruction
-    SIGILL,
+    Ill,
 
     /// Trace/breakpoint trap (typically used by debuggers)
-    SIGTRAP,
+    Trap,
 
     /// IOT trap or Abort signal from abort: http://man7.org/linux/man-pages/man3/abort.3.html. (synonym: SIGABRT)
-    SIGIOT,
+    Iot,
 
     /// Bus error (bad memory access)
-    SIGBUS,
+    Bus,
 
     /// Floating-point exception
-    SIGFPE,
+    Fpe,
 
     /// Kill signal
-    SIGKILL,
+    Kill,
 
     /// User-defined signal 1
-    SIGUSR1,
+    Usr1,
 
     /// Invalid memory reference
-    SIGSEGV,
+    Segv,
 
     /// User-defined signal 2
-    SIGUSR2,
+    Usr2,
 
     /// Broken pipe: write to pipe with no readers; see: http://man7.org/linux/man-pages/man7/pipe.7.html
-    SIGPIPE,
+    Pipe,
 
     /// Timer signal from alarm: http://man7.org/linux/man-pages/man2/alarm.2.html
-    SIGALRM,
+    Alrm,
 
     /// Termination signal
-    SIGTERM,
+    Term,
 
     /// Stack fault on coprocessor (unused)
-    SIGSTKFLT,
+    StkFlt,
 
     /// Child stopped or terminated (synonym: SIGCLD)
-    SIGCHLD,
+    Chld,
 
     /// Continue if stopped (typically used by debuggers)
-    SIGCONT,
+    Cont,
 
     /// Stop process (typically used by debuggers)
-    SIGSTOP,
+    Stop,
 
     /// Stop typed at terminal
-    SIGTSTP,
+    Tstp,
 
     /// Terminal input for background process
-    SIGTTIN,
+    Ttin,
 
     /// Terminal output for background process
-    SIGTTOU,
+    Ttou,
 
     /// Urgent condition on socket (4.2BSD)
-    SIGURG,
+    Urg,
 
     /// CPU time limit exceeded (4.2BSD); See: http://man7.org/linux/man-pages/man2/setrlimit.2.html
-    SIGXCPU,
+    Xcpu,
 
     /// File size limit exceeded (4.2BSD); See: http://man7.org/linux/man-pages/man2/setrlimit.2.html
-    SIGXFSZ,
+    Xfsz,
 
     /// Virtual alarm clock (4.2BSD)
-    SIGVTALRM,
+    VtAlrm,
 
     /// Profiling timer expired
-    SIGPROF,
+    Prof,
 
     /// Window resize signal (4.3BSD, Sun)
-    SIGWINCH,
+    Winch,
 
     /// I/O now possible (4.2BSD) or Pollable event (Sys V). (synonym: SIGPOLL)
-    SIGIO,
+    Io,
 
     /// Power failure (System V) (synonym: SIGINFO)
-    SIGPWR,
+    Pwd,
 }
 
 /// Convert an OffsetDateTime to ISO string representation
@@ -738,7 +734,10 @@ fn datetime_to_iso8601<S>(d: &OffsetDateTime, serializer: S) -> Result<S::Ok, S:
 where
     S: Serializer,
 {
-    serializer.serialize_str(d.format(OFFSET_DATETIME_FORMAT_STRING).as_str())
+    match d.format(&Rfc3339) {
+        Ok(formatted) => serializer.serialize_str(formatted.as_str()),
+        Err(e) => Err(SerializeError::custom(format!("{}", e))),
+    }
 }
 
 /// Convert an ISO DateTime string representation to OffsetDateTime
@@ -748,10 +747,10 @@ where
     D: de::Deserializer<'de>,
 {
     let timestr = String::deserialize(deserializer)?;
-    OffsetDateTime::parse(timestr.as_str(), Format::Rfc3339).map_err(|e| {
+    OffsetDateTime::parse(timestr.as_str(), &Rfc3339).map_err(|e| {
         de::Error::custom(format!(
             "Error deserializing OffsetDateTime from string {} with format {}: {}",
-            timestr, OFFSET_DATETIME_FORMAT_STRING, e
+            timestr, Rfc3339, e
         ))
     })
 }
@@ -763,7 +762,7 @@ mod test {
     #[test]
     fn deserialize_timestamp() {
         let timestamp_original = OffsetDateTime::now_utc();
-        let timestamp_str = timestamp_original.format(OFFSET_DATETIME_FORMAT_STRING);
+        let timestamp_str = timestamp_original.format(&Rfc3339).unwrap();
         let timestamp_rehydrated = OffsetDateTime::parse(timestamp_str, Format::Rfc3339).unwrap();
         assert_eq!(timestamp_original, timestamp_rehydrated);
     }

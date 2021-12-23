@@ -51,7 +51,7 @@ pub async fn emit_forever_syslogger_error(
         facility: Facility::LOG_USER,
         hostname,
         process: "zerotect".to_owned(),
-        pid,
+        pid: pid as u32,
     };
 
     // fire up the syslogger logger

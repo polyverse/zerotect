@@ -5,7 +5,7 @@ mod text;
 
 use crate::events::Version;
 use crate::params::OutputFormat;
-pub use cef::CEFFormatter;
+pub use cef::CefFormatter;
 pub use error::FormatError;
 pub use json::JsonFormatter;
 pub use text::TextFormatter;
@@ -13,15 +13,15 @@ pub use text::TextFormatter;
 pub type FormatResult = Result<String, FormatError>;
 
 pub enum Formatter {
-    CEF(CEFFormatter),
-    JSON(JsonFormatter),
+    Cef(CefFormatter),
+    Json(JsonFormatter),
     Text(TextFormatter),
 }
 impl Formatter {
     pub fn format(&self, value: &Version) -> FormatResult {
         match self {
-            Self::CEF(f) => f.format(value),
-            Self::JSON(f) => f.format(value),
+            Self::Cef(f) => f.format(value),
+            Self::Json(f) => f.format(value),
             Self::Text(f) => f.format(value),
         }
     }
@@ -30,7 +30,7 @@ impl Formatter {
 pub fn new(format: &OutputFormat) -> Formatter {
     match format {
         OutputFormat::Text => Formatter::Text(TextFormatter {}),
-        OutputFormat::JSON => Formatter::JSON(JsonFormatter {}),
-        OutputFormat::CEF => Formatter::CEF(CEFFormatter {}),
+        OutputFormat::Json => Formatter::Json(JsonFormatter {}),
+        OutputFormat::Cef => Formatter::Cef(CefFormatter {}),
     }
 }
