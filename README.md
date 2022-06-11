@@ -81,12 +81,3 @@ existing use-case or dependency and (b) They don't do something that is wildly o
 
 Please read our [Code of Conduct](CODE_OF_CONDUCT.md), and our [Contribution Guidelines](CONTRIBUTING.md) before starting work on a new feature or bug.
 
-## Zero Day Reward Program
-
-Memory and overflow attacks are very difficult to detect, which is the reason we built Zerotect in the first place.
-In order to encourage security professonals and enthusiasts to look for this class of attacks, we've started the
-Zero Day Reward Program. We're giving $1000 rewards to people and institutions that report evidence of real-world
-memory-based attacks using Zerotect. See the [terms and conditions](https://polyverse.com/zerotect-terms-and-conditions/)
-for more information.
-
-You can report evidence of a real-world atack using our [live attack form](https://info.polyverse.com/zerotect-contest).
